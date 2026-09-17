@@ -1,8 +1,27 @@
 # Acceptance — 2026-09-17
 
-## Mainnet release 0.3.0
+## Release 0.4.1 publication and verification
 
-Merovingian is live on its permanent mainnet domain. Full public acceptance passed at **2026-09-17T20:00:07.935Z** using the deployed 0.3.0 image and published SDK dependencies.
+Release **0.4.1 is live on the original mainnet lease**. One provider update POST completed without a new lease, chain transaction, or funding deposit. Provider release **3** was ready at **2026-09-17T20:29:23.087Z**, with manifest hash `0456290ccff8ff4674175b95a7dd535529c021cdc2bd094a244b7000a4a04b56`. The final public HTTP/MCP smoke passed at **20:29:47.577 UTC** using normal DNS and TLS verification.
+
+- Public source: [manifest-network/merovingian](https://github.com/manifest-network/merovingian), release commit [`38b92b1`](https://github.com/manifest-network/merovingian/commit/38b92b1).
+- Running image: `ghcr.io/manifest-network/merovingian@sha256:3375855154c860d04d45e548cb089b826231724f832f2329ff4b1ba7e26ba97e`; exact digest, configuration, and all ten layers verified anonymously.
+- Validation: **132 tests**, typecheck, and production build passed, plus **four focused metadata tests**. The final privacy fix then passed **22 focused tests**, typecheck, and build. The 0.4.1 image passed the isolated replacement test described below, including its exact public stats fields.
+- Publication review: Gitleaks **8.30.1** reported **zero findings** across the three-commit publication history; no actual operator home-directory paths were published. Local secrets, keyrings, journals, and host history were excluded.
+
+The release adds persistent aggregate serving counts, homepage/operator count cards, `/api/v1/stats`, Markdown content negotiation and `/index.md`, public discovery catalogs and links, MCP server-card metadata, an agent skill index, `/auth.md`, and declarative WebMCP form annotations. The actual HTTP visit handler and four remote MCP tools remain the source of behavior; metadata does not invent authentication, payment processing, or browser support.
+
+Live counters began at **2026-09-17T20:29:18.301Z**. The public smoke observed zero counts, then **2 cookies, 2 sauna sessions, and 3 teas** after its seven successful test visits. HTTP and MCP results remained equivalent, the operator ledger and known 15 PWR receipt passed, and indexing controls remained correct. These are test servings, not organic visitor counts. Earlier visits cannot be backfilled, and repeated or automated visits count again. The counter stores no visitor identities, seeds, preferences, or souvenir content. Evidence is `.local/mainnet/live-acceptance.json`.
+
+SQLite uses `/data/visits.sqlite`, configured through `VISIT_COUNTS_PATH`, with a `/data` image volume and UID/GID `1000:1000`. The final isolated test replaced a 0.4.0 container with 0.4.1 on the same named volume and preserved all three counts and their start date. It verified exactly seven public stats fields, no stored visitor marker or signer artifacts, eleven discovery paths, three declarative forms, Markdown negotiation, and a real MCP handshake. The test ran with no external network, a read-only root filesystem, all capabilities dropped, no new privileges, and nano CPU/memory caps; peak memory for the replacement was **175,271,936 bytes**. Evidence is `.local/mainnet/counter-container-acceptance.json`. Fred's reviewed update contract preserves the canonical lease volume, but its live mount inventory and a subsequent production restart were not independently verified.
+
+The external readiness rescan at **2026-09-17T20:29:58.748Z** improved from **20% (3/15)** to **67% (10/15)**, labeled **Level 4 / Agent-Integrated** by that scanner. New passes cover discovery links, Markdown negotiation, content signals, API catalog, MCP server card, agent skills, and ARD. Remaining checks cover DNS-AID, two OAuth endpoints, registration in `auth.md`, and imperative WebMCP detection. The service is public without OAuth or registration, and the scanner does not recognize its three valid declarative forms. This score is a particular scanner's result, not a guarantee of compatibility with every agent. Evidence is `.local/mainnet/agent-readiness-after.json` and `agent-readiness-comparison.json`.
+
+The original lease remains `01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd`, and its launch evidence was preserved. A prior 0.4.0 image/journal was prepared but never deployed after a local check found unnecessary public configuration fields in the stats response. Version 0.4.1 fixed the response before production rollout. Retain that unattempted journal for recovery history; use [the existing-lease update runbook](MAINNET.md#release-041-and-existing-lease-update) for the running release.
+
+## Historical mainnet launch, release 0.3.0
+
+The initial mainnet launch passed full public acceptance at **2026-09-17T20:00:07.935Z** using release 0.3.0 and published SDK dependencies. The same lease and public domain now run 0.4.1 as verified above.
 
 - Homepage: [merovingian.manifest.network](https://merovingian.manifest.network)
 - Agent instructions: [visit.md](https://merovingian.manifest.network/visit.md)

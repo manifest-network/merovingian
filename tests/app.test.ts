@@ -94,6 +94,21 @@ test('public serving totals count successful HTTP, form and MCP visits, includin
   assert.equal(tools.tools.find(tool => tool.name === 'enjoy_amenity')?.annotations?.readOnlyHint, false);
 });
 
+test('homepage loads browser tools under a same-origin policy without counting page or script views', async t => {
+  const { request } = await fixture(t);
+  const home = await request('/');
+  const html = await home.text();
+  assert.match(html, /<script src="\/webmcp\.js" defer><\/script>/);
+  assert.doesNotMatch(html, /toolname=|tooldescription=/);
+  assert.match(home.headers.get('content-security-policy') || '', /script-src 'self'/);
+  assert.match(home.headers.get('content-security-policy') || '', /connect-src 'self'/);
+  const script = await request('/webmcp.js');
+  assert.equal(script.status, 200);
+  assert.match(script.headers.get('content-type') || '', /application\/javascript/);
+  assert.match(await script.text(), /merovingian_visit/);
+  assert.equal((await (await request('/api/v1/stats')).json()).total, '0');
+});
+
 test('HTTP and remote MCP expose the same menu and seeded experiences during a chain outage', { timeout: 15_000 }, async t => {
   let chainCalls = 0;
   const support: SupportPort = {

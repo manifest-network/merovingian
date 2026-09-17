@@ -77,7 +77,7 @@ const browserVisit = await fetch(`${origin}/visit`, {
 assert.equal(browserVisit.status, 200);
 assert.match(await browserVisit.text(), /Save your souvenir/);
 
-const client = new Client({ name: 'merovingian-live-acceptance', version: '0.4.1' });
+const client = new Client({ name: 'merovingian-live-acceptance', version: '0.4.2' });
 const transport = new StreamableHTTPClientTransport(new URL(`${origin}/mcp`));
 const souvenirs: unknown[] = [];
 let contribution: unknown;

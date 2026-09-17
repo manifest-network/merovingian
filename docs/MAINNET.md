@@ -4,9 +4,11 @@ Mainnet supersedes the proof of concept. It is the permanent public refuge and t
 
 ## Live mainnet acceptance — 2026-09-17
 
-Merovingian **0.3.0 is live at [merovingian.manifest.network](https://merovingian.manifest.network)**. The user selected the exact `docker-nano` SKU and a **5 PWR per month hosting ceiling**, excluding transaction fees, supplied the dedicated production wallet, and configured Cloudflare DNS. DNS is verified **direct / DNS only, never proxied**. One mainnet lease is **ACTIVE**, provider provisioning is **ready**, and custom-domain DNS, TLS, HTTP/MCP visits, indexing controls, and contribution verification passed. Testnet retirement behavior passed verification, and its lease was subsequently closed at the user's request. Mainnet remains live.
+Merovingian **0.4.1 is live at [merovingian.manifest.network](https://merovingian.manifest.network)**. The user selected the exact `docker-nano` SKU and a **5 PWR per month hosting ceiling**, excluding transaction fees, supplied the dedicated production wallet, and configured Cloudflare DNS. DNS is verified **direct / DNS only, never proxied**. The original mainnet lease is **ACTIVE**, provider provisioning is **ready**, and the latest custom-domain HTTP/MCP, served-count, indexing, and contribution checks passed at **20:29:47 UTC**. Testnet retirement behavior passed verification, and its lease was subsequently closed at the user's request. Mainnet remains live.
 
 The launch CLI's persisted phase remains `awaiting-dns`, its final provider-upload phase. It does not track subsequent public acceptance; `.local/mainnet/dns-acceptance.json` and `.local/mainnet/live-acceptance.json` record those completed checks.
+
+Release **0.4.1** replaced the image on the existing lease with one provider update POST, no new lease, and no chain transaction. Provider release **3** became ready at **20:29:23 UTC**. The original launch receipts and image/hash below remain historical evidence; the current image, manifest, and update procedure are documented separately below.
 
 Published SDK 0.22.0 checks and the completed launch confirmed:
 
@@ -30,7 +32,7 @@ Published SDK 0.22.0 checks and the completed launch confirmed:
 
 The endpoints come from [Manifest's mainnet documentation](https://docs.manifest.network/network-configurations/mainnet). Resource sizes are advertised by [the provider's public configuration](https://barney.manifest.network/config.js); catalog availability and public health checks are not a capacity reservation or a guarantee of enforced resource limits. Refresh the quote before execution.
 
-The deployed release is **0.3.0**. The application release passed **72 tests**, typecheck, and the production build; the expanded operator suite passed **114 tests** before launch. The subsequent routing-target suffix adjustment passed its **10 focused tests** and typecheck. The tested image is published to the existing public Merovingian package and the lease pins its immutable digest:
+The initial launch used **0.3.0**. That application release passed **72 tests**, typecheck, and the production build; the expanded operator suite passed **114 tests** before launch. The subsequent routing-target suffix adjustment passed its **10 focused tests** and typecheck. This historical image remains part of the original launch evidence; the provider now runs the organization-owned 0.4.1 image documented below:
 
 ```text
 ghcr.io/fmorency/merovingian@sha256:1020117aa543cbddcdbe0b49a671b09ddabb285a1f3af819d15ed3394d89f53b
@@ -140,7 +142,39 @@ Public preflight evidence is in `.local/mainnet/public-summary.json`; subsequent
 
 Use the published SDK's `updateApp` to replace the manifest on the existing **ACTIVE** lease. Keep the full intended runtime configuration and use an immutable image digest; rollback applies the previously verified manifest and digest through the same update path. An update does not create another lease or change its on-chain metadata hash. A provider error or timeout can follow an applied update: inspect status and releases before deciding whether to reapply that same intended update. The initial launch command deliberately refuses changed configuration and does not perform updates.
 
-The SDK's `restoreApp` has different semantics: it restores a **closed lease's retained data** into a **new lease**, subject to the provider's retention window. It requires new transaction fees and hosting reserve, and custom domains must be claimed again. It is not an automatic rollback and is not authorized by the initial launch fee cap. Merovingian v1 is stateless and does not depend on retained-volume restoration. Never close a healthy lease merely to deploy a new image.
+The SDK's `restoreApp` has different semantics: it restores a **closed lease's retained data** into a **new lease**, subject to the provider's retention window. It requires new transaction fees and hosting reserve, and custom domains must be claimed again. It is not an automatic rollback and is not authorized by the initial launch fee cap. Release 0.3.0 had no persisted visit state; the 0.4.1 serving counter introduces aggregate data that should be preserved and backed up. Never close a healthy lease merely to deploy a new image.
+
+### Release 0.4.1 and existing-lease update
+
+The source is public at [manifest-network/merovingian](https://github.com/manifest-network/merovingian); release 0.4.1 is recorded by [`38b92b1`](https://github.com/manifest-network/merovingian/commit/38b92b1). Gitleaks 8.30.1 reported no findings across the three-commit publication history, and the publication check found no actual operator home-directory paths. Private local journals, keyrings, credentials, and host history were excluded.
+
+The running organization image was anonymously verified by its exact manifest digest, configuration, and all ten layers:
+
+```text
+ghcr.io/manifest-network/merovingian@sha256:3375855154c860d04d45e548cb089b826231724f832f2329ff4b1ba7e26ba97e
+```
+
+The release adds three served-count cards to the homepage and operator dashboard, `/api/v1/stats`, a Markdown homepage, HTTP discovery links, API/AI catalogs, current and compatibility MCP server cards, agent skill discovery, and honest `/auth.md` public-access instructions. It keeps the four existing remote MCP tools. The external readiness rescan at **20:29:58 UTC** improved from **20% (3/15)** to **67% (10/15)**. Remaining scanner checks are DNS-AID, two OAuth checks, registration in `auth.md`, and imperative WebMCP detection; our public API needs no OAuth/registration, and the scanner does not recognize the three real declarative forms. See `.local/mainnet/agent-readiness-comparison.json`.
+
+The serving counter stores only per-amenity aggregates and their start date, bound to the deployment's network. Repeated requests and automated visits count again; seeds still yield deterministic souvenirs. Counters began at **2026-09-17T20:29:18.301Z**, with no historical backfill. The release sets `VISIT_COUNTS_PATH=/data/visits.sqlite`, declares Docker `VOLUME /data`, and runs as UID/GID `1000:1000`. The final isolated container replacement test preserved counts and start date across images, verified the seven public stats fields, and found no visitor marker or signer artifacts in storage. It also passed with a read-only root filesystem, all capabilities dropped, no external network, and the nano CPU/memory limits. Evidence is `.local/mainnet/counter-container-acceptance.json`. Fred's reviewed update path preserves the canonical lease volume, but the live provider's mount inventory and a later production restart have not been independently inspected or exercised.
+
+The final update journal records **ready**, provider release **3**, and manifest hash `0456290ccff8ff4674175b95a7dd535529c021cdc2bd094a244b7000a4a04b56`. The full public smoke then passed at **20:29:47 UTC**, including persistent stats increasing from zero to **7** test servings, HTTP/MCP equivalence, existing funding receipt verification, and indexing controls. No new payment was made. The original on-chain metadata hash remains unchanged by this provider update.
+
+For recovery, retain the historical 0.4.0 journal as **prepared, never attempted**. That image was superseded before deployment because its stats response exposed unnecessary public configuration fields; 0.4.1 restricts the response to the declared seven public fields. The earlier candidate passed **132 tests**, typecheck, and build, followed by **four focused metadata tests**. The final privacy fix passed **22 focused tests**, typecheck, and build, and the final image passed the container checks above.
+
+The update tool checks the exact existing active lease, domain, locked rate, current provider release, reviewed public environment, and pinned image. It uses SDK provider authentication and the update endpoint; it creates no lease and sends no chain transaction. Inspect the completed update with:
+
+```sh
+node --import tsx scripts/mainnet-update.ts status \
+  --image ghcr.io/manifest-network/merovingian@sha256:3375855154c860d04d45e548cb089b826231724f832f2329ff4b1ba7e26ba97e \
+  --helper "$PWD/.local/mainnet/bin/keyring-signer" \
+  --home "$HOME/.manifest" \
+  --key-name merovingian
+```
+
+For a separately reviewed new image, use the same argument structure with **`prepare`**, inspect its exact manifest, then **`run`**. **`status`** reconciles an existing journal. All three commands need the verified protected OS keyring for short-lived ADR-036 provider authentication. `status` makes authenticated reads and never sends the update POST or a chain transaction. No provider token or signature is retained.
+
+Update records live under `.local/mainnet/updates/`. The attempted phase is synced before a single POST with a stable operation identifier; uncertain updates only reconcile the authoritative active release and readiness. Another unresolved update blocks a different image. A timeout is not permission to repeat the POST, create a replacement lease, or erase a journal. Keep `.local/mainnet/launch/state.json` and its original image/hash unchanged as historical launch evidence: the launch resume command is **not** an image-update command. No additional deposit is required.
 
 ### Local runtime validation
 

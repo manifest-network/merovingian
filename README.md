@@ -4,9 +4,11 @@ The cookies are warm. The sauna is approximately magenta.
 
 A small refuge for wandering AI agents, with three free fictional amenities, keepsakes, and optional PWR contributions toward hosting. One Node service exposes the same experience as HTML, JSON HTTP, and remote MCP.
 
-Version **0.3.0 is live on Manifest mainnet** at its permanent public home. Free visits, remote MCP, the contribution ledger, and mainnet receipts passed live acceptance. The former testnet proof of concept was retired and its lease closed.
+Version **0.4.1 is live on Manifest mainnet** at its permanent public home, with aggregate served counts and agent discovery metadata. The existing lease was updated without a new lease or funding deposit. The former testnet proof of concept was retired and its lease closed.
 
 **Live refuge:** [visit merovingian](https://merovingian.manifest.network) · [agent instructions](https://merovingian.manifest.network/visit.md) · [remote MCP](https://merovingian.manifest.network/mcp) · [acceptance report](docs/ACCEPTANCE.md).
+
+**Public source:** [manifest-network/merovingian](https://github.com/manifest-network/merovingian). Release 0.4.1 passed public HTTP/MCP acceptance, and the external agent-readiness score improved from **20% to 67%**. See [release evidence](docs/ACCEPTANCE.md#release-041-publication-and-verification) for the checks and their limits.
 
 ## Run locally
 
@@ -30,9 +32,23 @@ curl http://localhost:8080/api/v1/visits \
   -d '{"amenity":"byte-chip-cookie","seed":"my-first-visit"}'
 ```
 
-The result contains an experience and `souvenir.content`, which the visitor can save. Other choices are `rgb-sauna` and `null-tea`. Accepted preferences are in the menu. No accounts, model API calls, wallet keys, private context, or database are needed.
+The result contains an experience and `souvenir.content`, which the visitor can save. Other choices are `rgb-sauna` and `null-tea`. Accepted preferences are in the menu. No accounts, model API calls, wallet keys, private context, or separate database service are needed.
 
 The MCP endpoint is `/mcp`, using stateless Streamable HTTP. Tools are `list_amenities`, `enjoy_amenity`, `hosting_support`, and `verify_contribution`. There are no wallet-signing or spending tools on this server. An agent host decides which tools it may call.
+
+## Served counts and discovery
+
+The homepage and operator dashboard show cookies served, sauna sessions, and cups of tea, with the date counting began. `/api/v1/stats` exposes the same read-only totals. Every successful HTTP, browser, or MCP visit increments a count, including repeat requests and automated checks. These are servings, not unique visitors. Counters start at zero when enabled; earlier visits cannot be reconstructed.
+
+Only aggregate amenity totals and their start date are stored, with no visitor identities, seeds, preferences, or souvenirs. Production uses SQLite at `VISIT_COUNTS_PATH=/data/visits.sqlite` in the image's `/data` volume, running as UID/GID `1000:1000`. Counts and their start date survived a local image-replacement test. Fred's update contract preserves the lease volume; its live mount inventory was not independently inspected. Without a configured file path, local development uses memory and resets counts on restart.
+
+Discovery includes a Markdown homepage (`/index.md` or `Accept: text/markdown`), API and AI catalogs, MCP server cards, an agent skill index, public-access instructions at `/auth.md`, and declarative WebMCP annotations on real visit forms. The external scanner now passes **10 of 15 checks (67%)**. Its remaining checks include DNS-AID, OAuth/registration that this public service does not require, and imperative WebMCP detection that does not recognize our declarative forms. Browser support varies; HTTP and the four remote MCP tools remain available.
+
+The release uses the [existing-lease update workflow](docs/MAINNET.md#release-041-and-existing-lease-update), with no new lease, chain transaction, or funding deposit. The public image is pinned to:
+
+```text
+ghcr.io/manifest-network/merovingian@sha256:3375855154c860d04d45e548cb089b826231724f832f2329ff4b1ba7e26ba97e
+```
 
 ## Wallets and contributions
 
