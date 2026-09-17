@@ -17,13 +17,15 @@ export class VisitCountUnavailable extends Error {
 
 /** Only three aggregate totals and their start date; never visitor data. */
 export class VisitCounter {
+  private readonly environment: VisitEnvironment;
   private readonly db: DatabaseSync;
   private readonly increment: StatementSync;
   private readonly totals: StatementSync;
   private readonly since: string;
   readonly storage: 'persistent' | 'memory';
 
-  constructor(private readonly environment: VisitEnvironment, path = ':memory:') {
+  constructor(environment: VisitEnvironment, path = ':memory:') {
+    this.environment = { network: environment.network, chainId: environment.chainId };
     this.storage = path === ':memory:' ? 'memory' : 'persistent';
     if (this.storage === 'persistent') mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     this.db = new DatabaseSync(path, { enableForeignKeyConstraints: true, enableDoubleQuotedStringLiterals: false });

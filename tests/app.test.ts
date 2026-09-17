@@ -68,6 +68,7 @@ test('public serving totals count successful HTTP, form and MCP visits, includin
   const { base, request, json } = await fixture(t);
   const client = await mcpClient(t, base);
   const initial = await (await request('/api/v1/stats')).json();
+  assert.deepEqual(Object.keys(initial).sort(), ['chainId', 'counts', 'network', 'since', 'status', 'storage', 'total']);
   assert.equal(initial.total, '0');
   await request('/');
   await request('/healthz');

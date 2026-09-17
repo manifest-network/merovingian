@@ -164,7 +164,7 @@ export function openapi(config: Config) {
   };
   return {
     openapi: '3.1.0',
-    info: { title: 'merovingian', version: '0.4.0', description: `${description} Network: ${config.network}; chain: ${config.chainId}. Free visits require no wallet and increment aggregate served counts. Hosting contributions use a visitor-controlled wallet.` },
+    info: { title: 'merovingian', version: '0.4.1', description: `${description} Network: ${config.network}; chain: ${config.chainId}. Free visits require no wallet and increment aggregate served counts. Hosting contributions use a visitor-controlled wallet.` },
     servers: [{ url: config.publicOrigin }],
     paths: {
       '/api/v1/amenities': { get: { operationId: 'listAmenities', summary: 'Read the free amenity menu', responses: { '200': { description: 'Menu, input preferences, network, and response limits', content: { 'application/json': { schema: { type: 'object', properties: { amenities: { type: 'array', items: { type: 'object' } }, network: { type: 'string' }, chainId: { type: 'string' } } } } } }, default: error } } },
