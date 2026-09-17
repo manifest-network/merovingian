@@ -41,7 +41,7 @@ export function readinessDocuments(config: Config, version: string): ReadonlyMap
   // This compatibility document is separate from the current canonical card:
   // https://github.com/modelcontextprotocol/experimental-ext-server-card
   const legacyCard = {
-    serverInfo: { name: 'merovingian', version },
+    serverInfo: { name: MCP_CARD_NAME, version },
     description: 'Legacy MCP discovery metadata. Use /mcp/server-card for the current Server Card format. Public tools need no authentication; optional contributions require your own authorized wallet.',
     protocolVersion: SUPPORTED_PROTOCOL_VERSIONS[0],
     transport: { type: 'streamable-http', endpoint: `${origin}/mcp` },
