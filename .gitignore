@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.local/
+.env
+.env.*
+!.env.example
+!.env.mainnet.example
+coverage/
+*.log
+.agents/
+.codex/
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.pem
+*.key
