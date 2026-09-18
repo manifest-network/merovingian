@@ -18,6 +18,20 @@ were read before the acceptance report completed at **15:09:52.871Z**, on
 2026-09-18. The original check did not record the final stats request's exact
 time, so the evidence labels the latter timestamp as `afterObservedByAt`.
 
+The separately dated `imageIdentifierVerification` records a read-only recheck
+of the local image and GHCR. Docker 29.6.2 on this host uses the containerd image
+store and returned the manifest digest in both `Id` and `Descriptor.digest`.
+This agrees with the [Moby containerd inspection implementation](https://github.com/moby/moby/blob/master/daemon/containerd/image_inspect.go),
+which returns the image target's digest. The original fixture's recorded value
+is retained as `dockerInspectId`; the distinct `configurationDigest` is recorded
+separately. Both the manifest and configuration were independently hashed from
+the local OCI export and matched the corresponding anonymous GHCR blob bytes.
+This recheck did not rebuild the image or repeat the fixture or deployment.
+
+Service-returned `since` and registry `publishedAt` strings are preserved exactly,
+as is the journal's readiness timestamp. Other observation timestamps use UTC
+`Z`; compare mixed fractional precision as parsed instants.
+
 **Acceptance scope:** the full `scripts/smoke.ts`, `/visit` form submission,
 `POST /api/v1/visits`, and MCP `enjoy_amenity` were not rerun against live `0.4.3` because the release
 authorization excluded live visits. The full smoke results below describe older

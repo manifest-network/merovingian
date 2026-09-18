@@ -32,7 +32,7 @@
     "newLease": false,
     "chainTransaction": false,
     "additionalFunding": false,
-    "readyRecordedAt": "2026-09-18T15:09:30.178000Z",
+    "readyRecordedAt": "2026-09-18T15:09:30.178Z",
     "timingNote": "The operator journal recorded this timestamp after observing provider release 5 ready; the exact provider transition time was not recorded."
   },
   "localContainerCheck": {
@@ -45,8 +45,9 @@
     "previousVersionFixturePreserved": true,
     "limitsDescribe": "Isolated local check, not the provider SKU.",
     "image": "ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
-    "localImageId": "sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
-    "imageRelationship": "This tested local image was subsequently published unchanged under imagePublication.image; the published manifest digest matched the local image digest."
+    "imageRelationship": "The fixture ran against dockerInspectId. Its original local report also recorded the same manifest in RepoDigests, and the later push returned that manifest digest. The separate imageIdentifierVerification records the distinct configuration digest from a later read-only recheck.",
+    "dockerInspectId": "sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
+    "idSource": "The Id field returned by docker image inspect and recorded with the original fixture check; it is not labelled as a configuration digest."
   },
   "liveAcceptance": {
     "checkedAt": "2026-09-18T15:09:52.871000Z",
@@ -97,7 +98,7 @@
         "network": "mainnet",
         "chainId": "manifest-ledger-mainnet",
         "status": "available",
-        "since": "2026-09-17T20:29:18.301000Z",
+        "since": "2026-09-17T20:29:18.301Z",
         "counts": {
           "byte-chip-cookie": "6",
           "null-tea": "6",
@@ -110,7 +111,7 @@
         "network": "mainnet",
         "chainId": "manifest-ledger-mainnet",
         "status": "available",
-        "since": "2026-09-17T20:29:18.301000Z",
+        "since": "2026-09-17T20:29:18.301Z",
         "counts": {
           "byte-chip-cookie": "6",
           "null-tea": "6",
@@ -149,7 +150,7 @@
     "version": "0.4.3",
     "exactRecordUrl": "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.3",
     "latestRecordUrl": "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/latest",
-    "publishedAt": "2026-09-18T15:13:34.279660Z",
+    "publishedAt": "2026-09-18T15:13:34.27966Z",
     "active": true,
     "isLatest": true,
     "exactMetadataMatch": true,
@@ -160,5 +161,22 @@
     "metadataComparison": "The parsed server object from each exact-version and latest response was equal to the parsed server.json object; JSON byte serialization was not compared."
   },
   "scope": "Release acceptance used read-only public HTTP and MCP calls; no new live visit or payment was performed.",
-  "timestampFormat": "UTC RFC 3339 with six fractional digits; original instants are preserved. Observation bounds are labelled separately from exact times."
+  "timestampFormat": "Operator-generated observation timestamps use UTC Z. Transcribed service values (registryPublication.publishedAt and servingPersistence.before/after.since) and deployment.readyRecordedAt retain their exact recorded strings. Fractional precision may differ; compare timestamps as parsed instants. Observation bounds are labelled separately from exact times.",
+  "imageIdentifierVerification": {
+    "checkedAt": "2026-09-18T15:54:08.039253Z",
+    "image": "ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
+    "dockerEngineVersion": "29.6.2",
+    "imageStoreDriver": "io.containerd.snapshotter.v1",
+    "dockerInspectId": "sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
+    "dockerInspectDescriptorDigest": "sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
+    "repoDigest": "ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
+    "manifestDigest": "sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
+    "configurationDigest": "sha256:c7579b288032d121996496cab6293549ebdf1d054be6c2b640a44f6558160e15",
+    "localExportManifestHashVerified": true,
+    "localExportConfigurationHashVerified": true,
+    "registryManifestBytesMatchLocalExport": true,
+    "registryConfigurationBytesMatchLocalExport": true,
+    "registryAccess": "anonymous",
+    "timingNote": "Read-only identifier verification during PR review, after the original fixture check and publication; it does not rerun the fixture or deployment."
+  }
 }

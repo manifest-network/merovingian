@@ -27,6 +27,9 @@ the exact published metadata; do not regenerate or overwrite that historical rec
 
 Use the [snapshot index](evidence/mcp-registry-snapshots.json) when reading these
 saved responses. It records file hashes and dated observations or capture bounds.
+`npm run registry:check` (also part of `npm run check` and CI) re-hashes every
+snapshot named by the index and rejects missing, unsafe, or changed artifacts.
+It never rewrites the snapshots or repairs hashes automatically.
 Both responses retain `isLatest: true` because each described a different moment;
 neither is a claim about the current registry state. The original standalone
 `0.4.2` capture time was not recorded, but its complete parsed object matches the
