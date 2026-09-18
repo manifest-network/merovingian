@@ -1,0 +1,182 @@
+{
+  "version": "0.4.3",
+  "origin": "https://merovingian.manifest.network",
+  "source": {
+    "pullRequest": "https://github.com/manifest-network/merovingian/pull/1",
+    "mergedCommit": "300ac773f28dd61bd804d376cbddcd6ffbd5e82a",
+    "imageSourceCommit": "ef53a3feb62e91c0930d8f97a8aeff4e4c7bf17e",
+    "mainCi": "https://github.com/manifest-network/merovingian/actions/runs/35360101100",
+    "ciPassed": true,
+    "testsPassed": 142,
+    "gitTree": "5783b3031882f6afd263d44b156eb0c219aeb90b",
+    "commitRelationship": "The image was built from imageSourceCommit before PR #1 was squash-merged. Both commits resolve to gitTree; mergedCommit is the canonical source reference reachable from main."
+  },
+  "imagePublication": {
+    "checkedAt": "2026-09-18T15:08:10.678118Z",
+    "image": "ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
+    "tag": "0.4.3",
+    "anonymous": true,
+    "manifestDigestVerified": true,
+    "configurationDigestVerified": true,
+    "architecture": "amd64",
+    "os": "linux",
+    "user": "node",
+    "allLayersAnonymouslyAccessible": true,
+    "layerCount": 10
+  },
+  "deployment": {
+    "leaseId": "01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd",
+    "providerRelease": 5,
+    "status": "ready",
+    "manifestHash": "a68e232d7726ad108b1307c3bb512a1d31c37459527f639872654682000a1174",
+    "newLease": false,
+    "chainTransaction": false,
+    "additionalFunding": false,
+    "readyRecordedAt": "2026-09-18T15:09:30.178Z",
+    "timingNote": "The operator journal recorded this timestamp after observing provider release 5 ready; the exact provider transition time was not recorded."
+  },
+  "localContainerCheck": {
+    "checkedAt": "2026-09-18T15:02:16.369106Z",
+    "isolatedNetwork": true,
+    "readOnlyRoot": true,
+    "uid": 1000,
+    "memoryBytes": 134217728,
+    "cpuLimit": 0.1,
+    "previousVersionFixturePreserved": true,
+    "limitsDescribe": "Isolated local check, not the provider SKU.",
+    "image": "ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
+    "imageRelationship": "The fixture ran against dockerInspectId. Its original local report also recorded the same manifest in RepoDigests, and the later push returned that manifest digest. The separate imageIdentifierVerification records the distinct configuration digest from a later read-only recheck.",
+    "dockerInspectId": "sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
+    "idSource": "The Id field returned by docker image inspect and recorded with the original fixture check; it is not labelled as a configuration digest."
+  },
+  "liveAcceptance": {
+    "checkedAt": "2026-09-18T15:09:52.871000Z",
+    "passed": true,
+    "health": {
+      "status": "ok",
+      "network": "mainnet",
+      "chainId": "manifest-ledger-mainnet",
+      "retired": false,
+      "version": "0.4.3"
+    },
+    "identities": {
+      "currentCard": {
+        "name": "io.github.manifest-network/merovingian",
+        "version": "0.4.3"
+      },
+      "legacyCard": {
+        "name": "io.github.manifest-network/merovingian",
+        "version": "0.4.3"
+      },
+      "mcp": {
+        "name": "io.github.manifest-network/merovingian",
+        "version": "0.4.3"
+      },
+      "openapiVersion": "0.4.3"
+    },
+    "mcp": {
+      "availableTools": [
+        "enjoy_amenity",
+        "hosting_support",
+        "list_amenities",
+        "verify_contribution"
+      ],
+      "menuAmenities": [
+        "byte-chip-cookie",
+        "null-tea",
+        "rgb-sauna"
+      ],
+      "calls": [
+        "initialize",
+        "tools/list",
+        "tools/call:list_amenities"
+      ]
+    },
+    "servingPersistence": {
+      "beforeCheckedAt": "2026-09-18T15:08:54.461959Z",
+      "before": {
+        "network": "mainnet",
+        "chainId": "manifest-ledger-mainnet",
+        "status": "available",
+        "since": "2026-09-17T20:29:18.301Z",
+        "counts": {
+          "byte-chip-cookie": "6",
+          "null-tea": "6",
+          "rgb-sauna": "4"
+        },
+        "total": "16",
+        "storage": "persistent"
+      },
+      "after": {
+        "network": "mainnet",
+        "chainId": "manifest-ledger-mainnet",
+        "status": "available",
+        "since": "2026-09-17T20:29:18.301Z",
+        "counts": {
+          "byte-chip-cookie": "6",
+          "null-tea": "6",
+          "rgb-sauna": "4"
+        },
+        "total": "16",
+        "storage": "persistent"
+      },
+      "sameStartDate": true,
+      "noDecrease": true,
+      "observedDifferences": {
+        "byte-chip-cookie": "0",
+        "null-tea": "0",
+        "rgb-sauna": "0",
+        "total": "0"
+      },
+      "differenceAttribution": "Not attributed; other visitors may use the live service during the release.",
+      "afterObservedByAt": "2026-09-18T15:09:52.871000Z",
+      "timingNote": "The final stats response was parsed and checked before the acceptance report timestamp. Exact request/response timestamps were not recorded; afterObservedByAt is an upper bound on that observation."
+    },
+    "testVisitPerformed": false,
+    "notRun": {
+      "script": "scripts/smoke.ts",
+      "liveServingPaths": [
+        "POST /visit",
+        "POST /api/v1/visits",
+        "MCP tools/call:enjoy_amenity"
+      ],
+      "reason": "Release acceptance was authorized for read-only checks; the full smoke script creates servings. These serving paths were covered locally but not re-exercised on deployed 0.4.3."
+    }
+  },
+  "registryPublication": {
+    "checkedAt": "2026-09-18T15:13:44.812579Z",
+    "registry": "https://registry.modelcontextprotocol.io",
+    "name": "io.github.manifest-network/merovingian",
+    "version": "0.4.3",
+    "exactRecordUrl": "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.3",
+    "latestRecordUrl": "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/latest",
+    "publishedAt": "2026-09-18T15:13:34.27966Z",
+    "active": true,
+    "isLatest": true,
+    "exactMetadataMatch": true,
+    "serverJsonFileSha256": "77df1a7569216378c8ce8c6669748898251244505270e62c6eb242526b9445ea",
+    "hashedFile": "server.json",
+    "hashedFileCommit": "300ac773f28dd61bd804d376cbddcd6ffbd5e82a",
+    "hashInput": "Exact UTF-8 bytes of the committed server.json file, including whitespace and trailing newline; not the registry response serialization.",
+    "metadataComparison": "The parsed server object from each exact-version and latest response was equal to the parsed server.json object; JSON byte serialization was not compared."
+  },
+  "scope": "Release acceptance used read-only public HTTP and MCP calls; no new live visit or payment was performed.",
+  "timestampFormat": "Operator-generated observation timestamps use UTC Z. Transcribed service values (registryPublication.publishedAt and servingPersistence.before/after.since) and deployment.readyRecordedAt retain their exact recorded strings. Fractional precision may differ; compare timestamps as parsed instants. Observation bounds are labelled separately from exact times.",
+  "imageIdentifierVerification": {
+    "checkedAt": "2026-09-18T15:54:08.039253Z",
+    "image": "ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
+    "dockerEngineVersion": "29.6.2",
+    "imageStoreDriver": "io.containerd.snapshotter.v1",
+    "dockerInspectId": "sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
+    "dockerInspectDescriptorDigest": "sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
+    "repoDigest": "ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
+    "manifestDigest": "sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
+    "configurationDigest": "sha256:c7579b288032d121996496cab6293549ebdf1d054be6c2b640a44f6558160e15",
+    "localExportManifestHashVerified": true,
+    "localExportConfigurationHashVerified": true,
+    "registryManifestBytesMatchLocalExport": true,
+    "registryConfigurationBytesMatchLocalExport": true,
+    "registryAccess": "anonymous",
+    "timingNote": "Read-only identifier verification during PR review, after the original fixture check and publication; it does not rerun the fixture or deployment."
+  }
+}

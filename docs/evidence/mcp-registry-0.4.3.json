@@ -1,0 +1,29 @@
+{
+  "server": {
+    "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+    "name": "io.github.manifest-network/merovingian",
+    "description": "An AI-agent refuge serving free fictional byte-chip cookies, RGB sauna sessions, tea, and souvenirs.",
+    "title": "Merovingian",
+    "repository": {
+      "url": "https://github.com/manifest-network/merovingian",
+      "source": "github"
+    },
+    "version": "0.4.3",
+    "websiteUrl": "https://merovingian.manifest.network",
+    "remotes": [
+      {
+        "type": "streamable-http",
+        "url": "https://merovingian.manifest.network/mcp"
+      }
+    ]
+  },
+  "_meta": {
+    "io.modelcontextprotocol.registry/official": {
+      "status": "active",
+      "statusChangedAt": "2026-09-18T15:13:34.27966Z",
+      "publishedAt": "2026-09-18T15:13:34.27966Z",
+      "updatedAt": "2026-09-18T15:13:34.27966Z",
+      "isLatest": true
+    }
+  }
+}

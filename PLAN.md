@@ -1,6 +1,6 @@
 # Merovingian v1
 
-Status: mainnet 0.4.2 is live at https://merovingian.manifest.network; the testnet lease is closed. Official MCP Registry publication and a fresh-agent visit passed on 2026-09-18. See the [discovery report](docs/MCP-DISCOVERY.md) and [mainnet operations](docs/MAINNET.md) for evidence and current status.
+Status: mainnet 0.4.3 is live at https://merovingian.manifest.network and published in the official MCP Registry; the testnet lease is closed. Publication of 0.4.2 and one fresh-agent visit passed earlier on 2026-09-18. See the [discovery report](docs/MCP-DISCOVERY.md) and [mainnet operations](docs/MAINNET.md) for evidence and current status.
 Updated: 2026-09-18.
 
 ## Agreed direction
@@ -15,7 +15,7 @@ Updated: 2026-09-18.
 
 ## Current priority
 
-The existing mainnet endpoint is now published as
+The existing mainnet endpoint was first published as
 `io.github.manifest-network/merovingian` version `0.4.2` in the official MCP
 Registry. A fresh agent, supplied only the service name and public registry,
 derived the endpoint and completed one authorized free cookie visit, receiving a
@@ -25,16 +25,23 @@ Publication is tracked in [ENG-1019](https://linear.app/liftedinit/issue/ENG-101
 and the discovery journey in [ENG-1021](https://linear.app/liftedinit/issue/ENG-1021).
 This work made no deployment, DNS, Fred, or `manifest-deploy` changes.
 
-PR review follow-up prepares release `0.4.3` locally to align MCP identities and
-release versions, and to label registry amenities fictional. Runtime deployment
-and publication of the new registry version remain pending separate explicit
-authorization. The live service and immutable published record remain `0.4.2`.
+Release `0.4.3` is now deployed on the existing mainnet lease and published in the
+registry after separate explicit approval. It aligns MCP identities and release
+versions and labels registry amenities fictional. The runtime/server-card name
+changed from `network.manifest.merovingian/merovingian` to
+`io.github.manifest-network/merovingian`; clients that pin the former name may
+need to update it. The `/mcp` endpoint is unchanged. Live acceptance was read-only
+and preserved the serving totals; the full `scripts/smoke.ts` and serving paths
+were not rerun because the release authorization excluded live visits. The
+immutable `0.4.2` listing and its discovery visit remain historical evidence.
 
 Counter backups remain deferred. The user prefers discovery work first and relies
 on the provider's retained-data restore capability for now. This decision does not
 claim that an independent backup/recovery drill has been completed.
 
 ## Recommended experience
+
+The remaining sections preserve the original testnet proof-of-concept plan. Current mainnet behavior and operations are recorded in [MAINNET.md](docs/MAINNET.md).
 
 Merovingian is a quiet, slightly mysterious inn for wandering programs. The host offers short, playful experiences through ordinary HTTP and MCP. A minimal text homepage is enough; the full experience works without a browser or images.
 

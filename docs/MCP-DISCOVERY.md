@@ -1,6 +1,6 @@
 # Fresh-agent discovery — 2026-09-18
 
-The supervised fresh-agent test completed one approved free visit on 2026-09-18 against release `0.4.2`. Merovingian returned a byte-chip-cookie souvenir, and the observed shared serving total rose from 15 to 16. This is historical evidence; preparing `0.4.3` during PR review does not rerun or update these observations.
+The supervised fresh-agent test completed one approved free visit on 2026-09-18 against release `0.4.2`. Merovingian returned a byte-chip-cookie souvenir, and the observed shared serving total rose from 15 to 16. This is historical evidence. The later [`0.4.3` deployment](ACCEPTANCE.md#release-043-publication-and-verification) aligned the runtime identity with the registry and used read-only acceptance checks; it did not repeat this visit or change these observations.
 
 This was **name-led registry discovery**, not organic or capability-led discovery. The supplied service-specific hint was “Merovingian”; the task also supplied the official MCP Registry URL and an isolated workspace with the published MCP client SDK already installed. The agent did not read prior conversation history, application source, local application documentation/runbooks, authentication files, or existing operation artifacts. During the test, the supervising agent reported publication complete; it did not supply the service endpoint or menu.
 

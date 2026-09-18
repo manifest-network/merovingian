@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "semantics": "Immutable historical registry responses. status and isLatest describe the record when observed, not the current registry state. Consult currentLatestRecordUrl for current state.",
+  "fileHashInput": "Exact bytes of the named committed JSON snapshot file, including whitespace and trailing newline.",
+  "currentLatestRecordUrl": "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/latest",
+  "snapshots": [
+    {
+      "artifact": "mcp-registry-0.4.2.json",
+      "snapshotFileSha256": "e615107d231d534a1e0842cb5807cc8c6a3ac00f0ca262735358c4834a8576b1",
+      "version": "0.4.2",
+      "capturedAt": null,
+      "observation": {
+        "startedAt": "2026-09-18T13:44:54.588000Z",
+        "completedAt": "2026-09-18T13:44:56.009000Z",
+        "sourceArtifact": "mcp-discovery-2026-09-18.json",
+        "sourcePointer": "/discoveryRoute/3/response/servers/0",
+        "relationship": "The same parsed JSON object was independently observed in this dated discovery response. The standalone snapshot capture time was not recorded."
+      }
+    },
+    {
+      "artifact": "mcp-registry-0.4.3.json",
+      "snapshotFileSha256": "20734e2f5f3dc04d18b2540b16a8fb11a2c260a8dd0159e7c7b66ccc792f3d8b",
+      "version": "0.4.3",
+      "capturedAt": null,
+      "capturedByAt": "2026-09-18T15:13:44.812579Z",
+      "sourceArtifact": "release-0.4.3.json",
+      "sourcePointer": "/registryPublication/checkedAt",
+      "timingNote": "The exact response was saved before the publication report timestamp. Exact fetch timing was not recorded; capturedByAt is an upper bound."
+    }
+  ]
+}
