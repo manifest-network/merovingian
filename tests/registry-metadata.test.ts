@@ -44,6 +44,23 @@ test('registry snapshot validation accepts exact bytes and the committed evidenc
   assert.ok(assertRegistrySnapshots() >= 2);
 });
 
+test('registry snapshot validation requires new registry evidence in the index and ignores unrelated JSON', (t) => {
+  const { directory, snapshot, writeIndex } = snapshotFixture(t);
+  writeFileSync(join(directory, 'release-verification.json'), '{"status":"verified"}\n');
+  assert.equal(assertRegistrySnapshots(directory), 1);
+
+  const artifact = 'mcp-registry-0.4.4.json';
+  const bytes = '{\n  "version": "0.4.4",\n  "status": "active"\n}\n';
+  writeFileSync(join(directory, artifact), bytes);
+  assert.throws(() => assertRegistrySnapshots(directory), /Registry snapshots missing from index/);
+
+  writeIndex([
+    snapshot,
+    { artifact, snapshotFileSha256: createHash('sha256').update(bytes).digest('hex') },
+  ]);
+  assert.equal(assertRegistrySnapshots(directory), 2);
+});
+
 test('registry snapshot validation rejects changed content and formatting with a stale hash', (t) => {
   const { directory, artifact, bytes } = snapshotFixture(t);
   for (const changed of [

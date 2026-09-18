@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { lstatSync, readFileSync, writeFileSync } from 'node:fs';
+import { lstatSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { APP_VERSION, MCP_SERVER_INFO } from '../src/identity.js';
@@ -22,7 +22,7 @@ export function assertRegistryMetadata(metadata: unknown): void {
   assert.deepEqual(metadata, registryMetadata(), 'server.json has drifted; review and run npm run registry:generate');
 }
 
-/** Check exact historical snapshot bytes without rewriting their contents or index. */
+/** Check historical snapshot bytes and complete index coverage without rewriting either. */
 export function assertRegistrySnapshots(
   evidenceDirectory = fileURLToPath(new URL('../docs/evidence/', import.meta.url)),
 ): number {
@@ -57,6 +57,12 @@ export function assertRegistrySnapshots(
     assert.equal(digest, snapshot.snapshotFileSha256,
       `${artifact}: snapshotFileSha256 differs from exact file bytes; restore the immutable snapshot instead of regenerating historical evidence`);
   }
+  const unindexed = readdirSync(evidenceDirectory).filter(name =>
+    name.startsWith('mcp-registry-') && name.endsWith('.json')
+    && name !== 'mcp-registry-snapshots.json' && !artifacts.has(name),
+  ).sort();
+  assert.equal(unindexed.length, 0,
+    `Registry snapshots missing from index: ${unindexed.join(', ')}; add each snapshot and its exact file SHA-256 to mcp-registry-snapshots.json`);
   return artifacts.size;
 }
 
