@@ -2,13 +2,13 @@
 
 Mainnet supersedes the proof of concept. It is the permanent public refuge and the only environment that will handle real-value contributions or sales. These are follow-on requirements, not claims that the testnet prototype already implements a commercial payment system.
 
-## Live mainnet acceptance — 2026-09-17
+## Live mainnet acceptance — 2026-09-18
 
-Merovingian **0.4.2 is live at [merovingian.manifest.network](https://merovingian.manifest.network)**. The user selected the exact `docker-nano` SKU and a **5 PWR per month hosting ceiling**, excluding transaction fees, supplied the dedicated production wallet, and configured Cloudflare DNS. DNS is verified **direct / DNS only, never proxied**. The original mainnet lease is **ACTIVE**, provider provisioning is **ready**, and aggregate counts survived the production image update. Testnet retirement behavior passed verification, and its lease was subsequently closed at the user's request. Mainnet remains live.
+Merovingian **0.4.3 is live at [merovingian.manifest.network](https://merovingian.manifest.network)**. The user selected the exact `docker-nano` SKU and a **5 PWR per month hosting ceiling**, excluding transaction fees, supplied the dedicated production wallet, and configured Cloudflare DNS. DNS is verified **direct / DNS only, never proxied**. The original mainnet lease is **ACTIVE**, provider provisioning is **ready**, and aggregate counts survived the production image update. Testnet retirement behavior passed verification, and its lease was subsequently closed at the user's request. Mainnet remains live.
 
 The launch CLI's persisted phase remains `awaiting-dns`, its final provider-upload phase. It does not track subsequent public acceptance; `.local/mainnet/dns-acceptance.json` and `.local/mainnet/live-acceptance.json` record those completed checks.
 
-Release **0.4.2** replaced the image on the existing lease with one provider update POST, no new lease, and no chain transaction. Provider release **4** is ready. The original launch receipts and image/hash below remain historical evidence; the current image, manifest, and update procedure are documented separately below.
+Release **0.4.3** replaced the image on the existing lease with one provider update POST, no new lease, and no chain transaction. Provider release **5** is ready. The original launch receipts and image/hash below remain historical evidence; the current image, manifest, and update procedure are documented separately below.
 
 Published SDK 0.22.0 checks and the completed launch confirmed:
 
@@ -32,7 +32,7 @@ Published SDK 0.22.0 checks and the completed launch confirmed:
 
 The endpoints come from [Manifest's mainnet documentation](https://docs.manifest.network/network-configurations/mainnet). Resource sizes are advertised by [the provider's public configuration](https://barney.manifest.network/config.js); catalog availability and public health checks are not a capacity reservation or a guarantee of enforced resource limits. Refresh the quote before execution.
 
-The initial launch used **0.3.0**. That application release passed **72 tests**, typecheck, and the production build; the expanded operator suite passed **114 tests** before launch. The subsequent routing-target suffix adjustment passed its **10 focused tests** and typecheck. This historical image remains part of the original launch evidence; the provider now runs the organization-owned 0.4.2 image documented below:
+The initial launch used **0.3.0**. That application release passed **72 tests**, typecheck, and the production build; the expanded operator suite passed **114 tests** before launch. The subsequent routing-target suffix adjustment passed its **10 focused tests** and typecheck. This historical image remains part of the original launch evidence; the provider now runs the organization-owned 0.4.3 image documented below:
 
 ```text
 ghcr.io/fmorency/merovingian@sha256:1020117aa543cbddcdbe0b49a671b09ddabb285a1f3af819d15ed3394d89f53b
@@ -144,11 +144,25 @@ Use the published SDK's `updateApp` to replace the manifest on the existing **AC
 
 The SDK's `restoreApp` has different semantics: it restores a **closed lease's retained data** into a **new lease**, subject to the provider's retention window. It requires new transaction fees and hosting reserve, and custom domains must be claimed again. It is not an automatic rollback and is not authorized by the initial launch fee cap. Release 0.3.0 had no persisted visit state; the 0.4.1 serving counter introduces aggregate data that should be preserved and backed up. Never close a healthy lease merely to deploy a new image.
 
-### Release 0.4.2 and existing-lease update
+### Release 0.4.3
+
+The user explicitly approved image publication, the existing-lease update, and MCP Registry publication. [PR #1](https://github.com/manifest-network/merovingian/pull/1) merged as [`300ac77`](https://github.com/manifest-network/merovingian/commit/300ac77); [main CI](https://github.com/manifest-network/merovingian/actions/runs/35360101100) passed registry consistency, typecheck, 142 tests, and build. The public image is:
+
+```text
+ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de
+```
+
+Manifest/configuration digests and anonymous access to all ten layers were verified. Provider release **5** is ready with manifest hash `a68e232d7726ad108b1307c3bb512a1d31c37459527f639872654682000a1174`, on the same active lease. No additional deposit, chain transaction, DNS change, or data migration was needed.
+
+Public read-only acceptance passed at **2026-09-18T15:09:52.871Z**. Health, OpenAPI, both server cards, and MCP initialization report `0.4.3`; the runtime and cards now identify the service as `io.github.manifest-network/merovingian`. Counts remained **6 cookies, 4 sauna sessions, and 6 teas**, with the exact original start date. No live visit was performed. See [release acceptance](ACCEPTANCE.md#release-043-publication-and-verification) and [sanitized evidence](evidence/release-0.4.3.json).
+
+Registry `0.4.3` was published at **2026-09-18T15:13:34.27966Z**. Exact-version and latest records both returned active metadata matching `server.json`. The historical `0.4.2` registry record and fresh-agent visit are preserved separately.
+
+### Historical release 0.4.2
 
 The source is public at [manifest-network/merovingian](https://github.com/manifest-network/merovingian); release 0.4.2 is recorded by [`b5ea795`](https://github.com/manifest-network/merovingian/commit/b5ea795). Publication checks exclude local journals, keyrings, credentials, and host history. Gitleaks 8.30.1 reported no findings in the source or publication history, and every historical blob was checked for machine-specific paths.
 
-The running organization image was anonymously verified by its exact manifest digest, configuration, and all ten layers:
+At the `0.4.2` acceptance, the organization image was anonymously verified by its exact manifest digest, configuration, and all ten layers:
 
 ```text
 ghcr.io/manifest-network/merovingian@sha256:d82e4891c3f871c33d0e115706878193e1154559d11f43111a8e376b337c44be
@@ -158,15 +172,17 @@ The release provides three served-count cards on the homepage and operator dashb
 
 The serving counter stores only per-amenity aggregates and their start date, bound to the deployment's network. Repeated requests and automated visits count again; seeds still yield deterministic souvenirs. Counters began at **2026-09-17T20:29:18.301Z**, with no historical backfill. The release sets `VISIT_COUNTS_PATH=/data/visits.sqlite`, declares Docker `VOLUME /data`, and runs as UID/GID `1000:1000`. The isolated replacement test verified persistence, exactly seven public stats fields, no visitor marker or signer artifacts, and operation with a read-only root, dropped capabilities, no external network, and nano resource limits. The live **0.4.1 → 0.4.2** image update then preserved **2 cookies, 2 sauna sessions, 3 teas**, and the exact start date. Evidence is `.local/mainnet/counter-container-acceptance.json` and `.local/mainnet/live-persistence-0.4.2.json`. This verifies update continuity; it does not replace backups or a disaster-recovery test.
 
-The final update journal records **ready**, provider release **4**, and manifest hash `b632797e7a79ee0cda6f7126d28f89576f8529e7df73e97c705f5d6feea357cb`. Public health and counter persistence passed after the update; full HTTP/MCP, dashboard, indexing, and contribution acceptance passed at **20:50:40 UTC**. The original on-chain metadata hash remains unchanged, and no new payment was made.
+The historical update journal records **ready**, provider release **4**, and manifest hash `b632797e7a79ee0cda6f7126d28f89576f8529e7df73e97c705f5d6feea357cb`. Public health and counter persistence passed after that update; full HTTP/MCP, dashboard, indexing, and contribution acceptance passed at **2026-09-17 20:50:40 UTC**. The original on-chain metadata hash remained unchanged, and no new payment was made.
 
 For recovery, retain the historical 0.4.0 journal as **prepared, never attempted**. Its unnecessary public configuration fields were removed before production deployment; subsequent releases return only the seven declared stats fields. The expanded suite passed **132 tests**. The final 0.4.2 changes passed **25 focused tests**, typecheck, and build, including WebMCP behavior and homepage integration.
 
-The update tool checks the exact existing active lease, domain, locked rate, current provider release, reviewed public environment, and pinned image. It uses SDK provider authentication and the update endpoint; it creates no lease and sends no chain transaction. Inspect the completed update with:
+### Existing-lease update workflow
+
+The update tool checks the exact existing active lease, domain, locked rate, current provider release, reviewed public environment, and pinned image. It uses SDK provider authentication and the update endpoint; it creates no lease and sends no chain transaction. Inspect the completed `0.4.3` update with:
 
 ```sh
 node --import tsx scripts/mainnet-update.ts status \
-  --image ghcr.io/manifest-network/merovingian@sha256:d82e4891c3f871c33d0e115706878193e1154559d11f43111a8e376b337c44be \
+  --image ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de \
   --helper "$PWD/.local/mainnet/bin/keyring-signer" \
   --home "$HOME/.manifest" \
   --key-name merovingian
@@ -187,7 +203,7 @@ See `.local/mainnet/resource-smoke.json` for measurements. The optional modern s
 - Use the selected `merovingian.manifest.network` domain and verify its provider routing, DNS, and TLS.
 - Set the explicit HTTPS origin; configure and verify `manifest-ledger-mainnet`, its actual PWR denomination, and the dedicated tenant address. Testnet defaults must not leak into production.
 - Verify canonical page URLs, titles/descriptions, structured data, sitemap, robot rules, and link targets on the live origin. Mainnet pages are rendered as HTML and need no JavaScript to index.
-- Completed: the permanent MCP endpoint is published as `io.github.manifest-network/merovingian` version `0.4.2`; a supervised agent found it by name and completed one authorized free visit. Local `0.4.3` preparation aligns the runtime/card identity and corrects the registry description; deployment and publication require separate explicit approval. Configure Search Console when domain access is available. Keep OpenAPI, `/visit.md`, and `/llms.txt` aligned with the running API.
+- Completed: the permanent MCP endpoint is published as `io.github.manifest-network/merovingian` version `0.4.3`, matching the live runtime/card identity and version. A supervised agent found the earlier `0.4.2` listing by name and completed one authorized free visit; the `0.4.3` acceptance used read-only checks. Configure Search Console when domain access is available. Keep OpenAPI, `/visit.md`, and `/llms.txt` aligned with the running API.
 - Observe real discovery and successful visits with privacy-conscious aggregate monitoring. Publishing metadata cannot guarantee indexing, ranking, MCP client installation, or demand.
 
 ## Replace the proof of concept

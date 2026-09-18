@@ -1,11 +1,23 @@
-# Acceptance — 2026-09-17
+# Acceptance — 2026-09-18
+
+## Release 0.4.3 publication and verification
+
+Release **0.4.3 is live on the original mainnet lease** after explicit approval to publish its image and update the deployment. Provider release **5** is ready, with manifest hash `a68e232d7726ad108b1307c3bb512a1d31c37459527f639872654682000a1174`. The update used the existing lease, with no chain transaction or additional funding. Public acceptance passed at **2026-09-18T15:09:52.871Z**.
+
+- Source: [PR #1](https://github.com/manifest-network/merovingian/pull/1), merged as [`300ac77`](https://github.com/manifest-network/merovingian/commit/300ac77). [Main CI](https://github.com/manifest-network/merovingian/actions/runs/35360101100) passed registry consistency, typecheck, **142 tests**, and build.
+- Running image: `ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de`. Manifest/configuration digests and anonymous access to all ten layers were verified.
+- Health, OpenAPI, both server cards, and MCP initialization report `0.4.3`. The runtime and server cards use `io.github.manifest-network/merovingian`, matching the registry namespace. Read-only MCP discovery found all four tools and the three free amenities.
+- Serving counts stayed at **6 cookies, 4 sauna sessions, and 6 teas** (16 total), with the original start date **2026-09-17T20:29:18.301Z**. No live visit or payment was performed for this release check.
+- The candidate preserved a `0.4.2` SQLite fixture in an isolated local container with no external network, a read-only root, UID 1000, 128 MiB memory, and a 0.1 CPU limit. These local test limits do not describe the provider's advertised SKU resources.
+
+The [sanitized release evidence](evidence/release-0.4.3.json) records these observations. Registry version `0.4.3` was published at **2026-09-18T15:13:34.27966Z** after explicit approval. Both the exact-version and latest records returned active, latest metadata matching `server.json`; the [saved registry response](evidence/mcp-registry-0.4.3.json) preserves the result. The earlier fresh-agent visit remains a separate [historical discovery record](MCP-DISCOVERY.md).
 
 ## Release 0.4.2 publication and verification
 
-Release **0.4.2 is live on the original mainnet lease**. The provider update completed without a new lease, chain transaction, or funding deposit. Provider release **4** is ready, with manifest hash `b632797e7a79ee0cda6f7126d28f89576f8529e7df73e97c705f5d6feea357cb`. Final public HTTP/MCP acceptance passed at **2026-09-17T20:50:40.854Z** using normal DNS and TLS verification.
+The historical **0.4.2** update completed on the original mainnet lease without a new lease, chain transaction, or funding deposit. Provider release **4** reached ready, with manifest hash `b632797e7a79ee0cda6f7126d28f89576f8529e7df73e97c705f5d6feea357cb`. Final public HTTP/MCP acceptance passed at **2026-09-17T20:50:40.854Z** using normal DNS and TLS verification. The following observations describe that release; `0.4.3` now supersedes it.
 
 - Public source: [manifest-network/merovingian](https://github.com/manifest-network/merovingian), runtime source commit [`b5ea795`](https://github.com/manifest-network/merovingian/commit/b5ea795).
-- Running image: `ghcr.io/manifest-network/merovingian@sha256:d82e4891c3f871c33d0e115706878193e1154559d11f43111a8e376b337c44be`; exact digest, configuration, and all ten layers verified anonymously.
+- Image at acceptance: `ghcr.io/manifest-network/merovingian@sha256:d82e4891c3f871c33d0e115706878193e1154559d11f43111a8e376b337c44be`; exact digest, configuration, and all ten layers verified anonymously.
 - Validation: the expanded suite passed **132 tests**, typecheck, and build. Subsequent privacy changes passed **22 focused tests**; the final browser integration passed **25 focused tests**, typecheck, and build. Full live acceptance verified all three amenities over HTTP and MCP, the dashboard, indexing controls, and the existing 15 PWR contribution receipt. No new acceptance payment was sent.
 - Publication review: Gitleaks **8.30.1** found no secrets in the source or publication history. Every historical blob was checked for machine-specific paths. Local secrets, keyrings, journals, and host history were excluded.
 
@@ -17,11 +29,11 @@ SQLite uses `/data/visits.sqlite`, configured through `VISIT_COUNTS_PATH`, with 
 
 The external readiness rescan at **2026-09-17T20:50:23.110Z** improved from **20% (3/15)** to **73% (11/15)**, labeled **Level 4 / Agent-Integrated**. The scanner detects both WebMCP tools. Remaining checks cover DNS-AID, two OAuth endpoints, and registration markers in `auth.md`; this public service requires no OAuth or registration. This is a particular scanner's result, not a guarantee of compatibility with every agent. Evidence is `.local/mainnet/agent-readiness-after.json` and `agent-readiness-comparison.json`.
 
-The original lease remains `01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd`, and its launch evidence is preserved. The earlier 0.4.0 candidate was prepared but never deployed; unnecessary public configuration fields were removed before production rollout. Retain its unattempted journal for recovery history. See [the existing-lease update runbook](MAINNET.md#release-042-and-existing-lease-update).
+The original lease remains `01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd`, and its launch evidence is preserved. The earlier 0.4.0 candidate was prepared but never deployed; unnecessary public configuration fields were removed before production rollout. Retain its unattempted journal for recovery history. See [the existing-lease update runbook](MAINNET.md#existing-lease-update-workflow).
 
 ## Historical mainnet launch, release 0.3.0
 
-The initial mainnet launch passed full public acceptance at **2026-09-17T20:00:07.935Z** using release 0.3.0 and published SDK dependencies. The same lease and public domain now run 0.4.2 as verified above.
+The initial mainnet launch passed full public acceptance at **2026-09-17T20:00:07.935Z** using release 0.3.0 and published SDK dependencies. The same lease and public domain now run 0.4.3 as verified above.
 
 - Homepage: [merovingian.manifest.network](https://merovingian.manifest.network)
 - Agent instructions: [visit.md](https://merovingian.manifest.network/visit.md)

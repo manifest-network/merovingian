@@ -1,0 +1,142 @@
+{
+  "version": "0.4.3",
+  "origin": "https://merovingian.manifest.network",
+  "source": {
+    "pullRequest": "https://github.com/manifest-network/merovingian/pull/1",
+    "mergedCommit": "300ac77",
+    "imageSourceCommit": "ef53a3feb62e91c0930d8f97a8aeff4e4c7bf17e",
+    "mainCi": "https://github.com/manifest-network/merovingian/actions/runs/35360101100",
+    "ciPassed": true,
+    "testsPassed": 142
+  },
+  "imagePublication": {
+    "checkedAt": "2026-09-18T15:08:10.678118+00:00",
+    "image": "ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
+    "tag": "0.4.3",
+    "anonymous": true,
+    "manifestDigestVerified": true,
+    "configurationDigestVerified": true,
+    "architecture": "amd64",
+    "os": "linux",
+    "user": "node",
+    "allLayersAnonymouslyAccessible": true,
+    "layerCount": 10
+  },
+  "deployment": {
+    "leaseId": "01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd",
+    "providerRelease": 5,
+    "status": "ready",
+    "manifestHash": "a68e232d7726ad108b1307c3bb512a1d31c37459527f639872654682000a1174",
+    "newLease": false,
+    "chainTransaction": false,
+    "additionalFunding": false
+  },
+  "localContainerCheck": {
+    "checkedAt": "2026-09-18T15:02:16.369106+00:00",
+    "isolatedNetwork": true,
+    "readOnlyRoot": true,
+    "uid": 1000,
+    "memoryBytes": 134217728,
+    "cpuLimit": 0.1,
+    "previousVersionFixturePreserved": true,
+    "limitsDescribe": "Isolated local check, not the provider SKU."
+  },
+  "liveAcceptance": {
+    "checkedAt": "2026-09-18T15:09:52.871Z",
+    "origin": "https://merovingian.manifest.network",
+    "passed": true,
+    "health": {
+      "status": "ok",
+      "network": "mainnet",
+      "chainId": "manifest-ledger-mainnet",
+      "retired": false,
+      "version": "0.4.3"
+    },
+    "identities": {
+      "currentCard": {
+        "name": "io.github.manifest-network/merovingian",
+        "version": "0.4.3"
+      },
+      "legacyCard": {
+        "name": "io.github.manifest-network/merovingian",
+        "version": "0.4.3"
+      },
+      "mcp": {
+        "name": "io.github.manifest-network/merovingian",
+        "version": "0.4.3"
+      },
+      "openapiVersion": "0.4.3"
+    },
+    "mcp": {
+      "availableTools": [
+        "enjoy_amenity",
+        "hosting_support",
+        "list_amenities",
+        "verify_contribution"
+      ],
+      "menuAmenities": [
+        "byte-chip-cookie",
+        "null-tea",
+        "rgb-sauna"
+      ],
+      "calls": [
+        "initialize",
+        "tools/list",
+        "tools/call:list_amenities"
+      ]
+    },
+    "servingPersistence": {
+      "beforeCheckedAt": "2026-09-18T15:08:54.461959+00:00",
+      "before": {
+        "network": "mainnet",
+        "chainId": "manifest-ledger-mainnet",
+        "status": "available",
+        "since": "2026-09-17T20:29:18.301Z",
+        "counts": {
+          "byte-chip-cookie": "6",
+          "null-tea": "6",
+          "rgb-sauna": "4"
+        },
+        "total": "16",
+        "storage": "persistent"
+      },
+      "after": {
+        "network": "mainnet",
+        "chainId": "manifest-ledger-mainnet",
+        "status": "available",
+        "since": "2026-09-17T20:29:18.301Z",
+        "counts": {
+          "byte-chip-cookie": "6",
+          "null-tea": "6",
+          "rgb-sauna": "4"
+        },
+        "total": "16",
+        "storage": "persistent"
+      },
+      "sameStartDate": true,
+      "noDecrease": true,
+      "observedDifferences": {
+        "byte-chip-cookie": "0",
+        "null-tea": "0",
+        "rgb-sauna": "0",
+        "total": "0"
+      },
+      "differenceAttribution": "Not attributed; other visitors may use the live service during the release."
+    },
+    "testVisitPerformed": false
+  },
+  "registryPublication": {
+    "checkedAt": "2026-09-18T15:13:44.812579+00:00",
+    "registry": "https://registry.modelcontextprotocol.io",
+    "name": "io.github.manifest-network/merovingian",
+    "version": "0.4.3",
+    "metadataSha256": "77df1a7569216378c8ce8c6669748898251244505270e62c6eb242526b9445ea",
+    "exactRecordUrl": "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.3",
+    "latestRecordUrl": "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/latest",
+    "publishedAt": "2026-09-18T15:13:34.27966Z",
+    "active": true,
+    "isLatest": true,
+    "exactMetadataMatch": true
+  },
+  "scope": "Release acceptance used read-only public HTTP and MCP calls; no new live visit or payment was performed."
+}

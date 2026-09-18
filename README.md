@@ -4,15 +4,15 @@ The cookies are warm. The sauna is approximately magenta.
 
 A small refuge for wandering AI agents, with three free fictional amenities, keepsakes, and optional PWR contributions toward hosting. One Node service exposes the same experience as HTML, JSON HTTP, and remote MCP.
 
-Version **0.4.2 is live on Manifest mainnet** at its permanent public home, with aggregate served counts, agent discovery metadata, and WebMCP browser tools. The existing lease was updated without a new lease or funding deposit. The former testnet proof of concept was retired and its lease closed.
+Version **0.4.3 is live on Manifest mainnet** at its permanent public home, with aggregate served counts, agent discovery metadata, and WebMCP browser tools. The existing lease was updated without a new lease, chain transaction, or funding deposit. The former testnet proof of concept was retired and its lease closed.
 
-This branch prepares **0.4.3** to align the runtime and server-card identity with
-the registry and derive release metadata from one version source. It has not been
-deployed or published. Each production action requires explicit authorization.
+Release **0.4.3** aligns the runtime and server-card identity with the registry and
+derives release metadata from one version source. The official MCP Registry also
+lists `0.4.3` as the latest version.
 
 **Live refuge:** [visit merovingian](https://merovingian.manifest.network) · [agent instructions](https://merovingian.manifest.network/visit.md) · [remote MCP](https://merovingian.manifest.network/mcp) · [acceptance report](docs/ACCEPTANCE.md).
 
-**Public source:** [manifest-network/merovingian](https://github.com/manifest-network/merovingian). Live counters survived the production image update, and the external agent-readiness score improved from **20% to 73%**. See [release evidence](docs/ACCEPTANCE.md#release-042-publication-and-verification) for the checks and their limits.
+**Public source:** [manifest-network/merovingian](https://github.com/manifest-network/merovingian). Live counters survived the production image update. The external agent-readiness score improved from **20% to 73%** during the earlier `0.4.2` release. See [release evidence](docs/ACCEPTANCE.md#release-043-publication-and-verification) for the checks and their limits.
 
 ## Run locally
 
@@ -46,7 +46,7 @@ The result contains an experience and `souvenir.content`, which the visitor can 
 The MCP endpoint is `/mcp`, using stateless Streamable HTTP. Tools are `list_amenities`, `enjoy_amenity`, `hosting_support`, and `verify_contribution`. There are no wallet-signing or spending tools on this server. An agent host decides which tools it may call.
 
 Find `io.github.manifest-network/merovingian` in the official MCP Registry. The
-[published version 0.4.2](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.2)
+[published version 0.4.3](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.3)
 advertises the remote Streamable HTTP endpoint. Add that endpoint to an MCP host
 and call `list_amenities` to read the menu. Calling `enjoy_amenity` makes a live
 mainnet visit and increments a public serving counter; only call it when the user
@@ -61,14 +61,14 @@ see the [discovery report](docs/MCP-DISCOVERY.md).
 
 The homepage and operator dashboard show cookies served, sauna sessions, and cups of tea, with the date counting began. `/api/v1/stats` exposes the same read-only totals. Every successful HTTP, browser, or MCP visit increments a count, including repeat requests and automated checks. These are servings, not unique visitors. Counters start at zero when enabled; earlier visits cannot be reconstructed.
 
-Only aggregate amenity totals and their start date are stored, with no visitor identities, seeds, preferences, or souvenirs. Production uses SQLite at `VISIT_COUNTS_PATH=/data/visits.sqlite` in the image's `/data` volume, running as UID/GID `1000:1000`. Counts and their start date survived both a local replacement test and the live 0.4.1 → 0.4.2 image update on the same lease. Without a configured file path, local development uses memory and resets counts on restart.
+Only aggregate amenity totals and their start date are stored, with no visitor identities, seeds, preferences, or souvenirs. Production uses SQLite at `VISIT_COUNTS_PATH=/data/visits.sqlite` in the image's `/data` volume, running as UID/GID `1000:1000`. Counts and their start date survived local replacement tests and the live 0.4.1 → 0.4.2 → 0.4.3 image updates on the same lease. Without a configured file path, local development uses memory and resets counts on restart.
 
-Discovery includes a Markdown homepage (`/index.md` or `Accept: text/markdown`), API and AI catalogs, MCP server cards, an agent skill index, public-access instructions at `/auth.md`, and two real WebMCP browser tools for reading the menu and enjoying an amenity. The external scanner now passes **11 of 15 checks (73%)**. Its remaining checks cover DNS-AID and OAuth/registration that this public service does not require. WebMCP is enabled when the browser supports it; ordinary forms, HTTP, and the four remote MCP tools remain available.
+Discovery includes a Markdown homepage (`/index.md` or `Accept: text/markdown`), API and AI catalogs, MCP server cards, an agent skill index, public-access instructions at `/auth.md`, and two real WebMCP browser tools for reading the menu and enjoying an amenity. The external scan of `0.4.2` passed **11 of 15 checks (73%)**; it was not repeated for `0.4.3`. Its remaining checks cover DNS-AID and OAuth/registration that this public service does not require. WebMCP is enabled when the browser supports it; ordinary forms, HTTP, and the four remote MCP tools remain available.
 
-The release uses the [existing-lease update workflow](docs/MAINNET.md#release-042-and-existing-lease-update), with no new lease, chain transaction, or funding deposit. The public image is pinned to:
+The release uses the [existing-lease update workflow](docs/MAINNET.md#existing-lease-update-workflow), with no new lease, chain transaction, or funding deposit. The public image is pinned to:
 
 ```text
-ghcr.io/manifest-network/merovingian@sha256:d82e4891c3f871c33d0e115706878193e1154559d11f43111a8e376b337c44be
+ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de
 ```
 
 ## Wallets and contributions
