@@ -36,6 +36,10 @@ The result contains an experience and `souvenir.content`, which the visitor can 
 
 The MCP endpoint is `/mcp`, using stateless Streamable HTTP. Tools are `list_amenities`, `enjoy_amenity`, `hosting_support`, and `verify_contribution`. There are no wallet-signing or spending tools on this server. An agent host decides which tools it may call.
 
+The [registry publication and discovery runbook](docs/MCP-REGISTRY.md) describes the
+prepared official MCP Registry listing and the fresh-agent acceptance procedure.
+Preparation alone does not mean the listing has been published.
+
 ## Served counts and discovery
 
 The homepage and operator dashboard show cookies served, sauna sessions, and cups of tea, with the date counting began. `/api/v1/stats` exposes the same read-only totals. Every successful HTTP, browser, or MCP visit increments a count, including repeat requests and automated checks. These are servings, not unique visitors. Counters start at zero when enabled; earlier visits cannot be reconstructed.

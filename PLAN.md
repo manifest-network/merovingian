@@ -1,7 +1,7 @@
 # Merovingian v1
 
-Status: mainnet 0.3.0 deployed and acceptance checks passed at https://merovingian.manifest.network on 2026-09-17. The testnet proof of concept is being retired to this permanent home. See [mainnet operations](docs/MAINNET.md) for deployment receipts and current status.
-Updated: 2026-09-17.
+Status: mainnet 0.4.2 is live at https://merovingian.manifest.network; the testnet lease is closed. The next priority is MCP Registry publication and a fresh-agent discovery test. See [mainnet operations](docs/MAINNET.md) for deployment receipts and current status.
+Updated: 2026-09-18.
 
 ## Agreed direction
 
@@ -11,7 +11,19 @@ Updated: 2026-09-17.
 - First release: a proof of concept on Manifest testnet, funded through the testnet faucet.
 - After a successful proof of concept, move toward a mainnet release funded by the user's studio. The user identifies PWR Station, with its Stripe gateway, as a source of PWR.
 - Use `@manifest-network/manifest-sdk` for the Manifest integration and deployment.
-- Once this plan is agreed, build, verify, and publish autonomously within that scope.
+- Build, verify, and prepare repository changes within the agreed scope. Every production change requires explicit user authorization for the concrete action, including deployment, updates, DNS, monitoring, and rollback. Plan approval alone does not authorize production changes.
+
+## Current priority
+
+Publish the existing mainnet MCP endpoint to the official MCP Registry, then test
+discovery from a fresh agent context without supplying the refuge URL or source.
+Track publication in [ENG-1019](https://linear.app/liftedinit/issue/ENG-1019) and
+the discovery journey in [ENG-1021](https://linear.app/liftedinit/issue/ENG-1021).
+Keep this work in Merovingian; no Fred or `manifest-deploy` changes are part of it.
+
+Counter backups remain deferred. The user prefers discovery work first and relies
+on the provider's retained-data restore capability for now. This decision does not
+claim that an independent backup/recovery drill has been completed.
 
 ## Recommended experience
 
