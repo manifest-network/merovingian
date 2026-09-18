@@ -3,14 +3,16 @@
   "origin": "https://merovingian.manifest.network",
   "source": {
     "pullRequest": "https://github.com/manifest-network/merovingian/pull/1",
-    "mergedCommit": "300ac77",
+    "mergedCommit": "300ac773f28dd61bd804d376cbddcd6ffbd5e82a",
     "imageSourceCommit": "ef53a3feb62e91c0930d8f97a8aeff4e4c7bf17e",
     "mainCi": "https://github.com/manifest-network/merovingian/actions/runs/35360101100",
     "ciPassed": true,
-    "testsPassed": 142
+    "testsPassed": 142,
+    "gitTree": "5783b3031882f6afd263d44b156eb0c219aeb90b",
+    "commitRelationship": "The image was built from imageSourceCommit before PR #1 was squash-merged. Both commits resolve to gitTree; mergedCommit is the canonical source reference reachable from main."
   },
   "imagePublication": {
-    "checkedAt": "2026-09-18T15:08:10.678118+00:00",
+    "checkedAt": "2026-09-18T15:08:10.678118Z",
     "image": "ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
     "tag": "0.4.3",
     "anonymous": true,
@@ -29,21 +31,25 @@
     "manifestHash": "a68e232d7726ad108b1307c3bb512a1d31c37459527f639872654682000a1174",
     "newLease": false,
     "chainTransaction": false,
-    "additionalFunding": false
+    "additionalFunding": false,
+    "readyRecordedAt": "2026-09-18T15:09:30.178000Z",
+    "timingNote": "The operator journal recorded this timestamp after observing provider release 5 ready; the exact provider transition time was not recorded."
   },
   "localContainerCheck": {
-    "checkedAt": "2026-09-18T15:02:16.369106+00:00",
+    "checkedAt": "2026-09-18T15:02:16.369106Z",
     "isolatedNetwork": true,
     "readOnlyRoot": true,
     "uid": 1000,
     "memoryBytes": 134217728,
     "cpuLimit": 0.1,
     "previousVersionFixturePreserved": true,
-    "limitsDescribe": "Isolated local check, not the provider SKU."
+    "limitsDescribe": "Isolated local check, not the provider SKU.",
+    "image": "ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
+    "localImageId": "sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
+    "imageRelationship": "This tested local image was subsequently published unchanged under imagePublication.image; the published manifest digest matched the local image digest."
   },
   "liveAcceptance": {
-    "checkedAt": "2026-09-18T15:09:52.871Z",
-    "origin": "https://merovingian.manifest.network",
+    "checkedAt": "2026-09-18T15:09:52.871000Z",
     "passed": true,
     "health": {
       "status": "ok",
@@ -86,12 +92,12 @@
       ]
     },
     "servingPersistence": {
-      "beforeCheckedAt": "2026-09-18T15:08:54.461959+00:00",
+      "beforeCheckedAt": "2026-09-18T15:08:54.461959Z",
       "before": {
         "network": "mainnet",
         "chainId": "manifest-ledger-mainnet",
         "status": "available",
-        "since": "2026-09-17T20:29:18.301Z",
+        "since": "2026-09-17T20:29:18.301000Z",
         "counts": {
           "byte-chip-cookie": "6",
           "null-tea": "6",
@@ -104,7 +110,7 @@
         "network": "mainnet",
         "chainId": "manifest-ledger-mainnet",
         "status": "available",
-        "since": "2026-09-17T20:29:18.301Z",
+        "since": "2026-09-17T20:29:18.301000Z",
         "counts": {
           "byte-chip-cookie": "6",
           "null-tea": "6",
@@ -121,22 +127,38 @@
         "rgb-sauna": "0",
         "total": "0"
       },
-      "differenceAttribution": "Not attributed; other visitors may use the live service during the release."
+      "differenceAttribution": "Not attributed; other visitors may use the live service during the release.",
+      "afterObservedByAt": "2026-09-18T15:09:52.871000Z",
+      "timingNote": "The final stats response was parsed and checked before the acceptance report timestamp. Exact request/response timestamps were not recorded; afterObservedByAt is an upper bound on that observation."
     },
-    "testVisitPerformed": false
+    "testVisitPerformed": false,
+    "notRun": {
+      "script": "scripts/smoke.ts",
+      "liveServingPaths": [
+        "POST /visit",
+        "POST /api/v1/visits",
+        "MCP tools/call:enjoy_amenity"
+      ],
+      "reason": "Release acceptance was authorized for read-only checks; the full smoke script creates servings. These serving paths were covered locally but not re-exercised on deployed 0.4.3."
+    }
   },
   "registryPublication": {
-    "checkedAt": "2026-09-18T15:13:44.812579+00:00",
+    "checkedAt": "2026-09-18T15:13:44.812579Z",
     "registry": "https://registry.modelcontextprotocol.io",
     "name": "io.github.manifest-network/merovingian",
     "version": "0.4.3",
-    "metadataSha256": "77df1a7569216378c8ce8c6669748898251244505270e62c6eb242526b9445ea",
     "exactRecordUrl": "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.3",
     "latestRecordUrl": "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/latest",
-    "publishedAt": "2026-09-18T15:13:34.27966Z",
+    "publishedAt": "2026-09-18T15:13:34.279660Z",
     "active": true,
     "isLatest": true,
-    "exactMetadataMatch": true
+    "exactMetadataMatch": true,
+    "serverJsonFileSha256": "77df1a7569216378c8ce8c6669748898251244505270e62c6eb242526b9445ea",
+    "hashedFile": "server.json",
+    "hashedFileCommit": "300ac773f28dd61bd804d376cbddcd6ffbd5e82a",
+    "hashInput": "Exact UTF-8 bytes of the committed server.json file, including whitespace and trailing newline; not the registry response serialization.",
+    "metadataComparison": "The parsed server object from each exact-version and latest response was equal to the parsed server.json object; JSON byte serialization was not compared."
   },
-  "scope": "Release acceptance used read-only public HTTP and MCP calls; no new live visit or payment was performed."
+  "scope": "Release acceptance used read-only public HTTP and MCP calls; no new live visit or payment was performed.",
+  "timestampFormat": "UTC RFC 3339 with six fractional digits; original instants are preserved. Observation bounds are labelled separately from exact times."
 }

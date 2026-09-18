@@ -25,6 +25,25 @@ the live application has since advanced to `0.4.3`.
 The [saved `0.4.2` registry response](evidence/mcp-registry-0.4.2.json) preserves
 the exact published metadata; do not regenerate or overwrite that historical record.
 
+Use the [snapshot index](evidence/mcp-registry-snapshots.json) when reading these
+saved responses. It records file hashes and dated observations or capture bounds.
+Both responses retain `isLatest: true` because each described a different moment;
+neither is a claim about the current registry state. The original standalone
+`0.4.2` capture time was not recorded, but its complete parsed object matches the
+independent discovery response observed between **13:44:54.588Z and 13:44:56.009Z**
+on 2026-09-18. The `0.4.3` capture completed by **15:13:44.812579Z**; its individual
+fetch time was not recorded. Query the latest record above for current status.
+
+In the [release evidence](evidence/release-0.4.3.json),
+`serverJsonFileSha256` hashes the exact committed `server.json` bytes, including
+its trailing newline. `exactMetadataMatch` means parsed JSON-object equality
+between that file and each registry response's `server` object, not equality of
+their serialized bytes. Reproduce the file hash with:
+
+```sh
+git show 300ac773f28dd61bd804d376cbddcd6ffbd5e82a:server.json | sha256sum
+```
+
 ## Identity and access
 
 The GitHub namespace is controlled through an owner of the `manifest-network`

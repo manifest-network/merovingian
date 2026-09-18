@@ -32,13 +32,15 @@ Published SDK 0.22.0 checks and the completed launch confirmed:
 
 The endpoints come from [Manifest's mainnet documentation](https://docs.manifest.network/network-configurations/mainnet). Resource sizes are advertised by [the provider's public configuration](https://barney.manifest.network/config.js); catalog availability and public health checks are not a capacity reservation or a guarantee of enforced resource limits. Refresh the quote before execution.
 
-The initial launch used **0.3.0**. That application release passed **72 tests**, typecheck, and the production build; the expanded operator suite passed **114 tests** before launch. The subsequent routing-target suffix adjustment passed its **10 focused tests** and typecheck. This historical image remains part of the original launch evidence; the provider now runs the organization-owned 0.4.3 image documented below:
+### Historical launch image — 0.3.0
+
+The initial launch used **0.3.0**. That application release passed **72 tests**, typecheck, and the production build; the expanded operator suite passed **114 tests** before launch. The subsequent routing-target suffix adjustment passed its **10 focused tests** and typecheck. The following personal-namespace image is historical launch evidence; the current organization-owned **0.4.3** image and its ten layers are recorded in [Release 0.4.3](#release-043).
 
 ```text
 ghcr.io/fmorency/merovingian@sha256:1020117aa543cbddcdbe0b49a671b09ddabb285a1f3af819d15ed3394d89f53b
 ```
 
-Anonymous registry checks verified the exact manifest digest, the Linux/amd64 configuration, and access to all nine image layers without local registry credentials. Image publication and resource-test evidence are recorded in `.local/mainnet/resource-smoke.json`.
+At the **0.3.0 launch**, anonymous registry checks verified this exact manifest digest, the Linux/amd64 configuration, and access to its **nine** image layers without local registry credentials. Historical image publication and resource-test evidence are recorded in `.local/mainnet/resource-smoke.json`.
 
 The user approved a **0.5 PWR aggregate launch-fee cap**; the completed creation and domain transactions cost **0.158206 PWR total**. No additional hosting deposit was made after the authorized initial 15 PWR. The status observation at **2026-09-17 19:55:42 UTC** showed **34.786741 PWR in the wallet** and **14.996400 PWR available hosting credit**. Credit continues to accrue hosting charges, so these are timestamped observations. The lease locks **2.592 PWR per 30 days**, within the unchanged 5 PWR monthly ceiling. Paid studio extras remain a separate implementation item below.
 
@@ -53,7 +55,7 @@ The dedicated OS-keyring adapter signed the two authorized transactions, each br
 
 Authorization, public launch state, and committed receipts are saved under `.local/mainnet/launch/` in `authorization.json`, `state.json`, and `transactions/{create-lease,claim-domain}.json`. The immutable manifest hash is `cf50a58b2eecb160b4686c3e3f2dd228ae5f323be1a6c8e0ae36a6273a426818`. Private keys, provider tokens, and signatures were not retained.
 
-The full public smoke passed at **2026-09-17 20:00:07 UTC** on the custom domain: all three amenities matched across HTTP and MCP, souvenirs were mainnet-labeled, canonical/indexing rules and sitemap passed, the operator ledger was available and `noindex`, and the existing **15 PWR** funding transaction returned matching confirmed HTTP/MCP receipts. No new payment was sent for acceptance. DNS resolvers `1.1.1.1` and `8.8.8.8` both returned the exact CNAME and provider address `64.29.115.30`; normal TLS verification passed on both the native hostname and custom domain. The local resolver briefly retained a negative DNS cache, so the check used public DNS resolution without disabling certificate validation. See [ACCEPTANCE.md](ACCEPTANCE.md) and the local DNS/live-acceptance reports.
+The historical **0.3.0** full public smoke passed at **2026-09-17 20:00:07 UTC** on the custom domain: all three amenities matched across HTTP and MCP, souvenirs were mainnet-labeled, canonical/indexing rules and sitemap passed, the operator ledger was available and `noindex`, and the existing **15 PWR** funding transaction returned matching confirmed HTTP/MCP receipts. No new payment was sent for acceptance. DNS resolvers `1.1.1.1` and `8.8.8.8` both returned the exact CNAME and provider address `64.29.115.30`; normal TLS verification passed on both the native hostname and custom domain. The local resolver briefly retained a negative DNS cache, so the check used public DNS resolution without disabling certificate validation. See [ACCEPTANCE.md](ACCEPTANCE.md) and the local DNS/live-acceptance reports.
 
 ### Completed initial credit deposit
 
@@ -134,7 +136,7 @@ A process crash can leave `launch/run.lock` or `launch/transactions/*.lock`. Ins
 3. Completed in SDK order: created one pinned nano lease, claimed the domain for `refuge`, authenticated and uploaded the exact hashed manifest, then observed provider readiness. Preserve the existing lease identifier; do not create a second lease.
 4. Completed and verified: Cloudflare **CNAME** named **`merovingian`** targets **`refuge-928a176.barney0.manifest0.net`**, **DNS only (gray cloud)**. This exact native FQDN came from the authenticated provider connection response; Fred retains it alongside the custom-domain router. Keep proxying disabled. Do not point the record at itself, the Fred API hostname, or the testnet deployment.
 5. Completed: direct DNS resolution and valid TLS on the custom domain and native hostname. Cloudflare manages DNS only; the provider serves HTTPS and must renew the origin certificate. See [Cloudflare proxy status](https://developers.cloudflare.com/dns/proxy-status/). Certificate renewal has not yet been observed over a renewal cycle.
-6. Completed: `scripts/smoke.ts` passed the full mainnet checks and verified the existing authorized 15 PWR funding hash. Testnet's migration redirects and 410 responses subsequently passed 18 live checks, then its lease was closed at the user's request. Registry version `0.4.2` was published on 2026-09-18 and a supervised fresh-agent visit passed; see the [registry runbook](MCP-REGISTRY.md) and [discovery evidence](MCP-DISCOVERY.md). Search Console setup and observed organic discovery remain follow-up work.
+6. Completed at the historical **0.3.0 launch**: `scripts/smoke.ts` passed the full mainnet checks and verified the existing authorized 15 PWR funding hash. Testnet's migration redirects and 410 responses subsequently passed 18 live checks, then its lease was closed at the user's request. Registry version `0.4.2` was published on 2026-09-18 and a supervised fresh-agent visit passed; `0.4.3` publication and read-only acceptance followed. See the [registry runbook](MCP-REGISTRY.md) and [discovery evidence](MCP-DISCOVERY.md). Search Console setup and observed organic discovery remain follow-up work.
 
 Public preflight evidence is in `.local/mainnet/public-summary.json`; subsequent `preflight` runs refresh the operational quote. Production acceptance records belong in `.local/mainnet/`, separate from testnet.
 
@@ -146,7 +148,7 @@ The SDK's `restoreApp` has different semantics: it restores a **closed lease's r
 
 ### Release 0.4.3
 
-The user explicitly approved image publication, the existing-lease update, and MCP Registry publication. [PR #1](https://github.com/manifest-network/merovingian/pull/1) merged as [`300ac77`](https://github.com/manifest-network/merovingian/commit/300ac77); [main CI](https://github.com/manifest-network/merovingian/actions/runs/35360101100) passed registry consistency, typecheck, 142 tests, and build. The public image is:
+The user explicitly approved image publication, the existing-lease update, and MCP Registry publication. [PR #1](https://github.com/manifest-network/merovingian/pull/1) merged as [`300ac773f28dd61bd804d376cbddcd6ffbd5e82a`](https://github.com/manifest-network/merovingian/commit/300ac773f28dd61bd804d376cbddcd6ffbd5e82a); [main CI](https://github.com/manifest-network/merovingian/actions/runs/35360101100) passed registry consistency, typecheck, 142 tests, and build. The image was built from pre-merge commit `ef53a3feb62e91c0930d8f97a8aeff4e4c7bf17e`. That commit and the public squash merge have the identical Git tree `5783b3031882f6afd263d44b156eb0c219aeb90b`, so the built source matches the merged source. The public image is:
 
 ```text
 ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de
@@ -154,7 +156,9 @@ ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f51
 
 Manifest/configuration digests and anonymous access to all ten layers were verified. Provider release **5** is ready with manifest hash `a68e232d7726ad108b1307c3bb512a1d31c37459527f639872654682000a1174`, on the same active lease. No additional deposit, chain transaction, DNS change, or data migration was needed.
 
-Public read-only acceptance passed at **2026-09-18T15:09:52.871Z**. Health, OpenAPI, both server cards, and MCP initialization report `0.4.3`; the runtime and cards now identify the service as `io.github.manifest-network/merovingian`. Counts remained **6 cookies, 4 sauna sessions, and 6 teas**, with the exact original start date. No live visit was performed. See [release acceptance](ACCEPTANCE.md#release-043-publication-and-verification) and [sanitized evidence](evidence/release-0.4.3.json).
+**MCP compatibility:** the runtime/server-card name changed from `network.manifest.merovingian/merovingian` to `io.github.manifest-network/merovingian`. Clients that pin the old name may need to update their expected identity. The endpoint remains `https://merovingian.manifest.network/mcp`.
+
+Public read-only acceptance passed at **2026-09-18T15:09:52.871Z**. Health, OpenAPI, both server cards, and MCP initialization report `0.4.3`. Counts remained **6 cookies, 4 sauna sessions, and 6 teas**, with the exact original start date. The full `scripts/smoke.ts`, `/visit` form submission, `POST /api/v1/visits`, and MCP `enjoy_amenity` were **not rerun** because the release authorization excluded live visits. Earlier full smoke results describe their historical releases, not fresh serving-path acceptance of `0.4.3`. See [release acceptance](ACCEPTANCE.md#release-043-publication-and-verification) and [sanitized evidence](evidence/release-0.4.3.json).
 
 Registry `0.4.3` was published at **2026-09-18T15:13:34.27966Z**. Exact-version and latest records both returned active metadata matching `server.json`. The historical `0.4.2` registry record and fresh-agent visit are preserved separately.
 

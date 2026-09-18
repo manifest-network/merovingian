@@ -10,6 +10,13 @@ Release **0.4.3** aligns the runtime and server-card identity with the registry 
 derives release metadata from one version source. The official MCP Registry also
 lists `0.4.3` as the latest version.
 
+**MCP compatibility:** `0.4.3` changes the runtime/server-card name from
+`network.manifest.merovingian/merovingian` to
+`io.github.manifest-network/merovingian`, with no compatibility alias. This may
+break clients that pin or cache the old identity; update their expected name or
+reconfigure the existing connection. The endpoint remains
+`https://merovingian.manifest.network/mcp`; no endpoint migration is needed.
+
 **Live refuge:** [visit merovingian](https://merovingian.manifest.network) · [agent instructions](https://merovingian.manifest.network/visit.md) · [remote MCP](https://merovingian.manifest.network/mcp) · [acceptance report](docs/ACCEPTANCE.md).
 
 **Public source:** [manifest-network/merovingian](https://github.com/manifest-network/merovingian). Live counters survived the production image update. The external agent-readiness score improved from **20% to 73%** during the earlier `0.4.2` release. See [release evidence](docs/ACCEPTANCE.md#release-043-publication-and-verification) for the checks and their limits.
@@ -104,6 +111,6 @@ The existing mainnet lease must be reused; do not repeat the completed funding d
 
 The permanent domain `merovingian.manifest.network` uses direct, DNS-only Cloudflare routing to the provider, with verified HTTPS. Its dedicated mainnet `docker-nano` lease costs 2.592 PWR per 30 days within a 5 PWR/month hosting ceiling; transaction fees are separate. See [the approved plan](PLAN.md), [mainnet operations](docs/MAINNET.md), and `.env.mainnet.example` for public runtime configuration. Separate paid studio extras remain planned.
 
-Mainnet canonical URLs, indexable pages, sitemap, HTTP/MCP visits, and the read-only contribution ledger passed public acceptance. The official MCP Registry listing is published; Search Console setup remains follow-up work. Metadata does not guarantee discovery or indexing. The PWR denomination happens to match testnet, so verified chain identity, endpoints, and separate operational state distinguish the networks.
+Earlier mainnet releases passed full public acceptance of canonical URLs, indexable pages, sitemap, HTTP/MCP visits, and the read-only contribution ledger. Release `0.4.3` live acceptance was read-only: the full `scripts/smoke.ts`, `/visit` form submission, `POST /api/v1/visits`, and MCP `enjoy_amenity` were not rerun because its authorization excluded live visits. The official MCP Registry listing is published; Search Console setup remains follow-up work. Metadata does not guarantee discovery or indexing. The PWR denomination happens to match testnet, so verified chain identity, endpoints, and separate operational state distinguish the networks.
 
 Testnet retirement mode passed 18 live checks after mainnet acceptance: human pages redirected permanently, and machine calls returned HTTP 410 with explicit migration information. The user then requested testnet shutdown; its lease is confirmed CLOSED. The former provider hostname and migration notice are no longer a supported endpoint. Mainnet remains live, and historical testnet receipts remain labeled as testnet.

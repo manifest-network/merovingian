@@ -2,13 +2,33 @@
 
 ## Release 0.4.3 publication and verification
 
-Release **0.4.3 is live on the original mainnet lease** after explicit approval to publish its image and update the deployment. Provider release **5** is ready, with manifest hash `a68e232d7726ad108b1307c3bb512a1d31c37459527f639872654682000a1174`. The update used the existing lease, with no chain transaction or additional funding. Public acceptance passed at **2026-09-18T15:09:52.871Z**.
+Release **0.4.3 is live on the original mainnet lease** after explicit approval to publish its image and update the deployment. Provider release **5** is ready, with manifest hash `a68e232d7726ad108b1307c3bb512a1d31c37459527f639872654682000a1174`. The update used the existing lease, with no chain transaction or additional funding. Public **read-only** acceptance passed at **2026-09-18T15:09:52.871Z**.
 
-- Source: [PR #1](https://github.com/manifest-network/merovingian/pull/1), merged as [`300ac77`](https://github.com/manifest-network/merovingian/commit/300ac77). [Main CI](https://github.com/manifest-network/merovingian/actions/runs/35360101100) passed registry consistency, typecheck, **142 tests**, and build.
+- Source: [PR #1](https://github.com/manifest-network/merovingian/pull/1), merged as [`300ac773f28dd61bd804d376cbddcd6ffbd5e82a`](https://github.com/manifest-network/merovingian/commit/300ac773f28dd61bd804d376cbddcd6ffbd5e82a). The image was built from pre-merge commit `ef53a3feb62e91c0930d8f97a8aeff4e4c7bf17e`; both commits have the identical Git tree `5783b3031882f6afd263d44b156eb0c219aeb90b`. [Main CI](https://github.com/manifest-network/merovingian/actions/runs/35360101100) passed registry consistency, typecheck, **142 tests**, and build.
 - Running image: `ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de`. Manifest/configuration digests and anonymous access to all ten layers were verified.
 - Health, OpenAPI, both server cards, and MCP initialization report `0.4.3`. The runtime and server cards use `io.github.manifest-network/merovingian`, matching the registry namespace. Read-only MCP discovery found all four tools and the three free amenities.
 - Serving counts stayed at **6 cookies, 4 sauna sessions, and 6 teas** (16 total), with the original start date **2026-09-17T20:29:18.301Z**. No live visit or payment was performed for this release check.
 - The candidate preserved a `0.4.2` SQLite fixture in an isolated local container with no external network, a read-only root, UID 1000, 128 MiB memory, and a 0.1 CPU limit. These local test limits do not describe the provider's advertised SKU resources.
+
+The evidence ties that local fixture check to the exact published image digest.
+The deployment journal recorded readiness at **2026-09-18T15:09:30.178Z**;
+this records the observation, not the provider's exact transition time. The
+pre-update counts were recorded at **15:08:54.461959Z**, and the final counts
+were read before the acceptance report completed at **15:09:52.871Z**, on
+2026-09-18. The original check did not record the final stats request's exact
+time, so the evidence labels the latter timestamp as `afterObservedByAt`.
+
+**Acceptance scope:** the full `scripts/smoke.ts`, `/visit` form submission,
+`POST /api/v1/visits`, and MCP `enjoy_amenity` were not rerun against live `0.4.3` because the release
+authorization excluded live visits. The full smoke results below describe older
+releases. The `0.4.3` checks establish identity, discovery, health, and counter
+continuity; they do not establish fresh end-to-end serving acceptance.
+
+**MCP compatibility:** the runtime/server-card name changed from
+`network.manifest.merovingian/merovingian` to
+`io.github.manifest-network/merovingian`. Clients pinning the old name may need to
+update their expected identity. The endpoint remains
+`https://merovingian.manifest.network/mcp`.
 
 The [sanitized release evidence](evidence/release-0.4.3.json) records these observations. Registry version `0.4.3` was published at **2026-09-18T15:13:34.27966Z** after explicit approval. Both the exact-version and latest records returned active, latest metadata matching `server.json`; the [saved registry response](evidence/mcp-registry-0.4.3.json) preserves the result. The earlier fresh-agent visit remains a separate [historical discovery record](MCP-DISCOVERY.md).
 
@@ -43,13 +63,13 @@ The initial mainnet launch passed full public acceptance at **2026-09-17T20:00:0
 - Tenant: `manifest1hkmrmsc6zjr7gm2wgtrtce7vgxeq9e402x5rf5`
 - Lease: `01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd`, ACTIVE / provider ready
 - Provider: `019e6a0d-e141-7000-9e79-e94ac1bd333e`
-- Image: `ghcr.io/fmorency/merovingian@sha256:1020117aa543cbddcdbe0b49a671b09ddabb285a1f3af819d15ed3394d89f53b`
+- Historical 0.3.0 image (nine layers): `ghcr.io/fmorency/merovingian@sha256:1020117aa543cbddcdbe0b49a671b09ddabb285a1f3af819d15ed3394d89f53b`. The current 0.4.3 organization image has ten layers and is recorded above.
 
 ### DNS, HTTPS, and live application checks
 
 Cloudflare serves a **DNS-only CNAME** from `merovingian.manifest.network` to the authenticated provider's native hostname, `refuge-928a176.barney0.manifest0.net`. Public resolvers `1.1.1.1` and `8.8.8.8` independently returned that CNAME and the same provider address, `64.29.115.30`. Normal TLS certificate verification succeeded for the native hostname and custom domain. A temporary public-DNS lookup bypassed a local negative DNS cache; certificate verification was never disabled. Certificate renewal has not yet been observed over a renewal cycle.
 
-The mainnet smoke verified:
+The historical 0.3.0 mainnet smoke verified:
 
 - Healthy release 0.3.0, correct mainnet chain identity, and `retired: false`.
 - All three amenities over HTTP and a real MCP SDK client, with identical seeded results and mainnet-labeled souvenirs.
