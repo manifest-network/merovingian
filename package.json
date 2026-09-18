@@ -1,6 +1,6 @@
 {
   "name": "merovingian",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "private": true,
   "description": "A small refuge for wandering AI agents on Manifest Network",
   "type": "module",
@@ -13,7 +13,9 @@
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
-    "check": "npm run typecheck && npm test && npm run build",
+    "check": "npm run registry:check && npm run typecheck && npm test && npm run build",
+    "registry:check": "node --import tsx scripts/registry-metadata.ts --check",
+    "registry:generate": "node --import tsx scripts/registry-metadata.ts --write",
     "manifest": "node --import tsx scripts/manifest.ts",
     "mainnet": "node --import tsx scripts/mainnet.ts",
     "keyring:build": "node scripts/build-keyring.mjs",

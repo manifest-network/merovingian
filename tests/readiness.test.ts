@@ -6,16 +6,17 @@ import test from 'node:test';
 import express from 'express';
 import type { Config } from '../src/config.js';
 import { createReadinessRouter, discoveryLinkHeader, readinessDocuments, SKILL_PATH } from '../src/readiness.js';
+import { APP_VERSION } from '../src/identity.js';
 
 const config: Config = { network: 'mainnet', chainId: 'manifest-ledger-mainnet', publicOrigin: 'https://merovingian.manifest.network', port: 8080, rpcUrl: 'https://nodes.manifest.network/manifest/rpc', gasPrice: '0.5upwr', pwrDenom: 'upwr', tenant: '', trustProxyHops: 0 };
-const documents = readinessDocuments(config, '0.4.0');
+const documents = readinessDocuments(config);
 const readJson = (path: string) => JSON.parse(documents.get(path)!.body);
 
 test('MCP discovery distinguishes current connection metadata from truthful legacy compatibility', () => {
   const current = readJson('/mcp/server-card');
   assert.equal(current.$schema, 'https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json');
   assert.match(current.name, /^[a-zA-Z0-9.-]+\/[a-zA-Z0-9._-]+$/);
-  assert.equal(current.version, '0.4.0');
+  assert.equal(current.version, APP_VERSION);
   assert.ok(current.description.length <= 100);
   assert.equal(current.remotes[0].type, 'streamable-http');
   assert.equal(current.remotes[0].url, `${config.publicOrigin}/mcp`);
@@ -64,7 +65,7 @@ test('API and AI catalogs reference real public interfaces without fabricated au
 });
 
 test('discovery HTTP supports GET/HEAD, public CORS, exact bytes and unknown-path fallback', async t => {
-  const app = express(); app.use(createReadinessRouter(config, '0.4.0'));
+  const app = express(); app.use(createReadinessRouter(config));
   const server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
   t.after(() => { server.closeAllConnections(); server.close(); });
   const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

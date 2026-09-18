@@ -1,0 +1,47 @@
+import fs from 'node:fs';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+
+export async function connectLoggedClient(prefix, { allowedTools = [], allowOneVisit = false } = {}) {
+  const discovery = JSON.parse(fs.readFileSync('mcp-discovery.json', 'utf8'));
+  const exchanges = [];
+  let visitRequests = 0;
+  const save = () => fs.writeFileSync(`${prefix}-http.json`, JSON.stringify(exchanges, null, 2));
+  const allowedMethods = new Set(['initialize', 'notifications/initialized', 'resources/read', 'tools/call']);
+  const loggedFetch = async (url, options = {}) => {
+    if (String(url) !== discovery.endpoint) throw new Error('Unexpected endpoint');
+    if (new Headers(options.headers).has('authorization')) throw new Error('Credentials prohibited');
+    const request = options.body ? JSON.parse(options.body) : null;
+    if (request && !allowedMethods.has(request.method)) throw new Error('Method prohibited');
+    if (request?.method === 'tools/call') {
+      if (!allowedTools.includes(request.params.name)) throw new Error('Tool prohibited');
+      if (request.params.name === 'enjoy_amenity') {
+        if (!allowOneVisit || !fs.existsSync('visit-attempt.json') || visitRequests !== 0) throw new Error('Visit guard rejected request');
+        visitRequests += 1;
+      }
+    }
+    const exchange = { startedAt: new Date().toISOString(), method: options.method ?? 'GET', url: String(url), request };
+    exchanges.push(exchange);
+    save();
+    try {
+      const response = await fetch(url, { ...options, redirect: 'error', signal: AbortSignal.any([...(options.signal ? [options.signal] : []), AbortSignal.timeout(30000)]) });
+      exchange.status = response.status;
+      exchange.contentType = response.headers.get('content-type');
+      if (exchange.contentType?.includes('application/json')) exchange.rawBody = await response.clone().text();
+      exchange.completedAt = new Date().toISOString();
+      save();
+      return response;
+    } catch (error) {
+      exchange.failure = { message: error.message, cause: error.cause?.code };
+      save();
+      throw error;
+    }
+  };
+  const client = new Client({ name: 'fresh-registry-discovery-test', version: '1.0.0' }, { capabilities: {} });
+  const transport = new StreamableHTTPClientTransport(new URL(discovery.endpoint), {
+    fetch: loggedFetch,
+    reconnectionOptions: { maxRetries: 0, initialReconnectionDelay: 1000, maxReconnectionDelay: 1000, reconnectionDelayGrowFactor: 1 }
+  });
+  await client.connect(transport, { timeout: 30000 });
+  return { client, transport };
+}

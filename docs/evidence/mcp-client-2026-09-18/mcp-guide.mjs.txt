@@ -1,0 +1,24 @@
+import fs from 'node:fs';
+import { connectLoggedClient } from './mcp-client.mjs';
+
+const discovery = JSON.parse(fs.readFileSync('mcp-discovery.json', 'utf8'));
+const guide = discovery.resources.resources.find(resource => resource.name === 'visit-guide');
+if (!guide) throw new Error('No discovered visitor guide');
+const output = { startedAt: new Date().toISOString(), failures: [] };
+const save = () => fs.writeFileSync('mcp-guide.json', JSON.stringify(output, null, 2));
+const { client } = await connectLoggedClient('mcp-guide', { allowedTools: ['list_amenities'] });
+try {
+  const actions = [
+    ['guide', () => client.readResource({ uri: guide.uri })],
+    ['menu', () => client.callTool({ name: 'list_amenities', arguments: {} })]
+  ];
+  const results = await Promise.allSettled(actions.map(async ([key, action]) => { output[key] = await action(); save(); }));
+  results.forEach((result, i) => {
+    if (result.status === 'rejected') output.failures.push({ operation: actions[i][0], message: result.reason.message });
+  });
+  output.completedAt = new Date().toISOString();
+  save();
+  console.log(JSON.stringify(output, null, 2));
+} finally {
+  await client.close();
+}

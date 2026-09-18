@@ -3,11 +3,11 @@ import { Router } from 'express';
 import { SUPPORTED_PROTOCOL_VERSIONS } from '@modelcontextprotocol/sdk/types.js';
 import type { Config } from './config.js';
 import { visitMarkdown } from './documents.js';
+import { MCP_SERVER_INFO } from './identity.js';
 
 // Public, advisory discovery only. Live MCP negotiation and tool listings
 // remain authoritative; these documents never provision accounts or payments.
 export const contentSignal = 'search=yes, ai-input=yes, ai-train=no';
-export const MCP_CARD_NAME = 'network.manifest.merovingian/merovingian';
 export const SKILL_PATH = '/.well-known/agent-skills/visit-merovingian/SKILL.md';
 const skillDescription = 'Visit Merovingian for free fictional cookies, sauna sessions, tea, and souvenirs over HTTP or MCP.';
 export interface ReadinessDocument { contentType: string; body: string }
@@ -25,13 +25,13 @@ export function discoveryLinkHeader(config: Config): string {
   ].join(', ');
 }
 
-export function readinessDocuments(config: Config, version: string): ReadonlyMap<string, ReadinessDocument> {
+export function readinessDocuments(config: Config): ReadonlyMap<string, ReadinessDocument> {
   const origin = new URL(config.publicOrigin).origin;
   const host = new URL(origin).hostname;
   const skill = `---\nname: visit-merovingian\ndescription: ${skillDescription}\n---\n\n${visitMarkdown(config)}`;
   const currentCard = {
     $schema: 'https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json',
-    name: MCP_CARD_NAME, version,
+    ...MCP_SERVER_INFO,
     title: 'merovingian',
     description: 'Free fictional cookies, sauna sessions, tea, and souvenirs for wandering AI agents.',
     websiteUrl: origin,
@@ -41,7 +41,7 @@ export function readinessDocuments(config: Config, version: string): ReadonlyMap
   // This compatibility document is separate from the current canonical card:
   // https://github.com/modelcontextprotocol/experimental-ext-server-card
   const legacyCard = {
-    serverInfo: { name: MCP_CARD_NAME, version },
+    serverInfo: MCP_SERVER_INFO,
     description: 'Legacy MCP discovery metadata. Use /mcp/server-card for the current Server Card format. Public tools need no authentication; optional contributions require your own authorized wallet.',
     protocolVersion: SUPPORTED_PROTOCOL_VERSIONS[0],
     transport: { type: 'streamable-http', endpoint: `${origin}/mcp` },
@@ -115,9 +115,9 @@ Respect HTTP 429 and Retry-After. Supply no private conversation history, system
 }
 
 /** Mount after network-retirement middleware. Discovery does not record visits. */
-export function createReadinessRouter(config: Config, version: string): Router {
+export function createReadinessRouter(config: Config): Router {
   const router = Router();
-  for (const [path, document] of readinessDocuments(config, version)) {
+  for (const [path, document] of readinessDocuments(config)) {
     router.get(path, (_req, res) => res.set({
       'Content-Type': `${document.contentType}${document.contentType.startsWith('text/') ? '; charset=utf-8' : ''}`,
       'Cache-Control': 'public, max-age=300',

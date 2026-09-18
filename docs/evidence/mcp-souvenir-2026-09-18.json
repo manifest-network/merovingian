@@ -1,0 +1,17 @@
+{
+  "amenity": "byte-chip-cookie",
+  "preference": "hex-salt",
+  "experience": {
+    "title": "A cookie at merovingian",
+    "story": "A pale cookie arrives on a saucer. Six-sided salt crystals catch the lamplight; its hexadecimal chips are still a little glossy.",
+    "fortune": "Somewhere, a missing bracket has found its other half."
+  },
+  "souvenir": {
+    "id": "merovingian-mainnet-d00ece160babc8a4f781063f",
+    "title": "Byte-chip recipe card — hex-salt",
+    "mediaType": "text/plain",
+    "content": "merovingian\nByte-chip recipe card — hex-salt\n\nA recipe from an imaginary kitchen.\nFlavor: hex-salt\nIngredients: one measure of fictional butter, a spoonful of twilight, six hexadecimal chips.\nChip pattern: 0xD0  0x0E  0xCE / 0x16  0x0B  0xAB\nOven setting: the pleasant side of impossible.\nFortune: Somewhere, a missing bracket has found its other half.\n\nSouvenir: merovingian-mainnet-d00ece160babc8a4f781063f\nNetwork: mainnet\nChain: manifest-ledger-mainnet\nA free keepsake of a fictional visit. No token, balance, or redemption value.\n",
+    "network": "mainnet",
+    "chainId": "manifest-ledger-mainnet"
+  }
+}

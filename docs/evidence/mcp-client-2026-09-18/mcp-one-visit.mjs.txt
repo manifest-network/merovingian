@@ -1,0 +1,62 @@
+import fs from 'node:fs';
+import { connectLoggedClient } from './mcp-client.mjs';
+
+if (fs.existsSync('visit-attempt.json')) throw new Error('Visit marker already exists: do not repeat');
+const guidance = JSON.parse(fs.readFileSync('mcp-guide.json', 'utf8'));
+const menu = guidance.menu.structuredContent;
+const amenity = menu.amenities.find(amenity => amenity.id === 'byte-chip-cookie');
+if (!amenity || amenity.price !== 'free' || menu.walletRequired !== false) throw new Error('Expected free, wallet-free menu item');
+const guideText = guidance.guide.contents.map(item => item.text ?? '').join('\n');
+const statsURL = guideText.match(/https:\/\/[^\s]+\/api\/v1\/stats\b/)?.[0];
+if (!statsURL) throw new Error('No stats endpoint discovered in guide');
+const selected = { name: 'enjoy_amenity', arguments: { amenity: amenity.id, preference: amenity.defaultPreference } };
+const result = { startedAt: new Date().toISOString(), selected, failures: [], mutationRetryPolicy: 'No retry. Transport reconnection maxRetries=0; fetch guard permits one enjoy_amenity request.' };
+const save = () => fs.writeFileSync('visit-result.json', JSON.stringify(result, null, 2));
+async function readCounters(stage) {
+  const startedAt = new Date().toISOString();
+  const response = await fetch(statsURL, { method: 'GET', redirect: 'error', signal: AbortSignal.timeout(30000) });
+  const rawBody = await response.text();
+  const observed = { startedAt, completedAt: new Date().toISOString(), url: statsURL, status: response.status, rawBody };
+  fs.writeFileSync(`${stage}-stats-fetch.json`, JSON.stringify(observed, null, 2));
+  if (!response.ok) throw new Error(`Stats ${stage} failed with HTTP ${response.status}`);
+  const counts = JSON.parse(rawBody);
+  fs.writeFileSync(`${stage}-stats-raw.json`, rawBody);
+  return { ...observed, counts };
+}
+let client;
+try {
+  result.before = await readCounters('before');
+  save();
+  ({ client } = await connectLoggedClient('mcp-visit', { allowedTools: ['enjoy_amenity'], allowOneVisit: true }));
+  const marker = { timestamp: new Date().toISOString(), selectedAction: selected, reason: 'Exactly one explicitly authorized live free amenity visit', retryPolicy: 'Never retry this mutation; stop if marker exists or outcome is ambiguous.' };
+  fs.writeFileSync('visit-attempt.json', JSON.stringify(marker, null, 2), { flag: 'wx', mode: 0o600 });
+  result.attempt = marker;
+  save();
+  try {
+    result.response = await client.callTool(selected, undefined, { timeout: 30000 });
+    result.responseAt = new Date().toISOString();
+    save();
+    const data = result.response.structuredContent ?? JSON.parse(result.response.content.find(item => item.type === 'text').text);
+    fs.writeFileSync('souvenir.json', JSON.stringify(data, null, 2));
+    if (typeof data.souvenir?.content === 'string') fs.writeFileSync('souvenir.txt', data.souvenir.content);
+    result.success = !result.response.isError;
+  } catch (error) {
+    result.failures.push({ operation: 'one visit', message: error.message, outcome: 'Do not retry; use read-only observations.' });
+  }
+  save();
+  try {
+    result.after = await readCounters('after');
+  } catch (error) {
+    result.failures.push({ operation: 'after counters', message: error.message });
+  }
+  result.completedAt = new Date().toISOString();
+  save();
+  console.log(JSON.stringify(result, null, 2));
+} catch (error) {
+  result.failures.push({ operation: 'visit setup', message: error.message });
+  save();
+  console.log(JSON.stringify(result, null, 2));
+  process.exitCode = 1;
+} finally {
+  if (client) await client.close();
+}

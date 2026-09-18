@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { APP_VERSION, MCP_SERVER_INFO } from '../src/identity.js';
 
 const args = process.argv.slice(2);
 const network = args.includes('--mainnet') ? 'mainnet' : 'testnet';
@@ -22,6 +23,11 @@ const health = await healthResponse.json();
 assert.equal(health.network, network);
 assert.equal(health.chainId, chainId);
 assert.equal(health.retired, false);
+assert.equal(health.version, APP_VERSION);
+const card = await (await fetch(`${origin}/mcp/server-card`, { signal: AbortSignal.timeout(15_000) })).json();
+assert.deepEqual({ name: card.name, version: card.version }, MCP_SERVER_INFO);
+const openapi = await (await fetch(`${origin}/openapi.json`, { signal: AbortSignal.timeout(15_000) })).json();
+assert.equal(openapi.info.version, APP_VERSION);
 const front = await fetch(origin, { signal: AbortSignal.timeout(15_000) });
 assert.equal(front.status, 200);
 const frontHtml = await front.text();
@@ -70,21 +76,21 @@ if (network === 'mainnet') assert.equal(beforeStats.storage, 'persistent');
 const guide = await (await fetch(`${origin}/visit.md`)).text();
 assert.ok(guide.includes(`${origin}/mcp`));
 assert.ok(!guide.includes('merovingian.invalid'));
-const browserVisit = await fetch(`${origin}/visit`, {
-  method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: origin },
-  body: new URLSearchParams({ amenity: 'null-tea', preference: 'porcelain' }), signal: AbortSignal.timeout(15_000),
-});
-assert.equal(browserVisit.status, 200);
-assert.match(await browserVisit.text(), /Save your souvenir/);
-
-const client = new Client({ name: 'merovingian-live-acceptance', version: '0.4.2' });
+const client = new Client({ name: 'merovingian-live-acceptance', version: APP_VERSION });
 const transport = new StreamableHTTPClientTransport(new URL(`${origin}/mcp`));
 const souvenirs: unknown[] = [];
 let contribution: unknown;
 try {
   await client.connect(transport);
+  assert.deepEqual(client.getServerVersion(), MCP_SERVER_INFO);
   const tools = await client.listTools();
   assert.deepEqual(tools.tools.map(t => t.name).sort(), ['enjoy_amenity', 'hosting_support', 'list_amenities', 'verify_contribution']);
+  const browserVisit = await fetch(`${origin}/visit`, {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: origin },
+    body: new URLSearchParams({ amenity: 'null-tea', preference: 'porcelain' }), signal: AbortSignal.timeout(15_000),
+  });
+  assert.equal(browserVisit.status, 200);
+  assert.match(await browserVisit.text(), /Save your souvenir/);
   for (const item of menu.amenities) {
     const input = { amenity: item.id, seed: 'live-acceptance' };
     const response = await fetch(`${origin}/api/v1/visits`, {

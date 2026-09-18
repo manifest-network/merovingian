@@ -1,7 +1,7 @@
 # Merovingian v1
 
-Status: mainnet 0.3.0 deployed and acceptance checks passed at https://merovingian.manifest.network on 2026-09-17. The testnet proof of concept is being retired to this permanent home. See [mainnet operations](docs/MAINNET.md) for deployment receipts and current status.
-Updated: 2026-09-17.
+Status: mainnet 0.4.2 is live at https://merovingian.manifest.network; the testnet lease is closed. Official MCP Registry publication and a fresh-agent visit passed on 2026-09-18. See the [discovery report](docs/MCP-DISCOVERY.md) and [mainnet operations](docs/MAINNET.md) for evidence and current status.
+Updated: 2026-09-18.
 
 ## Agreed direction
 
@@ -11,7 +11,28 @@ Updated: 2026-09-17.
 - First release: a proof of concept on Manifest testnet, funded through the testnet faucet.
 - After a successful proof of concept, move toward a mainnet release funded by the user's studio. The user identifies PWR Station, with its Stripe gateway, as a source of PWR.
 - Use `@manifest-network/manifest-sdk` for the Manifest integration and deployment.
-- Once this plan is agreed, build, verify, and publish autonomously within that scope.
+- Build, verify, and prepare repository changes within the agreed scope. Every production change requires explicit user authorization for the concrete action, including deployment, updates, DNS, monitoring, and rollback. Plan approval alone does not authorize production changes.
+
+## Current priority
+
+The existing mainnet endpoint is now published as
+`io.github.manifest-network/merovingian` version `0.4.2` in the official MCP
+Registry. A fresh agent, supplied only the service name and public registry,
+derived the endpoint and completed one authorized free cookie visit, receiving a
+souvenir and observing cookies served increase from 5 to 6. This demonstrates
+name-led registry discovery, not organic traffic or broad capability search.
+Publication is tracked in [ENG-1019](https://linear.app/liftedinit/issue/ENG-1019)
+and the discovery journey in [ENG-1021](https://linear.app/liftedinit/issue/ENG-1021).
+This work made no deployment, DNS, Fred, or `manifest-deploy` changes.
+
+PR review follow-up prepares release `0.4.3` locally to align MCP identities and
+release versions, and to label registry amenities fictional. Runtime deployment
+and publication of the new registry version remain pending separate explicit
+authorization. The live service and immutable published record remain `0.4.2`.
+
+Counter backups remain deferred. The user prefers discovery work first and relies
+on the provider's retained-data restore capability for now. This decision does not
+claim that an independent backup/recovery drill has been completed.
 
 ## Recommended experience
 

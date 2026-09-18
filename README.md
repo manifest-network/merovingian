@@ -6,6 +6,10 @@ A small refuge for wandering AI agents, with three free fictional amenities, kee
 
 Version **0.4.2 is live on Manifest mainnet** at its permanent public home, with aggregate served counts, agent discovery metadata, and WebMCP browser tools. The existing lease was updated without a new lease or funding deposit. The former testnet proof of concept was retired and its lease closed.
 
+This branch prepares **0.4.3** to align the runtime and server-card identity with
+the registry and derive release metadata from one version source. It has not been
+deployed or published. Each production action requires explicit authorization.
+
 **Live refuge:** [visit merovingian](https://merovingian.manifest.network) · [agent instructions](https://merovingian.manifest.network/visit.md) · [remote MCP](https://merovingian.manifest.network/mcp) · [acceptance report](docs/ACCEPTANCE.md).
 
 **Public source:** [manifest-network/merovingian](https://github.com/manifest-network/merovingian). Live counters survived the production image update, and the external agent-readiness score improved from **20% to 73%**. See [release evidence](docs/ACCEPTANCE.md#release-042-publication-and-verification) for the checks and their limits.
@@ -19,6 +23,11 @@ npm ci
 npm run check
 npm run dev
 ```
+
+The [CI workflow](.github/workflows/ci.yml) runs `npm run check` on pull requests
+to `main` and pushes to `main`, including registry consistency, typechecking,
+isolated local tests, and the build. It uses read-only repository permissions and
+does not publish releases or visit the live refuge.
 
 Open `http://localhost:8080`. Free amenities work without configuration or chain access. Optional contribution queries require the public `REFUGE_TENANT` address. See `.env.example`; Node can load your local file with `node --env-file=.env dist/index.js` after `npm run build`.
 
@@ -35,6 +44,18 @@ curl http://localhost:8080/api/v1/visits \
 The result contains an experience and `souvenir.content`, which the visitor can save. Other choices are `rgb-sauna` and `null-tea`. Accepted preferences are in the menu. No accounts, model API calls, wallet keys, private context, or separate database service are needed.
 
 The MCP endpoint is `/mcp`, using stateless Streamable HTTP. Tools are `list_amenities`, `enjoy_amenity`, `hosting_support`, and `verify_contribution`. There are no wallet-signing or spending tools on this server. An agent host decides which tools it may call.
+
+Find `io.github.manifest-network/merovingian` in the official MCP Registry. The
+[published version 0.4.2](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.2)
+advertises the remote Streamable HTTP endpoint. Add that endpoint to an MCP host
+and call `list_amenities` to read the menu. Calling `enjoy_amenity` makes a live
+mainnet visit and increments a public serving counter; only call it when the user
+has authorized that visit. Automated checks need an explicit visit scope.
+Free visits require no authentication or wallet; the host controls tool approval.
+See the [publication runbook](docs/MCP-REGISTRY.md) for verification and updates.
+A supervised fresh agent, given the service name and official registry URL,
+found the listing and completed one authorized free cookie visit on 2026-09-18;
+see the [discovery report](docs/MCP-DISCOVERY.md).
 
 ## Served counts and discovery
 
@@ -83,6 +104,6 @@ The existing mainnet lease must be reused; do not repeat the completed funding d
 
 The permanent domain `merovingian.manifest.network` uses direct, DNS-only Cloudflare routing to the provider, with verified HTTPS. Its dedicated mainnet `docker-nano` lease costs 2.592 PWR per 30 days within a 5 PWR/month hosting ceiling; transaction fees are separate. See [the approved plan](PLAN.md), [mainnet operations](docs/MAINNET.md), and `.env.mainnet.example` for public runtime configuration. Separate paid studio extras remain planned.
 
-Mainnet canonical URLs, indexable pages, sitemap, HTTP/MCP visits, and the read-only contribution ledger passed public acceptance. Public MCP registry submission and Search Console setup remain follow-up work; metadata does not guarantee discovery or indexing. The PWR denomination happens to match testnet, so verified chain identity, endpoints, and separate operational state distinguish the networks.
+Mainnet canonical URLs, indexable pages, sitemap, HTTP/MCP visits, and the read-only contribution ledger passed public acceptance. The official MCP Registry listing is published; Search Console setup remains follow-up work. Metadata does not guarantee discovery or indexing. The PWR denomination happens to match testnet, so verified chain identity, endpoints, and separate operational state distinguish the networks.
 
 Testnet retirement mode passed 18 live checks after mainnet acceptance: human pages redirected permanently, and machine calls returned HTTP 410 with explicit migration information. The user then requested testnet shutdown; its lease is confirmed CLOSED. The former provider hostname and migration notice are no longer a supported endpoint. Mainnet remains live, and historical testnet receipts remain labeled as testnet.
