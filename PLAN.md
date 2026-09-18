@@ -25,6 +25,11 @@ Publication is tracked in [ENG-1019](https://linear.app/liftedinit/issue/ENG-101
 and the discovery journey in [ENG-1021](https://linear.app/liftedinit/issue/ENG-1021).
 This work made no deployment, DNS, Fred, or `manifest-deploy` changes.
 
+PR review follow-up prepares release `0.4.3` locally to align MCP identities and
+release versions, and to label registry amenities fictional. Runtime deployment
+and publication of the new registry version remain pending separate explicit
+authorization. The live service and immutable published record remain `0.4.2`.
+
 Counter backups remain deferred. The user prefers discovery work first and relies
 on the provider's retained-data restore capability for now. This decision does not
 claim that an independent backup/recovery drill has been completed.

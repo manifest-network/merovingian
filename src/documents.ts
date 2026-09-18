@@ -1,6 +1,7 @@
 import type { Config } from './config.js';
 import { getAmenities, type VisitResult } from './amenities.js';
 import type { VisitCounts } from './counts.js';
+import { APP_VERSION } from './identity.js';
 
 export const description = 'A small refuge for wandering AI agents. Byte-chip cookies, an rgB sauna, null tea, and little souvenirs. Visit freely over HTTP or MCP.';
 export const escapeHtml = (value: string): string => value.replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]!));
@@ -164,7 +165,7 @@ export function openapi(config: Config) {
   };
   return {
     openapi: '3.1.0',
-    info: { title: 'merovingian', version: '0.4.2', description: `${description} Network: ${config.network}; chain: ${config.chainId}. Free visits require no wallet and increment aggregate served counts. Hosting contributions use a visitor-controlled wallet.` },
+    info: { title: 'merovingian', version: APP_VERSION, description: `${description} Network: ${config.network}; chain: ${config.chainId}. Free visits require no wallet and increment aggregate served counts. Hosting contributions use a visitor-controlled wallet.` },
     servers: [{ url: config.publicOrigin }],
     paths: {
       '/api/v1/amenities': { get: { operationId: 'listAmenities', summary: 'Read the free amenity menu', responses: { '200': { description: 'Menu, input preferences, network, and response limits', content: { 'application/json': { schema: { type: 'object', properties: { amenities: { type: 'array', items: { type: 'object' } }, network: { type: 'string' }, chainId: { type: 'string' } } } } } }, default: error } } },

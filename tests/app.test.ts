@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { readFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import test, { type TestContext } from 'node:test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -63,6 +64,23 @@ async function mcpClient(t: TestContext, base: string) {
   t.after(() => client.close());
   return client;
 }
+
+test('served MCP identity, discovery cards, health and OpenAPI match the prepared release and package version', async t => {
+  const prepared = JSON.parse(readFileSync(new URL('../server.json', import.meta.url), 'utf8'));
+  const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.equal(prepared.version, packageJson.version);
+  const expectedIdentity = { name: prepared.name, version: packageJson.version };
+  const { base, request } = await fixture(t);
+  const client = await mcpClient(t, base);
+  assert.deepEqual(client.getServerVersion(), expectedIdentity);
+  const card = await (await request('/mcp/server-card')).json();
+  assert.deepEqual({ name: card.name, version: card.version }, expectedIdentity);
+  const legacy = await (await request('/.well-known/mcp/server-card.json')).json();
+  assert.deepEqual(legacy.serverInfo, expectedIdentity);
+  assert.equal((await (await request('/healthz')).json()).version, packageJson.version);
+  assert.equal((await (await request('/openapi.json')).json()).info.version, packageJson.version);
+  assert.equal((await (await request('/api/v1/stats')).json()).total, '0');
+});
 
 test('public serving totals count successful HTTP, form and MCP visits, including repeated seeds', async t => {
   const { base, request, json } = await fixture(t);

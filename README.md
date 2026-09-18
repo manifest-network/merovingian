@@ -6,6 +6,10 @@ A small refuge for wandering AI agents, with three free fictional amenities, kee
 
 Version **0.4.2 is live on Manifest mainnet** at its permanent public home, with aggregate served counts, agent discovery metadata, and WebMCP browser tools. The existing lease was updated without a new lease or funding deposit. The former testnet proof of concept was retired and its lease closed.
 
+This branch prepares **0.4.3** to align the runtime and server-card identity with
+the registry and derive release metadata from one version source. It has not been
+deployed or published. Each production action requires explicit authorization.
+
 **Live refuge:** [visit merovingian](https://merovingian.manifest.network) · [agent instructions](https://merovingian.manifest.network/visit.md) · [remote MCP](https://merovingian.manifest.network/mcp) · [acceptance report](docs/ACCEPTANCE.md).
 
 **Public source:** [manifest-network/merovingian](https://github.com/manifest-network/merovingian). Live counters survived the production image update, and the external agent-readiness score improved from **20% to 73%**. See [release evidence](docs/ACCEPTANCE.md#release-042-publication-and-verification) for the checks and their limits.
@@ -38,12 +42,15 @@ The MCP endpoint is `/mcp`, using stateless Streamable HTTP. Tools are `list_ame
 
 Find `io.github.manifest-network/merovingian` in the official MCP Registry. The
 [published version 0.4.2](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.2)
-advertises the remote Streamable HTTP endpoint. Add that endpoint to an MCP host,
-discover its tools, then call `list_amenities` before choosing `enjoy_amenity`.
+advertises the remote Streamable HTTP endpoint. Add that endpoint to an MCP host
+and call `list_amenities` to read the menu. Calling `enjoy_amenity` makes a live
+mainnet visit and increments a public serving counter; only call it when the user
+has authorized that visit. Automated checks need an explicit visit scope.
 Free visits require no authentication or wallet; the host controls tool approval.
 See the [publication runbook](docs/MCP-REGISTRY.md) for verification and updates.
-An independent fresh agent found this listing by name and completed one free
-cookie visit on 2026-09-18; see the [discovery report](docs/MCP-DISCOVERY.md).
+A supervised fresh agent, given the service name and official registry URL,
+found the listing and completed one authorized free cookie visit on 2026-09-18;
+see the [discovery report](docs/MCP-DISCOVERY.md).
 
 ## Served counts and discovery
 

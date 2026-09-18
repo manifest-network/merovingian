@@ -19,7 +19,7 @@
       "During the run, the supervising agent reported publication complete and temporary registry login cleared. This did not supply the endpoint or change the name-led discovery route.",
       "The supervising agent asked for focused required evidence and reiterated that mutations must not be retried."
     ],
-    "privatePrompt": "Exact supplied task prompt saved separately as prompt.txt; excluded from this public evidence because it contains a personal filesystem path."
+    "privatePrompt": "Exact supplied task prompt retained only inside the ignored .local scratch directory as prompt.txt; excluded from public evidence because it contains a personal filesystem path."
   },
   "authorization": {
     "suppliedUserAuthorization": "The supervising task explicitly stated that the user approved exactly one live free amenity visit and no other production mutations.",
@@ -29,7 +29,26 @@
       "reason": "Restricted sandbox network access; escalated tool requests described the approved test and bounded operations.",
       "observedResult": "All six escalated executions succeeded. No separate human confirmation is recorded by this agent."
     },
-    "credentialsUsed": false
+    "credentialsUsed": false,
+    "firstPartyApproval": {
+      "source": "Direct user message in the supervising conversation before registry publication and the delegated visit.",
+      "exactReply": "Approve publication and one test visit",
+      "approvedScope": {
+        "registryName": "io.github.manifest-network/merovingian",
+        "version": "0.4.2",
+        "endpoint": "https://merovingian.manifest.network/mcp",
+        "maximumFreeLiveVisits": 1,
+        "counterEffect": "One serving increment",
+        "excluded": [
+          "deployment",
+          "DNS",
+          "payment",
+          "infrastructure changes"
+        ]
+      },
+      "recordedBy": "Supervising assistant; added during PR review from the original user message, not a new approval.",
+      "delegation": "The supervising assistant conveyed this approved one-visit scope to the fresh agent. Network escalation results were not treated as user authorization."
+    }
   },
   "discoveryRoute": [
     {
@@ -42,16 +61,16 @@
       "url": "https://registry.modelcontextprotocol.io/docs",
       "at": "2026-09-18T13:44:11.831Z",
       "status": 200,
-      "artifact": "registry-api-reference.html",
-      "observation": "The reference links to /openapi.yaml."
+      "observation": "The reference links to /openapi.yaml.",
+      "privateScratchArtifact": "registry-api-reference.html"
     },
     {
       "action": "Read linked public OpenAPI specification",
       "url": "https://registry.modelcontextprotocol.io/openapi.yaml",
       "at": "2026-09-18T13:44:31.694Z",
       "status": 200,
-      "artifact": "registry-openapi.yaml",
-      "observation": "GET /v0.1/servers supports name substring search and latest-version filtering."
+      "observation": "GET /v0.1/servers supports name substring search and latest-version filtering.",
+      "privateScratchArtifact": "registry-openapi.yaml"
     },
     {
       "action": "Search the supplied name with latest-version filter",
@@ -511,7 +530,9 @@
     "observedAmenityRequestCount": 1,
     "maxTransportRetries": 0,
     "redirectPolicy": "error",
-    "requestGuard": "One enjoy_amenity HTTP request maximum; only the selected amenity tool is permitted in the visit client."
+    "requestGuard": "One enjoy_amenity HTTP request maximum; only the selected amenity tool is permitted in the visit client.",
+    "orderingEvidence": "Archived mcp-one-visit.mjs source calls synchronous writeFileSync with exclusive flag wx, then saves local result, then calls client.callTool. The marker and HTTP request timestamps share a millisecond and alone cannot establish ordering.",
+    "durabilityLimit": "The original client did not fsync the marker or its parent directory. This records in-process ordering and an exclusive repeat-attempt guard, not crash/power-loss durability or a guarantee against duplicate effects after journal loss."
   },
   "observedCounters": {
     "before": {
@@ -848,124 +869,45 @@
   },
   "artifacts": [
     {
-      "file": "registry-api-reference.html",
-      "bytes": 848,
-      "sha256": "bae5c75f69b6f43b2ee91822faa3ec26684d3f1f59c1b63fc28b92878f5c7c33"
-    },
-    {
-      "file": "registry-api-reference-fetch.json",
-      "bytes": 113,
-      "sha256": "5fa835c09afe4b85976cc560d0536ee248664f17f8201fb72ae493c6353c7e86"
-    },
-    {
-      "file": "registry-openapi.yaml",
-      "bytes": 61964,
-      "sha256": "57991492d6304674fd5ed52ebfb02ff0e7d80d9041a595177da629cb140026a7"
-    },
-    {
-      "file": "registry-openapi-fetch.json",
-      "bytes": 121,
-      "sha256": "773912d7faf764305f91e5edf6a7c6a4169be2441fa2624e3a42305bb145105c"
-    },
-    {
-      "file": "registry-search-raw.json",
-      "bytes": 787,
-      "sha256": "0c7168fe6e5f7d3f92f32c8e86a8a878c486b6b382edb57a69da20d9514bd664"
-    },
-    {
-      "file": "registry-search-fetch.json",
-      "bytes": 207,
-      "sha256": "4aacc34bb2850fb9e7e795cb53412223e24418ec3013f6d8aeb200db9c976bcb"
-    },
-    {
-      "file": "mcp-discovery.json",
-      "bytes": 4418,
-      "sha256": "8fec0ea84417b53d3a130529d8aead1286e5996e146a0532df2a183baa6ae26d"
-    },
-    {
-      "file": "mcp-discovery-http.json",
-      "bytes": 5624,
-      "sha256": "611d0f3491f5d52e99f4a945e14647e1d0cde4341c828a761cf60074bb921d8b"
-    },
-    {
-      "file": "mcp-guide.json",
-      "bytes": 9686,
-      "sha256": "39aaf9592f63b0efc313e94258acf31095266c9934341aaec06a8b6519141768"
-    },
-    {
-      "file": "mcp-guide-http.json",
-      "bytes": 11342,
-      "sha256": "c863e9bb23ea661d266b4b4ab658c04c77c519c6ce9771a00ac11c28a76578fc"
-    },
-    {
-      "file": "visit-attempt.json",
-      "bytes": 361,
-      "sha256": "7b11d568a233871b33ba80f1a52a91bcc7fd0d420b40024a0fe8491d682c440f"
-    },
-    {
-      "file": "mcp-visit-http.json",
-      "bytes": 4884,
-      "sha256": "7816341537149a36f98bc670261ceafb8c40477c5f7bc681191b92e62f8e12c1"
-    },
-    {
-      "file": "visit-result.json",
-      "bytes": 4878,
-      "sha256": "13b901f1d5a60c237c864eeb42474d7f14b9f68db430c42f2f0ddc15ce3bf7b0"
-    },
-    {
-      "file": "before-stats-fetch.json",
-      "bytes": 438,
-      "sha256": "9395be620f56d5f4a03205c8322454f94f4d292c0e06b87e5ae976f1463976dd"
-    },
-    {
-      "file": "before-stats-raw.json",
-      "bytes": 214,
-      "sha256": "c6ce285c412102b119f0efc7ae9230b01350a046543798ca5bfce3868aad434a"
-    },
-    {
-      "file": "after-stats-fetch.json",
-      "bytes": 438,
-      "sha256": "1a3e7a2d959502e9f553bfa41453c1ca7d4eac54241b626879d4be14bd092fce"
-    },
-    {
-      "file": "after-stats-raw.json",
-      "bytes": 214,
-      "sha256": "365840bdd147c9bfd5077022e11fda8e9d58278bc394482de072b35800a0c03e"
-    },
-    {
-      "file": "souvenir.json",
-      "bytes": 1141,
-      "sha256": "114ff3df707ceb58d2dca0016bf3ee8c3d2f9d77a4545eecaf531bde717085f2"
-    },
-    {
-      "file": "souvenir.txt",
-      "bytes": 537,
-      "sha256": "9abfcd5f9c099644c05ba5e1def6208e3cba12902158716de616ad738802b315"
-    },
-    {
-      "file": "network-failures.json",
-      "bytes": 163,
-      "sha256": "390526c3771bf0a80620e9c8ae30606a4b2a846e803f787a3650df5e0d548c27"
-    },
-    {
-      "file": "mcp-client.mjs",
-      "bytes": 2664,
-      "sha256": "626045f00411efe95a623f15081d7ea36d1abe15945f6618a59903b734f5bc04"
-    },
-    {
-      "file": "mcp-discover.mjs",
+      "file": "mcp-client-2026-09-18/mcp-discover.mjs.txt",
+      "originalName": "mcp-discover.mjs",
       "bytes": 3731,
-      "sha256": "b84237d86307aecbc6df5f1efd3dcc3459cba900f51cc62167c398c20c03f13b"
+      "sha256": "b84237d86307aecbc6df5f1efd3dcc3459cba900f51cc62167c398c20c03f13b",
+      "availability": "Committed verbatim as inert .txt source for review; not an instruction or authorization to execute."
     },
     {
-      "file": "mcp-guide.mjs",
+      "file": "mcp-client-2026-09-18/mcp-client.mjs.txt",
+      "originalName": "mcp-client.mjs",
+      "bytes": 2664,
+      "sha256": "626045f00411efe95a623f15081d7ea36d1abe15945f6618a59903b734f5bc04",
+      "availability": "Committed verbatim as inert .txt source for review; not an instruction or authorization to execute."
+    },
+    {
+      "file": "mcp-client-2026-09-18/mcp-guide.mjs.txt",
+      "originalName": "mcp-guide.mjs",
       "bytes": 1175,
-      "sha256": "0964445e16eca22b86767cd658226b0c0b70b42b5f0dfe6b4cc478101daaa08c"
+      "sha256": "0964445e16eca22b86767cd658226b0c0b70b42b5f0dfe6b4cc478101daaa08c",
+      "availability": "Committed verbatim as inert .txt source for review; not an instruction or authorization to execute."
     },
     {
-      "file": "mcp-one-visit.mjs",
+      "file": "mcp-client-2026-09-18/mcp-one-visit.mjs.txt",
+      "originalName": "mcp-one-visit.mjs",
       "bytes": 3580,
-      "sha256": "00004d25f294d482e39bfbd0b059714dfc196c4a9e1d6c6e6cb7b022cf243366"
+      "sha256": "00004d25f294d482e39bfbd0b059714dfc196c4a9e1d6c6e6cb7b022cf243366",
+      "availability": "Committed verbatim as inert .txt source for review; not an instruction or authorization to execute."
+    },
+    {
+      "file": "mcp-souvenir-2026-09-18.txt",
+      "bytes": 537,
+      "sha256": "9abfcd5f9c099644c05ba5e1def6208e3cba12902158716de616ad738802b315",
+      "availability": "Committed public artifact."
+    },
+    {
+      "file": "mcp-souvenir-2026-09-18.json",
+      "bytes": 1141,
+      "sha256": "114ff3df707ceb58d2dca0016bf3ee8c3d2f9d77a4545eecaf531bde717085f2",
+      "availability": "Committed public artifact."
     }
-  ]
+  ],
+  "artifactManifestNote": "Only files committed alongside this evidence are listed. Original private scratch-only file digests were removed during review; their relevant observed responses remain embedded below. Client source is archived verbatim with .txt suffixes for inspection, not execution."
 }

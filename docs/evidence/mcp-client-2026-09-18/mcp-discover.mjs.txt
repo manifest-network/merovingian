@@ -1,0 +1,74 @@
+import fs from 'node:fs';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+
+const listing = JSON.parse(fs.readFileSync('registry-search-raw.json', 'utf8'));
+if (listing.servers.length !== 1) throw new Error('Expected one matching public listing');
+const remote = listing.servers[0].server.remotes.find(remote => remote.type === 'streamable-http');
+if (!remote) throw new Error('No public Streamable HTTP endpoint');
+const result = { startedAt: new Date().toISOString(), endpoint: remote.url, failures: [] };
+const exchanges = [];
+const save = () => {
+  fs.writeFileSync('mcp-discovery.json', JSON.stringify(result, null, 2));
+  fs.writeFileSync('mcp-discovery-http.json', JSON.stringify(exchanges, null, 2));
+};
+const allowed = new Set(['initialize', 'notifications/initialized', 'tools/list', 'resources/list', 'resources/templates/list', 'resources/read', 'prompts/list', 'ping']);
+const loggedFetch = async (url, options = {}) => {
+  if (String(url) !== remote.url) throw new Error('Unexpected endpoint');
+  const headers = new Headers(options.headers);
+  if (headers.has('authorization')) throw new Error('Credentials prohibited');
+  const request = options.body ? JSON.parse(options.body) : null;
+  if (request && !allowed.has(request.method)) throw new Error('Read-only discovery guard rejected method');
+  const exchange = { startedAt: new Date().toISOString(), method: options.method ?? 'GET', url: String(url), request };
+  exchanges.push(exchange);
+  save();
+  try {
+    const response = await fetch(url, { ...options, redirect: 'error', signal: AbortSignal.any([...(options.signal ? [options.signal] : []), AbortSignal.timeout(30000)]) });
+    exchange.status = response.status;
+    exchange.contentType = response.headers.get('content-type');
+    if (exchange.contentType?.includes('application/json')) exchange.rawBody = await response.clone().text();
+    exchange.completedAt = new Date().toISOString();
+    save();
+    return response;
+  } catch (error) {
+    exchange.failure = { message: error.message, cause: error.cause?.code };
+    save();
+    throw error;
+  }
+};
+const client = new Client({ name: 'fresh-registry-discovery-test', version: '1.0.0' }, { capabilities: {} });
+const transport = new StreamableHTTPClientTransport(new URL(remote.url), {
+  fetch: loggedFetch,
+  reconnectionOptions: { maxRetries: 0, initialReconnectionDelay: 1000, maxReconnectionDelay: 1000, reconnectionDelayGrowFactor: 1 }
+});
+try {
+  await client.connect(transport, { timeout: 30000 });
+  result.server = client.getServerVersion();
+  result.protocolVersion = transport.protocolVersion;
+  result.capabilities = client.getServerCapabilities();
+  result.instructions = client.getInstructions();
+  save();
+  const actions = [
+    ['tools', () => client.listTools()],
+    ['resources', () => client.listResources()],
+    ['resourceTemplates', () => client.listResourceTemplates()]
+  ];
+  if (result.capabilities.prompts) actions.push(['prompts', () => client.listPrompts()]);
+  const results = await Promise.allSettled(actions.map(async ([key, action]) => {
+    result[key] = await action();
+    save();
+  }));
+  results.forEach((item, i) => {
+    if (item.status === 'rejected') result.failures.push({ operation: actions[i][0], message: item.reason.message });
+  });
+  result.completedAt = new Date().toISOString();
+  save();
+  console.log(JSON.stringify(result, null, 2));
+} catch (error) {
+  result.failures.push({ operation: 'discovery', message: error.message, cause: error.cause?.code });
+  save();
+  console.log(JSON.stringify(result, null, 2));
+  process.exitCode = 1;
+} finally {
+  await client.close();
+}

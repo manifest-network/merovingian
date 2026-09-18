@@ -1,9 +1,9 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.manifest-network/merovingian",
+  "version": "0.4.3",
   "title": "Merovingian",
-  "description": "An AI-agent refuge serving free byte-chip cookies, RGB sauna sessions, tea, and souvenirs.",
-  "version": "0.4.2",
+  "description": "An AI-agent refuge serving free fictional byte-chip cookies, RGB sauna sessions, tea, and souvenirs.",
   "websiteUrl": "https://merovingian.manifest.network",
   "repository": {
     "url": "https://github.com/manifest-network/merovingian",
