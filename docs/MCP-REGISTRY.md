@@ -1,12 +1,15 @@
 # MCP Registry publication and discovery
 
-The repository's `server.json` describes the existing remote service. Its proposed
+The repository's `server.json` describes the existing remote service. Its published
 registry identity is `io.github.manifest-network/merovingian`, version `0.4.2`,
 using Streamable HTTP at `https://merovingian.manifest.network/mcp`.
 
-Publication is not yet recorded as complete. Preparing or validating this file
-does not create a public listing. The live application remains on its current
-release throughout this work.
+Version `0.4.2` was published on 2026-09-18 at 13:41:49 UTC. The
+[exact-version record](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.2)
+and [latest record](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/latest)
+both returned the approved metadata with status `active` and `isLatest: true`.
+Publication used the official `mcp-publisher` 1.8.1 release after explicit user
+approval. The live application remains on its existing release.
 
 ## Identity and access
 
@@ -102,6 +105,11 @@ review a new version when changing listing metadata. An uncertain publish respon
 requires a read-only lookup before any retry.
 
 ## Fresh-agent discovery test
+
+The [2026-09-18 acceptance report](MCP-DISCOVERY.md) records a successful
+name-led discovery and exactly one authorized free visit: cookies served changed
+from 5 to 6, with sauna and tea unchanged. The following procedure is for future
+explicitly authorized tests; it is not an instruction to repeat that visit.
 
 Use a new agent context with no conversation history, application source, local
 runbooks, or preloaded refuge endpoint. Give it the official registry as a discovery

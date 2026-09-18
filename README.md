@@ -36,9 +36,14 @@ The result contains an experience and `souvenir.content`, which the visitor can 
 
 The MCP endpoint is `/mcp`, using stateless Streamable HTTP. Tools are `list_amenities`, `enjoy_amenity`, `hosting_support`, and `verify_contribution`. There are no wallet-signing or spending tools on this server. An agent host decides which tools it may call.
 
-The [registry publication and discovery runbook](docs/MCP-REGISTRY.md) describes the
-prepared official MCP Registry listing and the fresh-agent acceptance procedure.
-Preparation alone does not mean the listing has been published.
+Find `io.github.manifest-network/merovingian` in the official MCP Registry. The
+[published version 0.4.2](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.2)
+advertises the remote Streamable HTTP endpoint. Add that endpoint to an MCP host,
+discover its tools, then call `list_amenities` before choosing `enjoy_amenity`.
+Free visits require no authentication or wallet; the host controls tool approval.
+See the [publication runbook](docs/MCP-REGISTRY.md) for verification and updates.
+An independent fresh agent found this listing by name and completed one free
+cookie visit on 2026-09-18; see the [discovery report](docs/MCP-DISCOVERY.md).
 
 ## Served counts and discovery
 
@@ -87,6 +92,6 @@ The existing mainnet lease must be reused; do not repeat the completed funding d
 
 The permanent domain `merovingian.manifest.network` uses direct, DNS-only Cloudflare routing to the provider, with verified HTTPS. Its dedicated mainnet `docker-nano` lease costs 2.592 PWR per 30 days within a 5 PWR/month hosting ceiling; transaction fees are separate. See [the approved plan](PLAN.md), [mainnet operations](docs/MAINNET.md), and `.env.mainnet.example` for public runtime configuration. Separate paid studio extras remain planned.
 
-Mainnet canonical URLs, indexable pages, sitemap, HTTP/MCP visits, and the read-only contribution ledger passed public acceptance. Public MCP registry submission and Search Console setup remain follow-up work; metadata does not guarantee discovery or indexing. The PWR denomination happens to match testnet, so verified chain identity, endpoints, and separate operational state distinguish the networks.
+Mainnet canonical URLs, indexable pages, sitemap, HTTP/MCP visits, and the read-only contribution ledger passed public acceptance. The official MCP Registry listing is published; Search Console setup remains follow-up work. Metadata does not guarantee discovery or indexing. The PWR denomination happens to match testnet, so verified chain identity, endpoints, and separate operational state distinguish the networks.
 
 Testnet retirement mode passed 18 live checks after mainnet acceptance: human pages redirected permanently, and machine calls returned HTTP 410 with explicit migration information. The user then requested testnet shutdown; its lease is confirmed CLOSED. The former provider hostname and migration notice are no longer a supported endpoint. Mainnet remains live, and historical testnet receipts remain labeled as testnet.

@@ -1,0 +1,14 @@
+merovingian
+Byte-chip recipe card — hex-salt
+
+A recipe from an imaginary kitchen.
+Flavor: hex-salt
+Ingredients: one measure of fictional butter, a spoonful of twilight, six hexadecimal chips.
+Chip pattern: 0xD0  0x0E  0xCE / 0x16  0x0B  0xAB
+Oven setting: the pleasant side of impossible.
+Fortune: Somewhere, a missing bracket has found its other half.
+
+Souvenir: merovingian-mainnet-d00ece160babc8a4f781063f
+Network: mainnet
+Chain: manifest-ledger-mainnet
+A free keepsake of a fictional visit. No token, balance, or redemption value.

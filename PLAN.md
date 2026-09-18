@@ -1,6 +1,6 @@
 # Merovingian v1
 
-Status: mainnet 0.4.2 is live at https://merovingian.manifest.network; the testnet lease is closed. The next priority is MCP Registry publication and a fresh-agent discovery test. See [mainnet operations](docs/MAINNET.md) for deployment receipts and current status.
+Status: mainnet 0.4.2 is live at https://merovingian.manifest.network; the testnet lease is closed. Official MCP Registry publication and a fresh-agent visit passed on 2026-09-18. See the [discovery report](docs/MCP-DISCOVERY.md) and [mainnet operations](docs/MAINNET.md) for evidence and current status.
 Updated: 2026-09-18.
 
 ## Agreed direction
@@ -15,11 +15,15 @@ Updated: 2026-09-18.
 
 ## Current priority
 
-Publish the existing mainnet MCP endpoint to the official MCP Registry, then test
-discovery from a fresh agent context without supplying the refuge URL or source.
-Track publication in [ENG-1019](https://linear.app/liftedinit/issue/ENG-1019) and
-the discovery journey in [ENG-1021](https://linear.app/liftedinit/issue/ENG-1021).
-Keep this work in Merovingian; no Fred or `manifest-deploy` changes are part of it.
+The existing mainnet endpoint is now published as
+`io.github.manifest-network/merovingian` version `0.4.2` in the official MCP
+Registry. A fresh agent, supplied only the service name and public registry,
+derived the endpoint and completed one authorized free cookie visit, receiving a
+souvenir and observing cookies served increase from 5 to 6. This demonstrates
+name-led registry discovery, not organic traffic or broad capability search.
+Publication is tracked in [ENG-1019](https://linear.app/liftedinit/issue/ENG-1019)
+and the discovery journey in [ENG-1021](https://linear.app/liftedinit/issue/ENG-1021).
+This work made no deployment, DNS, Fred, or `manifest-deploy` changes.
 
 Counter backups remain deferred. The user prefers discovery work first and relies
 on the provider's retained-data restore capability for now. This decision does not
