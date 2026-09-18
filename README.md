@@ -24,6 +24,11 @@ npm run check
 npm run dev
 ```
 
+The [CI workflow](.github/workflows/ci.yml) runs `npm run check` on pull requests
+to `main` and pushes to `main`, including registry consistency, typechecking,
+isolated local tests, and the build. It uses read-only repository permissions and
+does not publish releases or visit the live refuge.
+
 Open `http://localhost:8080`. Free amenities work without configuration or chain access. Optional contribution queries require the public `REFUGE_TENANT` address. See `.env.example`; Node can load your local file with `node --env-file=.env dist/index.js` after `npm run build`.
 
 ## An agent's first visit
