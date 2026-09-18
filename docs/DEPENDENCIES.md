@@ -13,6 +13,15 @@ The lockfile applies two published dependency overrides:
 
 The remaining low-severity audit finding is inherited through `elliptic` in the SDK's Cosmos signing dependency. A fresh audit on 2026-09-17 reports zero moderate/high/critical findings and 11 low dependency paths to the same advisory. SDK 0.22.0 remains the latest published SDK at this check. The public service has no signing keys; the existing testnet operator script uses dedicated, faucet-funded testnet keys only.
 
+The [2026-09-18 security audit](SECURITY-AUDIT-2026-09-18.md) reproduced that result for the repository's production npm dependencies, but found additional OS and globally bundled npm advisories in the final container image. The application-only npm result is not a clean bill of health for the image. The audit records package paths, fix targets, exposure limitations and tracked remediation.
+
+The [prepared runtime-image remediation](RUNTIME-IMAGE.md) replaces that Debian
+image with a minimized, digest-pinned Alpine candidate and removes bundled
+package managers. Its exact-image scan reports no OS findings and retains the
+one unfixed low elliptic finding. [Final-image CI](IMAGE-SECURITY.md) records the
+full inventory and scans each candidate; this is separate from the unchanged
+deployed release.
+
 Mainnet preparation includes an optional SDK `WalletProvider` adapter in `scripts/mainnet-wallet.ts`. It uses published `@cosmjs/proto-signing@0.34.0` and `@cosmjs/amino@0.34.0`, installed under explicit aliases as development dependencies for operator tooling. Those versions use noble-backed signing. No SDK dependency override is required, and the aliases are pruned from the hosted image. The read-only mainnet preparation CLI never imports this signer or reads wallet files.
 
 Tests use a public test mnemonic and verify direct transaction signatures plus ADR-036 provider authentication independently through Node/OpenSSL. They also disable legacy elliptic's signing method and prove both modern signing paths and actual SDK authentication-token construction still work. This is a tested adapter for a future explicitly authorized signer integration, not possession of the user's production wallet. A public address supplies no signing authority.

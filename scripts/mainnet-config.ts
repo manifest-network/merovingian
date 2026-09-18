@@ -1,6 +1,7 @@
 import { parseAddress } from '@manifest-network/manifest-sdk';
 import { resolve } from 'node:path';
 import { z } from 'zod';
+import { normalizeTrustedProxyCidrs, trustedProxyCidrsSchema } from './runtime-proxy.js';
 
 export const MAINNET = Object.freeze({
   network: 'mainnet', chainId: 'manifest-ledger-mainnet',
@@ -23,12 +24,13 @@ export const inputSchema = z.object({
   tenant: z.string().nullish().transform(v => v ?? undefined), image: pinnedImage.nullish().transform(v => v ?? undefined), providerUuid: uuid.nullish().transform(v => v ?? undefined),
   monthlyBudgetPwr: z.string().regex(/^(0|[1-9][0-9]{0,60})(\.[0-9]{1,6})?$/).nullish().transform(v => v ?? undefined),
   gasPrice: z.string().regex(/^[0-9]+(?:\.[0-9]{1,18})?[a-zA-Z][a-zA-Z0-9/._:-]*$/).nullish().transform(v => v ?? undefined),
+  trustedProxyCidrs: trustedProxyCidrsSchema.nullish().transform(v => v == null ? undefined : normalizeTrustedProxyCidrs(v)).optional(),
 }).strict();
 export type PublicInputs = z.infer<typeof inputSchema>;
 
 export function publicInputs(file: unknown = {}, env: NodeJS.ProcessEnv = {}): PublicInputs {
   const inputs = inputSchema.parse(file);
-  const variables = { tenant: 'MAINNET_TENANT', image: 'MAINNET_IMAGE', monthlyBudgetPwr: 'MAINNET_MONTHLY_BUDGET_PWR', providerUuid: 'MAINNET_PROVIDER_UUID', gasPrice: 'MAINNET_GAS_PRICE' } as const;
+  const variables = { tenant: 'MAINNET_TENANT', image: 'MAINNET_IMAGE', monthlyBudgetPwr: 'MAINNET_MONTHLY_BUDGET_PWR', providerUuid: 'MAINNET_PROVIDER_UUID', gasPrice: 'MAINNET_GAS_PRICE', trustedProxyCidrs: 'MAINNET_TRUSTED_PROXY_CIDRS' } as const;
   for (const [key, variable] of Object.entries(variables)) {
     const value = env[variable];
     if (value !== undefined) (inputs as Record<string, string>)[key] = value;
@@ -175,7 +177,9 @@ export function buildPlan(rawQuote: unknown, rawInputs: PublicInputs, now = Date
     monthlyHostingBudget: budget === null ? null : { base: String(budget), pwr: displayPwr(String(budget)), excludes: ['transaction gas', 'domain costs', 'PWR acquisition fees'] },
     funding: { balances: tenant, gaps: fundingGaps, gasPrice, gasOptions, gasReserveBase: null, gasFeesIncludedInHostingBudget: false, observedNodeMinimumGasPrices: quote.minimumGasPrices, depositsWithdrawable: false, creditScope: 'shared by all leases owned by this tenant; not earmarked for Merovingian',
       note: 'The node accepts PWR or MFX for gas. PWR held in the wallet can pay gas; deposited hosting credit cannot. A fee reserve needs later simulation and separate approval.' },
-    runtimeEnv: { NETWORK: 'mainnet', CHAIN_ID: MAINNET.chainId, MANIFEST_RPC_URL: MAINNET.rpcUrl, MANIFEST_REST_URL: MAINNET.restUrl, MANIFEST_GAS_PRICE: gasPrice, PWR_DENOM: quote.pwr.denom, REFUGE_TENANT: inputs.tenant ?? null, PUBLIC_ORIGIN: `https://${MAINNET.domain}`, PORT: '8080', NODE_ENV: 'production', TRUST_PROXY_HOPS: '0' },
+    runtimeEnv: { NETWORK: 'mainnet', CHAIN_ID: MAINNET.chainId, MANIFEST_RPC_URL: MAINNET.rpcUrl, MANIFEST_REST_URL: MAINNET.restUrl, MANIFEST_GAS_PRICE: gasPrice, PWR_DENOM: quote.pwr.denom, REFUGE_TENANT: inputs.tenant ?? null, PUBLIC_ORIGIN: `https://${MAINNET.domain}`, PORT: '8080', NODE_ENV: 'production', TRUST_PROXY_HOPS: '0',
+      ...(inputs.trustedProxyCidrs ? { TRUSTED_PROXY_CIDRS: inputs.trustedProxyCidrs } : {}),
+    },
     domain: { ...quote.domainClaim, dns: quote.dns, dnsControlVerified: false, tlsVerified: false, dnsProvider: 'Cloudflare', cloudflareProxyAllowed: false, proxyPolicy: 'DNS only permanently' },
     nextSteps: [
       'Verify the dedicated production signer and existing hosting credit; do not repeat a completed deposit. Set the transaction gas spending limit and replenishment policy; no key material belongs in this configuration or runtime.',

@@ -1,0 +1,20 @@
+{
+  "checkedAt": "2026-09-18T19:04:51.305Z",
+  "imageId": "sha256:9d0f14ee5db1b4fe6e8fc923010c68040bc9dc0068cbaa2b20c3a4d5c94c2663",
+  "scannerVersion": "0.74.0",
+  "databaseUpdatedAt": "2026-09-18T07:09:02.741569251Z",
+  "passed": true,
+  "blocked": [],
+  "accepted": [],
+  "reported": [
+    {
+      "advisory": "CVE-2025-14505",
+      "package": "elliptic",
+      "version": "6.6.1",
+      "target": "Node.js",
+      "path": "app/node_modules/elliptic/package.json",
+      "severity": "LOW",
+      "fixedVersion": ""
+    }
+  ]
+}

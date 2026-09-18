@@ -1,0 +1,46 @@
+{
+  "recordedAt": "2026-09-18T19:06:14.534503+00:00",
+  "baseRevision": "11d9e7cb6554f982e12778819a3a52dbb3f18193",
+  "scope": "Local uncommitted combined remediation candidate; not a production release.",
+  "localImageId": "sha256:a2d5c179ac9e35a06310fa085c53c79bc524a4ae738607228fced39beb6f7525",
+  "configurationDigest": "sha256:9d0f14ee5db1b4fe6e8fc923010c68040bc9dc0068cbaa2b20c3a4d5c94c2663",
+  "sourceSha256": {
+    "Dockerfile": "b582b38eb96f2ca70eb1f7b2f39dca2d1c7bebdc711cda0ba2152239b23a9a80",
+    "package.json": "531208e5802d7c0d0939d826e26d29dea855cd326844277c054e8903ac011981",
+    "package-lock.json": "1f7c1ae63538c342bcc309a899713edcde1c45ced332dfff6e1067db26a4cce9",
+    ".dockerignore": "f96a326b9008449c33ea9ef2d6af147b19294f79634d4e2b57f2a437fef03f5c",
+    "src/amenities.ts": "043e0c900bb72ae65ba33a80962ddc4e9492851895f1b708531b24cbb8c38f00",
+    "src/app.ts": "019c7e8ef9eef70da7c48bfe8695a7676aa779d0d73315e5d4423e3b40e31d05",
+    "src/config.ts": "fe482c72e8d47e02400265dfdaf4ec435a008ef98031f98c9dd0e10a273d8a52",
+    "src/counts.ts": "abee98dfb0735e49421955eec51a7b6de6e866bee6726035be67735129ce5bb3",
+    "src/documents.ts": "4000533158d5336ebc8d8a5d04923811920c4695d93405d75b8d950bff5399d6",
+    "src/identity.ts": "7a59b63689c9e4acc6ba2188abbe52f5de5f4321e68bec0d26dfaba359b0ddb4",
+    "src/index.ts": "39772711c930c7f27bcc9f58de584fa1ec76c5d2dd9dc89cadd106cb81b2c9a6",
+    "src/operator.ts": "2456c2b01d660b3f67c3ca6fcd72a7b4b2385de68047165b2016907fd45df50a",
+    "src/readiness.ts": "2aa0eb2cf104023a513d96affc02b4a1270d611862e34a7be367b37a64dc3816",
+    "src/support.ts": "6498e0f5f7d52b41c75aa31fe18b2bd976609ba46e91ee242da267cf36decc4c",
+    "src/webmcp.ts": "1f623f03f469f217b756423f0c86e29ea1ba618a4f3c6c96c137e295c871e04c"
+  },
+  "checks": {
+    "command": "npm run check",
+    "registry": "passed",
+    "typecheck": "passed",
+    "testsPassed": 169,
+    "testsFailed": 0,
+    "build": "passed"
+  },
+  "scan": {
+    "osPackages": 10,
+    "languagePackages": 168,
+    "osVulnerabilities": 0,
+    "languageVulnerabilities": 1,
+    "secretFindings": 0
+  },
+  "openAcceptance": [
+    "Provider runtime/running-image attestation (ENG-1038)",
+    "Production ingress source/header evidence before TRUSTED_PROXY_CIDRS configuration (ENG-1038/ENG-1039)",
+    "Named AppArmor profile enforcement and attributed denial tests on isolated capable runner (ENG-1038/ENG-1041)"
+  ],
+  "productionChanges": false,
+  "liveServingCalls": 0
+}

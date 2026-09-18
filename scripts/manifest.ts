@@ -9,6 +9,7 @@ import { fetchFaucetStatus, requestFaucetCredit } from '@manifest-network/manife
 import { MsgSend } from '@manifest-network/manifestjs/dist/codegen/cosmos/bank/v1beta1/tx.js';
 import { mkdir, open, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { withTrustedProxyCidrs } from './runtime-proxy.js';
 
 // This operator tool deliberately has no mainnet switch. A production launch
 // needs a separately reviewed wallet, budget, origin and migration procedure.
@@ -203,7 +204,7 @@ const pinnedImage = (image?: string) => {
 };
 
 function runtimeEnv(tenant: string, origin = 'https://merovingian.invalid') {
-  return { NETWORK: 'testnet', CHAIN_ID: chainId, MANIFEST_RPC_URL: rpcUrl, MANIFEST_REST_URL: restUrl, MANIFEST_GAS_PRICE: gasPrice, PWR_DENOM: pwrDenom, REFUGE_TENANT: tenant, PUBLIC_ORIGIN: origin, PORT: '8080', NODE_ENV: 'production', TRUST_PROXY_HOPS: '0' };
+  return withTrustedProxyCidrs({ NETWORK: 'testnet', CHAIN_ID: chainId, MANIFEST_RPC_URL: rpcUrl, MANIFEST_REST_URL: restUrl, MANIFEST_GAS_PRICE: gasPrice, PWR_DENOM: pwrDenom, REFUGE_TENANT: tenant, PUBLIC_ORIGIN: origin, PORT: '8080', NODE_ENV: 'production', TRUST_PROXY_HOPS: '0' }, process.env.TRUSTED_PROXY_CIDRS);
 }
 
 function services(image: string, env: Record<string, string>) {
@@ -212,6 +213,8 @@ function services(image: string, env: Record<string, string>) {
 
 async function deploy(image?: string) {
   image = pinnedImage(image);
+  // Validate public proxy configuration before opening a wallet or client.
+  withTrustedProxyCidrs({}, process.env.TRUSTED_PROXY_CIDRS);
   if (await exists('deployment.json')) throw new Error('A deployment record already exists. Reconcile with status; use update for the existing lease.');
   const selection = await read<Selection>('preflight.json');
   if (selection.chainId !== chainId || Date.now() - Date.parse(selection.checkedAt) > 3_600_000) throw new Error('Run preflight again; catalog selection is stale or wrong-network');
@@ -275,6 +278,7 @@ async function update(image?: string, origin?: string, retireTo?: string) {
   const deployment = await read<Deployment>('deployment.json');
   if (!deployment.leaseUuid || deployment.chainId !== chainId) throw new Error('No matching testnet lease recorded');
   deployment.image = pinnedImage(image ?? deployment.image);
+  deployment.env = withTrustedProxyCidrs(deployment.env, process.env.TRUSTED_PROXY_CIDRS);
   if (origin) {
     const url = new URL(origin);
     if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error('Expected a plain HTTPS origin');

@@ -1,0 +1,152 @@
+"""Local-only audit fixture. Run with python3; requires the exact cached image.
+
+Uses the local Docker socket, never pulls an image, publishes no ports, mounts no
+host paths and makes no serving requests. Output is an allowlisted JSON summary.
+This exercises compatibility with local controls, not production enforcement.
+"""
+import datetime
+import hashlib
+import json
+import subprocess
+import tarfile
+import tempfile
+import time
+import uuid
+
+
+IMAGE = "ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de"
+MANIFEST = IMAGE.split("@sha256:")[1]
+CONFIG = "c7579b288032d121996496cab6293549ebdf1d054be6c2b640a44f6558160e15"
+NAME = "merovingian-audit-" + uuid.uuid4().hex
+
+
+def docker(*args, timeout=60):
+    result = subprocess.run(
+        ["docker", "--host", "unix:///var/run/docker.sock", *args],
+        capture_output=True, text=True, timeout=timeout,
+    )
+    if result.returncode:
+        # Docker diagnostics can contain host paths. Keep them out of evidence.
+        raise RuntimeError("Local Docker audit command failed: " + args[0])
+    return result.stdout
+
+
+def check(condition, message):
+    if not condition:
+        raise RuntimeError(message)
+
+
+image = json.loads(docker("image", "inspect", IMAGE))[0]
+check(IMAGE in image["RepoDigests"], "Cached image digest mismatch")
+
+# Recompute immutable bytes, rather than equating Docker's local image ID with
+# the configuration digest (the ID varies with Docker's image store).
+with tempfile.TemporaryDirectory(prefix="merovingian-audit-") as directory:
+    archive = directory + "/image.tar"
+    docker("image", "save", "--output", archive, IMAGE, timeout=120)
+    with tarfile.open(archive) as contents:
+        manifest_bytes = contents.extractfile("blobs/sha256/" + MANIFEST).read()
+        config_bytes = contents.extractfile("blobs/sha256/" + CONFIG).read()
+    check(hashlib.sha256(manifest_bytes).hexdigest() == MANIFEST, "Manifest hash mismatch")
+    check(hashlib.sha256(config_bytes).hexdigest() == CONFIG, "Configuration hash mismatch")
+    check(json.loads(manifest_bytes)["config"]["digest"] == "sha256:" + CONFIG, "Manifest/config binding mismatch")
+
+probe = r"""
+const fs = require('node:fs');
+(async () => {
+  const endpoints = {};
+  for (const path of ['/healthz', '/api/v1/amenities', '/api/v1/stats']) {
+    const response = await fetch('http://127.0.0.1:8080' + path, {signal: AbortSignal.timeout(2000)});
+    endpoints[path] = {status: response.status, body: await response.json()};
+  }
+  const status = fs.readFileSync('/proc/1/status', 'utf8');
+  const processFields = Object.fromEntries(status.split('\n').flatMap(line => {
+    const match = /^(Uid|Gid|CapInh|CapPrm|CapEff|CapBnd|CapAmb|NoNewPrivs|Seccomp):\s*(.*)$/.exec(line);
+    return match ? [[match[1], match[2]]] : [];
+  }));
+  const ownership = Object.fromEntries(['/app', '/app/dist', '/app/node_modules', '/app/package.json', '/data'].map(path => {
+    const s = fs.statSync(path);
+    return [path, {uid: s.uid, gid: s.gid, mode: (s.mode & 0o777).toString(8)}];
+  }));
+  let codeWrite;
+  try {
+    fs.writeFileSync('/app/dist/.audit-write-probe', 'fixture', {flag: 'wx'});
+    fs.unlinkSync('/app/dist/.audit-write-probe');
+    codeWrite = 'unexpected_success';
+  } catch (error) { codeWrite = error.code; }
+  fs.writeFileSync('/data/.audit-write-probe', 'fixture', {flag: 'wx'});
+  fs.unlinkSync('/data/.audit-write-probe');
+  const stats = endpoints['/api/v1/stats'].body;
+  const dataMount = fs.readFileSync('/proc/1/mountinfo', 'utf8').split('\n').find(line => line.split(' ')[4] === '/data');
+  console.log(JSON.stringify({
+    statuses: Object.fromEntries(Object.entries(endpoints).map(([key, value]) => [key, value.status])),
+    version: endpoints['/healthz'].body.version,
+    counts: {status: stats.status, storage: stats.storage, total: stats.total},
+    processFields, ownership, codeWrite, dataWrite: 'passed',
+    dataMount: dataMount ? {type: dataMount.split(' - ')[1].split(' ')[0], options: dataMount.split(' ')[5].split(',')} : null,
+    versions: Object.fromEntries(['node', 'openssl', 'undici', 'sqlite'].map(key => [key, process.versions[key]])),
+  }));
+})().catch(() => process.exit(1));
+"""
+
+created = False
+try:
+    docker("create", "--name", NAME, "--pull", "never", "--network", "none",
+           "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges=true",
+           "--pids-limit", "64", "--memory", "512m", "--cpus", "0.5", "--user", "1000:1000",
+           "--tmpfs", "/data:rw,noexec,nosuid,nodev,size=64m,uid=1000,gid=1000,mode=0700", IMAGE)
+    created = True
+    docker("start", NAME)
+    for attempt in range(20):
+        try:
+            observed = json.loads(docker("exec", NAME, "node", "-e", probe, timeout=10))
+            break
+        except RuntimeError:
+            if attempt == 19:
+                raise
+            time.sleep(0.25)
+    runtime = json.loads(docker("inspect", NAME))[0]
+    host = runtime["HostConfig"]
+    check(host["NetworkMode"] == "none" and not host["PortBindings"], "Network isolation mismatch")
+    check(host["ReadonlyRootfs"] and not host["Privileged"], "Filesystem/privilege mismatch")
+    check(host["CapDrop"] == ["ALL"] and "no-new-privileges=true" in host["SecurityOpt"], "Privilege options mismatch")
+    check(host["PidsLimit"] == 64 and host["Memory"] == 536870912 and host["NanoCpus"] == 500000000, "Resource options mismatch")
+    check(not host["Binds"] and list(host["Tmpfs"]) == ["/data"], "Unexpected mount scope")
+    # Docker versions differ on whether --tmpfs entries also appear in Mounts.
+    check(all(m["Type"] == "tmpfs" and m["Destination"] == "/data" for m in runtime["Mounts"]), "Unexpected data mount")
+    check(observed["dataMount"] and observed["dataMount"]["type"] == "tmpfs"
+          and {"rw", "noexec", "nosuid", "nodev"} <= set(observed["dataMount"]["options"]), "Effective data mount mismatch")
+    check(all(status == 200 for status in observed["statuses"].values()), "Read-only endpoint failed")
+    check(observed["version"] == "0.4.3", "Release version mismatch")
+    check(observed["counts"] == {"status": "available", "storage": "persistent", "total": "0"}, "Disposable SQLite check failed")
+    fields = observed["processFields"]
+    check(fields["Uid"].split() == ["1000"] * 4 and fields["Gid"].split() == ["1000"] * 4, "Process identity mismatch")
+    check(all(int(fields[key], 16) == 0 for key in ["CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb"]), "Process capabilities mismatch")
+    check(fields["NoNewPrivs"] == "1" and fields["Seccomp"] == "2", "Process isolation mismatch")
+    check(observed["codeWrite"] == "EROFS", "Read-only application filesystem check failed")
+    docker("stop", "--time", "15", NAME, timeout=25)
+    exit_code = json.loads(docker("inspect", NAME))[0]["State"]["ExitCode"]
+    check(exit_code == 0, "Graceful stop failed")
+    print(json.dumps({
+        "checkedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "scope": "Fresh isolated local compatibility test. No live requests or serving calls; not provider evidence.",
+        "image": IMAGE, "configurationDigest": "sha256:" + CONFIG,
+        "archiveManifestAndConfigHashesVerified": True,
+        "imageDefaults": {key: image["Config"][key] for key in ["User", "Entrypoint", "Cmd"]},
+        "localControls": {
+            "readOnlyRoot": host["ReadonlyRootfs"], "privileged": host["Privileged"],
+            "capDrop": host["CapDrop"], "noNewPrivileges": True, "network": "none",
+            "publishedPorts": 0, "hostBindMounts": 0, "dataMount": host["Tmpfs"]["/data"],
+            "pidsLimit": host["PidsLimit"], "memoryBytes": host["Memory"], "nanoCpus": host["NanoCpus"],
+        },
+        "observed": observed, "gracefulStopExitCode": exit_code,
+        "limitations": [
+            "Resource values are local Docker settings, not stress-tested ceilings.",
+            "No AppArmor enforcement or provider runtime inspection was performed.",
+            "Disposable tmpfs does not test persistence across container replacement.",
+            "No new vulnerability scan; original scan retains its original timestamp.",
+        ],
+    }, indent=2))
+finally:
+    if created:
+        docker("rm", "--force", "--volumes", NAME)

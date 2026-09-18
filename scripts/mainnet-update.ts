@@ -13,13 +13,14 @@ import { collectQuote } from './mainnet.js';
 import { verifyLaunchLease, type LaunchBinding } from './mainnet-launch-plan.js';
 import { createKeyringWalletProvider } from './keyring-wallet.js';
 import { MAINNET_PROVIDER } from './mainnet-provider.js';
+import { normalizeTrustedProxyCidrs, trustedProxyCidrsSchema, withTrustedProxyCidrs } from './runtime-proxy.js';
 
 export const MAINNET_UPDATE_LEASE = '01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd';
 const pinnedImage = z.string().regex(/^ghcr\.io\/(?:manifest-network|fmorency)\/merovingian@sha256:[a-f0-9]{64}$/);
 const sha = z.string().regex(/^[a-f0-9]{64}$/);
 const digest = (text: string) => createHash('sha256').update(text).digest('hex');
 const manifestEnv = z.object({ NETWORK: z.literal('mainnet'), CHAIN_ID: z.literal(MAINNET.chainId), MANIFEST_RPC_URL: z.literal(MAINNET.rpcUrl), MANIFEST_REST_URL: z.literal(MAINNET.restUrl),
-  MANIFEST_GAS_PRICE: z.string(), PWR_DENOM: z.string(), REFUGE_TENANT: z.string(), PUBLIC_ORIGIN: z.literal(`https://${MAINNET.domain}`), PORT: z.literal('8080'), NODE_ENV: z.literal('production'), TRUST_PROXY_HOPS: z.literal('0'), VISIT_COUNTS_PATH: z.literal('/data/visits.sqlite').optional() }).strict();
+  MANIFEST_GAS_PRICE: z.string(), PWR_DENOM: z.string(), REFUGE_TENANT: z.string(), PUBLIC_ORIGIN: z.literal(`https://${MAINNET.domain}`), PORT: z.literal('8080'), NODE_ENV: z.literal('production'), TRUST_PROXY_HOPS: z.literal('0').optional(), TRUSTED_PROXY_CIDRS: trustedProxyCidrsSchema.optional(), VISIT_COUNTS_PATH: z.literal('/data/visits.sqlite').optional() }).strict();
 const manifestSchema = z.object({ services: z.object({ refuge: z.object({ image: pinnedImage,
   ports: z.object({ '8080/tcp': z.object({ ingress: z.literal(true) }).strict() }).strict(),
   env: manifestEnv, user: z.literal('1000:1000').optional(),
@@ -66,9 +67,10 @@ function verifyLease(lease: Lease, binding: LaunchBinding) {
   if (lease.state !== LeaseState.LEASE_STATE_ACTIVE || lease.items[0].customDomain !== MAINNET.domain) fail('update_requires_active_existing_domain_lease');
 }
 
-export function prepareMainnetUpdate(bindingInput: LaunchBinding, current: UpdateObservation, nextImage: string, now = Date.now()): MainnetUpdateState {
+export function prepareMainnetUpdate(bindingInput: LaunchBinding, current: UpdateObservation, nextImage: string, options: { now?: number; trustedProxyCidrs?: string } = {}): MainnetUpdateState {
+  const now = options.now ?? Date.now();
   let binding: LaunchBinding;
-  try { binding = bindingSchema.parse(bindingInput); pinnedImage.parse(nextImage); }
+  try { binding = bindingSchema.parse(bindingInput); pinnedImage.parse(nextImage); if (options.trustedProxyCidrs !== undefined) trustedProxyCidrsSchema.parse(options.trustedProxyCidrs); }
   catch { return fail('invalid_update_configuration'); }
   verifyLease(current.lease, binding);
   if (!current.ready || !current.active) fail('update_requires_ready_active_release');
@@ -77,7 +79,8 @@ export function prepareMainnetUpdate(bindingInput: LaunchBinding, current: Updat
   if (old.services.refuge.image !== current.active.image) fail('provider_active_image_mismatch');
   if (current.active.image === nextImage) fail('requested_image_already_active');
   const service = old.services.refuge;
-  const manifest = { services: { refuge: buildManifest({ ...service, image: nextImage, user: '1000:1000', env: { ...service.env, VISIT_COUNTS_PATH: '/data/visits.sqlite' } }) } };
+  const env = withTrustedProxyCidrs({ ...service.env, VISIT_COUNTS_PATH: '/data/visits.sqlite' }, options.trustedProxyCidrs);
+  const manifest = { services: { refuge: buildManifest({ ...service, image: nextImage, user: '1000:1000', env }) } };
   const manifestJson = JSON.stringify(manifest);
   publicManifest(manifestJson, binding);
   return stateSchema.parse({ version: 1, operationId: randomUUID(), leaseUuid: MAINNET_UPDATE_LEASE, binding, image: nextImage, beforeImage: current.active.image,
@@ -109,11 +112,22 @@ export function assertUpdateHistoryCanProceed(history: readonly MainnetUpdateSta
   }
 }
 
+/** Check reviewed bytes and explicit CLI intent before any wallet/provider work. */
+export function assertMainnetUpdateIntent(rawState: MainnetUpdateState, trustedProxyCidrs?: string) {
+  const state = stateSchema.parse(rawState);
+  const manifest = publicManifest(state.manifestJson, state.binding);
+  if (digest(state.manifestJson) !== state.manifestHash || manifest.services.refuge.image !== state.image) fail('update_intent_changed');
+  if (trustedProxyCidrs !== undefined
+    && normalizeTrustedProxyCidrs(trustedProxyCidrs) !== normalizeTrustedProxyCidrs(manifest.services.refuge.env.TRUSTED_PROXY_CIDRS ?? '')) {
+    fail('update_trusted_proxy_cidrs_conflicts_with_journal');
+  }
+}
+
 /** Existing attempted updates can only reconcile; no automatic POST retry. */
 export async function advanceMainnetUpdate(rawState: MainnetUpdateState, deps: UpdateDependencies, allowPost: boolean, timeoutMs = 45_000): Promise<MainnetUpdateState> {
   const state = stateSchema.parse(rawState);
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 55_000) fail('invalid_update_poll_timeout');
-  if (digest(state.manifestJson) !== state.manifestHash || publicManifest(state.manifestJson, state.binding).services.refuge.image !== state.image) fail('update_intent_changed');
+  assertMainnetUpdateIntent(state);
   const now = deps.now ?? Date.now;
   const wait = deps.wait ?? (ms => sleep(ms));
   const persist = async () => { state.updatedAt = new Date(now()).toISOString(); await deps.save(state); };
@@ -228,27 +242,32 @@ function updateProvider(binding: LaunchBinding, wallet: WalletProvider, operatio
   };
 }
 
-async function main() {
-  const [command, ...args] = process.argv.slice(2);
+export function parseMainnetUpdateArguments(argv: readonly string[]) {
+  const [command, ...args] = argv;
   if (!['prepare', 'run', 'status'].includes(command)) fail('usage_mainnet_update_prepare_run_or_status');
-  const flags = new Map<string, string>(), allowed = new Set(['--image', '--helper', '--home', '--key-name']);
+  const required = ['--image', '--helper', '--home', '--key-name'];
+  const flags = new Map<string, string>(), allowed = new Set([...required, '--trusted-proxy-cidrs']);
   for (let i = 0; i < args.length; i += 2) {
-    if (!allowed.has(args[i]) || !args[i + 1] || args[i + 1].startsWith('--') || flags.has(args[i])) fail('invalid_update_arguments');
+    const value = args[i + 1];
+    if (!allowed.has(args[i]) || value === undefined || value === '' && args[i] !== '--trusted-proxy-cidrs'
+      || value.startsWith('--') || flags.has(args[i])) fail('invalid_update_arguments');
     flags.set(args[i], args[i + 1]);
   }
-  if (flags.size !== allowed.size) fail('update_requires_image_helper_home_key_name');
+  if (required.some(flag => !flags.has(flag))) fail('update_requires_image_helper_home_key_name');
   const image = pinnedImage.parse(flags.get('--image'));
+  const requested = flags.get('--trusted-proxy-cidrs');
+  return { command, image, helper: flags.get('--helper')!, home: flags.get('--home')!, keyName: flags.get('--key-name')!,
+    trustedProxyCidrs: requested === undefined ? undefined : normalizeTrustedProxyCidrs(requested) };
+}
+
+async function main() {
+  const { command, image, helper, home, keyName, trustedProxyCidrs } = parseMainnetUpdateArguments(process.argv.slice(2));
   const paths = mainnetPaths(), directoryPath = resolve(paths.directory, 'updates'), statePath = resolve(directoryPath, `${image.split('@sha256:')[1]}.json`);
   const launch = JSON.parse(await readFile(resolve(paths.directory, 'launch/state.json'), 'utf8')) as { binding: LaunchBinding; leaseUuid: string; manifestJson: string };
   const binding = bindingSchema.parse(launch.binding);
   if (launch.leaseUuid !== MAINNET_UPDATE_LEASE || digest(launch.manifestJson) !== binding.metaHashHex) fail('update_launch_record_invalid');
   const inputs = publicInputs(JSON.parse(await readFile(paths.config, 'utf8')));
   if (inputs.tenant !== binding.tenant || inputs.providerUuid !== binding.providerUuid) fail('update_public_configuration_changed');
-  const quote = await collectQuote(inputs);
-  if (quote.tenant?.liveLeaseUuids.length !== 1 || quote.tenant.liveLeaseUuids[0] !== MAINNET_UPDATE_LEASE
-    || quote.domainClaim.leaseUuid !== MAINNET_UPDATE_LEASE || quote.domainClaim.tenant !== binding.tenant) fail('update_live_lease_or_domain_mismatch');
-  const proof = JSON.parse(await readFile(resolve(paths.directory, 'keyring-check.json'), 'utf8'));
-  if (proof.status !== 'passed' || proof.address !== binding.tenant || proof.helperSha256 !== createHash('sha256').update(await readFile(flags.get('--helper')!)).digest('hex')) fail('update_helper_compatibility_proof_missing');
   await mkdir(directoryPath, { recursive: true, mode: 0o700 });
   const lockPath = resolve(directoryPath, 'run.lock'), lockId = randomUUID();
   await durableJson(lockPath, { id: lockId, pid: process.pid }, true).catch(() => fail('update_locked_requires_local_reconciliation'));
@@ -264,7 +283,14 @@ async function main() {
     try { state = stateSchema.parse(JSON.parse(await readFile(statePath, 'utf8'))); }
     catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') state = null; else throw error; }
     if (state && (state.image !== image || JSON.stringify(state.binding) !== JSON.stringify(binding))) fail('update_journal_binding_changed');
-    const wallet = await createKeyringWalletProvider({ helperPath: flags.get('--helper')!, home: flags.get('--home')!, keyName: flags.get('--key-name')!, keyringBackend: 'os', expectedAddress: binding.tenant, chainId: MAINNET.chainId });
+    if (state) assertMainnetUpdateIntent(state, trustedProxyCidrs);
+    else if (command === 'status') fail('update_record_not_found');
+    const quote = await collectQuote(inputs);
+    if (quote.tenant?.liveLeaseUuids.length !== 1 || quote.tenant.liveLeaseUuids[0] !== MAINNET_UPDATE_LEASE
+      || quote.domainClaim.leaseUuid !== MAINNET_UPDATE_LEASE || quote.domainClaim.tenant !== binding.tenant) fail('update_live_lease_or_domain_mismatch');
+    const proof = JSON.parse(await readFile(resolve(paths.directory, 'keyring-check.json'), 'utf8'));
+    if (proof.status !== 'passed' || proof.address !== binding.tenant || proof.helperSha256 !== createHash('sha256').update(await readFile(helper)).digest('hex')) fail('update_helper_compatibility_proof_missing');
+    const wallet = await createKeyringWalletProvider({ helperPath: helper, home, keyName, keyringBackend: 'os', expectedAddress: binding.tenant, chainId: MAINNET.chainId });
     const client = await createManifestReadClient({ config: { chainId: MAINNET.chainId, rpcUrl: MAINNET.rpcUrl, restUrl: MAINNET.restUrl, gasPrice: binding.gasPrice, retry: { maxRetries: 0 } } });
     try {
       const operationId = state?.operationId ?? randomUUID();
@@ -273,8 +299,7 @@ async function main() {
         if (!value) fail('existing_update_lease_not_found'); return value;
       });
       if (!state) {
-        if (command === 'status') fail('update_record_not_found');
-        state = prepareMainnetUpdate(binding, await provider.observe(), image); state.operationId = operationId;
+        state = prepareMainnetUpdate(binding, await provider.observe(), image, { trustedProxyCidrs }); state.operationId = operationId;
         await durableJson(statePath, state, true);
       }
       const result = command === 'prepare' ? state : await advanceMainnetUpdate(state, { ...provider, save: value => durableJson(statePath, value) }, command === 'run');

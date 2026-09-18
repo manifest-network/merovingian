@@ -1,0 +1,253 @@
+{
+  "date": "2026-09-18",
+  "command": "npm audit --omit=dev --json",
+  "auditScope": "Repository production dependency lockfile; excludes base OS and globally bundled npm.",
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 11,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 11
+    },
+    "dependencies": {
+      "prod": 166,
+      "dev": 51,
+      "optional": 28,
+      "peer": 0,
+      "peerOptional": 0,
+      "total": 217
+    }
+  },
+  "vulnerabilities": {
+    "@cosmjs/amino": {
+      "name": "@cosmjs/amino",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "@cosmjs/crypto"
+      ],
+      "effects": [
+        "@cosmjs/proto-signing"
+      ],
+      "range": "<=0.33.1",
+      "nodes": [
+        "node_modules/@cosmjs/amino"
+      ],
+      "fixAvailable": {
+        "name": "@manifest-network/manifest-sdk",
+        "version": "0.21.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@cosmjs/crypto": {
+      "name": "@cosmjs/crypto",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "elliptic"
+      ],
+      "effects": [
+        "@cosmjs/amino",
+        "@cosmjs/proto-signing",
+        "@cosmjs/tendermint-rpc"
+      ],
+      "range": "<=0.33.1",
+      "nodes": [
+        "node_modules/@cosmjs/crypto"
+      ],
+      "fixAvailable": {
+        "name": "@manifest-network/manifest-sdk",
+        "version": "0.21.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@cosmjs/proto-signing": {
+      "name": "@cosmjs/proto-signing",
+      "severity": "low",
+      "isDirect": true,
+      "via": [
+        "@cosmjs/amino",
+        "@cosmjs/crypto"
+      ],
+      "effects": [
+        "@manifest-network/manifest-mcp-core",
+        "@manifest-network/manifest-sdk",
+        "@manifest-network/manifestjs",
+        "@manifest-network/stargate"
+      ],
+      "range": "0.25.0-alpha.0 - 0.33.1",
+      "nodes": [
+        "node_modules/@cosmjs/proto-signing"
+      ],
+      "fixAvailable": {
+        "name": "@manifest-network/manifest-sdk",
+        "version": "0.21.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@cosmjs/tendermint-rpc": {
+      "name": "@cosmjs/tendermint-rpc",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "@cosmjs/crypto"
+      ],
+      "effects": [],
+      "range": "<=0.33.1",
+      "nodes": [
+        "node_modules/@cosmjs/tendermint-rpc"
+      ],
+      "fixAvailable": true
+    },
+    "@manifest-network/manifest-agent-core": {
+      "name": "@manifest-network/manifest-agent-core",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "@manifest-network/manifest-mcp-core",
+        "@manifest-network/manifest-mcp-fred"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@manifest-network/manifest-agent-core"
+      ],
+      "fixAvailable": true
+    },
+    "@manifest-network/manifest-mcp-core": {
+      "name": "@manifest-network/manifest-mcp-core",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "@cosmjs/amino",
+        "@cosmjs/proto-signing",
+        "@manifest-network/manifestjs"
+      ],
+      "effects": [
+        "@manifest-network/manifest-agent-core",
+        "@manifest-network/manifest-mcp-fred",
+        "@manifest-network/manifest-sdk"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@manifest-network/manifest-mcp-core"
+      ],
+      "fixAvailable": {
+        "name": "@manifest-network/manifest-sdk",
+        "version": "0.21.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@manifest-network/manifest-mcp-fred": {
+      "name": "@manifest-network/manifest-mcp-fred",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "@manifest-network/manifest-mcp-core"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@manifest-network/manifest-mcp-fred"
+      ],
+      "fixAvailable": true
+    },
+    "@manifest-network/manifest-sdk": {
+      "name": "@manifest-network/manifest-sdk",
+      "severity": "low",
+      "isDirect": true,
+      "via": [
+        "@cosmjs/proto-signing",
+        "@manifest-network/manifest-agent-core",
+        "@manifest-network/manifest-mcp-core",
+        "@manifest-network/manifest-mcp-fred",
+        "@manifest-network/manifestjs"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@manifest-network/manifest-sdk"
+      ],
+      "fixAvailable": {
+        "name": "@manifest-network/manifest-sdk",
+        "version": "0.21.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@manifest-network/manifestjs": {
+      "name": "@manifest-network/manifestjs",
+      "severity": "low",
+      "isDirect": true,
+      "via": [
+        "@cosmjs/amino",
+        "@cosmjs/proto-signing",
+        "@cosmjs/tendermint-rpc"
+      ],
+      "effects": [
+        "@manifest-network/manifest-sdk"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@manifest-network/manifestjs"
+      ],
+      "fixAvailable": {
+        "name": "@manifest-network/manifest-sdk",
+        "version": "0.21.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@manifest-network/stargate": {
+      "name": "@manifest-network/stargate",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "@cosmjs/amino",
+        "@cosmjs/proto-signing",
+        "@cosmjs/tendermint-rpc"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@cosmjs/stargate"
+      ],
+      "fixAvailable": true
+    },
+    "elliptic": {
+      "name": "elliptic",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1112030,
+          "name": "elliptic",
+          "dependency": "elliptic",
+          "title": "Elliptic Uses a Cryptographic Primitive with a Risky Implementation",
+          "url": "https://github.com/advisories/GHSA-848j-6mx2-7j84",
+          "severity": "low",
+          "cwe": [
+            "CWE-1240"
+          ],
+          "cvss": {
+            "score": 5.6,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:L"
+          },
+          "range": "<=6.6.1"
+        }
+      ],
+      "effects": [
+        "@cosmjs/crypto"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/elliptic"
+      ],
+      "fixAvailable": {
+        "name": "@manifest-network/manifest-sdk",
+        "version": "0.21.0",
+        "isSemVerMajor": true
+      }
+    }
+  }
+}

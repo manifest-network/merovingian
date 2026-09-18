@@ -11,6 +11,25 @@ const mainnetEnv: NodeJS.ProcessEnv = {
   REFUGE_TENANT: 'manifest1z5ep5m3ka5v2fn5wyv93elqh5nqlfqww2u82f4',
 };
 
+test('proxy trust defaults closed and accepts only explicit bounded IP/CIDR configuration', () => {
+  assert.deepEqual(loadConfig({}).trustedProxyCidrs, []);
+  assert.deepEqual(loadConfig({ TRUST_PROXY_HOPS: '0' }).trustedProxyCidrs, []);
+  assert.deepEqual(loadConfig({ TRUSTED_PROXY_CIDRS: ' 192.0.2.5, 198.51.100.0/24,2001:db8::/64,::1,192.0.2.5 ' }).trustedProxyCidrs,
+    ['192.0.2.5', '198.51.100.0/24', '2001:db8::/64', '::1']);
+  for (const value of ['1', '3', '-1', 'false', 'true', '0.0']) {
+    assert.throws(() => loadConfig({ TRUST_PROXY_HOPS: value }), /TRUST_PROXY_HOPS/);
+  }
+  for (const value of ['true', '1', 'loopback', 'uniquelocal', 'proxy.example', '192.0.2.5,',
+    '0.0.0.0/0', '::/0', '0.0.0.0/1', '192.0.2.0/23', '::/1', '2001:db8::/63',
+    '::ffff:0:0/96', '::ffff:192.0.2.0/120', '0:0:0:0:0:ffff:c000:200/120',
+    '192.0.2.0/33', '::1/129', '192.0.2.1/01', '::1/64/1',
+    'fe80::1%eth0', '192.0.2.1/255.255.255.0', Array(33).fill('192.0.2.1').join(',')]) {
+    assert.throws(() => loadConfig({ TRUSTED_PROXY_CIDRS: value }), /TRUSTED_PROXY_CIDRS/, value);
+  }
+  assert.deepEqual(loadConfig({ TRUSTED_PROXY_CIDRS: '192.0.2.5/32,2001:db8::1/128,::ffff:192.0.2.5' }).trustedProxyCidrs,
+    ['192.0.2.5/32', '2001:db8::1/128', '::ffff:192.0.2.5']);
+});
+
 test('counter storage is explicitly configured with an absolute path', () => {
   assert.equal(loadConfig({}).visitCountsPath, undefined);
   assert.equal(loadConfig({ VISIT_COUNTS_PATH: '/data/visits.sqlite' }).visitCountsPath, '/data/visits.sqlite');
