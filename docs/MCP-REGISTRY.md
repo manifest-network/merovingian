@@ -41,19 +41,54 @@ not publish and is not an offline check. Do not add credentials or private heade
 to the record. Review the exact namespace, version, description, endpoint, and
 repository URL before publication.
 
-Authenticate with the interactive GitHub device flow:
+As checked on 2026-09-18, the interactive device flow cannot grant our organization
+namespace. It uses the private **MCP Registry Login (Prod) GitHub App**, whose user
+token cannot supply the organization role required by the registry. Login can
+succeed while granting only the personal namespace. This is a
+[maintainer-confirmed registry bug](https://github.com/modelcontextprotocol/registry/issues/1468#issuecomment-5093147856).
+Changing OAuth App settings, making membership public, or attempting to install
+the private app is not the remedy.
+
+For a one-off publication, an organization owner can create a dedicated PAT with
+the shortest practical expiration and either:
+
+- Classic PAT: only `read:org`.
+- Fine-grained PAT: resource owner `manifest-network`, with **Organization
+  permissions → Members → Read-only** and no added repository permissions.
+
+Enter the token through hidden local input and supply it only to the login
+process through the `MCP_GITHUB_TOKEN` environment variable:
 
 ```sh
 mcp-publisher login github
 ```
 
-Complete the displayed GitHub authorization in the operator's browser using an
-organization owner account. Do not paste access tokens into chat, source, command
-arguments, or logs. Version 1.8.1 stores its registry token in the user's
+The command above uses the PAT only when `MCP_GITHUB_TOKEN` is supplied; otherwise
+it starts the affected device flow. Do not put token values in shell history,
+command arguments, chat, source, or logs, and keep shell tracing disabled. Do not
+reuse the broad credential used by `gh` for repository management. Clear the PAT
+from the local process environment after login and revoke it after publication.
+
+Version 1.8.1 stores its registry token in the user's
 `.config/mcp-publisher/token.json`, outside this repository. Check that the
 directory is private (`0700`) and the token is private (`0600`); do not overwrite
 an existing login unknowingly. It does not support `XDG_CONFIG_HOME` relocation.
-Do not reuse a broad repository-management token merely to skip the device flow.
+
+Before publishing, check that the saved login metadata names the official
+registry destination. Inspect the locally issued registry token's claims in
+memory to confirm a `publish` grant for `io.github.manifest-network/*` and a valid
+expiration. Report only the destination/grant check results and expiration time;
+never dump the JWT or its complete claims. Decoding claims is
+a local preflight, not cryptographic verification. The registry JWT lasts only
+[five minutes](https://github.com/modelcontextprotocol/registry/blob/v1.8.1/internal/auth/jwt.go),
+so complete metadata review and validation before login and publish promptly.
+Successful login alone does not prove organization publishing access.
+
+GitHub Actions OIDC is another supported route: a reviewed workflow in this
+organization's repository can use `mcp-publisher login github-oidc` with
+`id-token: write`, without a PAT. Keep publication an explicitly approved action;
+do not introduce an automatic release trigger as part of this workaround. See the
+[official Actions guidance](https://github.com/modelcontextprotocol/registry/blob/main/docs/modelcontextprotocol-io/github-actions.mdx).
 
 After explicit authorization for the reviewed registry publication:
 
