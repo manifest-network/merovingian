@@ -1,0 +1,67 @@
+// Local-only Host/Origin observations for the audited 0.4.3 source snapshot.
+// No serving calls or upstream access; remediation may change these assertions.
+import assert from 'node:assert/strict';
+import { once } from 'node:events';
+import { request } from 'node:http';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+const moduleAt = file => import(pathToFileURL(resolve(process.cwd(), file)).href);
+const { createApp } = await moduleAt('src/app.ts');
+const { loadConfig } = await moduleAt('src/config.ts');
+const { VisitCounter } = await moduleAt('src/counts.ts');
+const config = loadConfig({});
+const counts = new VisitCounter(config);
+let upstreamCalls = 0;
+const refuse = async () => { upstreamCalls++; throw new Error('Unexpected upstream blocked'); };
+const server = createApp(config, { getInfo: refuse, getHistory: refuse, verify: refuse }, counts).listen(0, '127.0.0.1');
+const receivedHosts = [];
+server.prependListener('request', req => receivedHosts.push(req.headers.host));
+await once(server, 'listening');
+const endpoint = `http://127.0.0.1:${server.address().port}/mcp`;
+const observations = [];
+try {
+  for (const hostKind of ['configured', 'arbitrary']) {
+    for (const originKind of ['absent', 'allowed', 'hostile']) {
+      const headers = {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        'mcp-protocol-version': '2025-03-26',
+        host: hostKind === 'configured' ? new URL(config.publicOrigin).host : 'audit.invalid',
+        ...(originKind === 'absent' ? {} : { origin: originKind === 'allowed' ? config.publicOrigin : 'https://audit.invalid' }),
+      };
+      // fetch may replace Host. Send it through node:http and assert what the
+      // server received before treating either case as evidence.
+      const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+      const response = await new Promise((resolveResponse, reject) => {
+        const call = request(endpoint, {
+          method: 'POST', headers: { ...headers, 'content-length': Buffer.byteLength(body) },
+          signal: AbortSignal.timeout(5000),
+        }, incoming => {
+          const chunks = [];
+          incoming.on('data', chunk => chunks.push(chunk));
+          incoming.on('error', reject);
+          incoming.on('end', () => resolveResponse({ status: incoming.statusCode, body: Buffer.concat(chunks).toString('utf8') }));
+        });
+        call.on('error', reject);
+        call.end(body);
+      });
+      assert.equal(receivedHosts.length, observations.length + 1);
+      const observedHost = receivedHosts.at(-1);
+      assert.equal(observedHost, headers.host);
+      const result = JSON.parse(response.body);
+      assert.equal(response.status, originKind === 'hostile' ? 403 : 200);
+      if (response.status === 200) assert.equal(result.result.tools.length, 4);
+      else assert.equal(result.error, 'origin_not_allowed');
+      observations.push({ host: hostKind, observedHost, origin: originKind, status: response.status });
+    }
+  }
+  assert.equal(counts.snapshot().total, '0');
+  assert.equal(upstreamCalls, 0);
+  console.log(JSON.stringify({
+    checkedAt: new Date().toISOString(),
+    scope: 'Loopback MCP tools/list only; no serving calls or upstream requests. Not provider ingress evidence.',
+    observations, totalServings: counts.snapshot().total, upstreamCalls,
+  }, null, 2));
+} finally {
+  server.close(); server.closeAllConnections(); await once(server, 'close'); counts.close();
+}

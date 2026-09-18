@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { readFileSync } from 'node:fs';
+import { createServer, request as httpRequest } from 'node:http';
+import { setTimeout as delay } from 'node:timers/promises';
 import type { AddressInfo } from 'node:net';
 import test, { type TestContext } from 'node:test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { createApp, type SupportPort } from '../src/app.js';
+import { createApp, REQUEST_LIMITS, type SupportPort } from '../src/app.js';
 import type { Config } from '../src/config.js';
 import type { ContributionHistory, SupportInfo } from '../src/support.js';
 import { VisitCounter } from '../src/counts.js';
@@ -19,7 +21,7 @@ const config: Config = {
   gasPrice: '1.1umfx',
   pwrDenom: 'upwr',
   tenant: '',
-  trustProxyHops: 0,
+  trustedProxyCidrs: [],
 };
 
 function unavailableSupport(): SupportPort {
@@ -63,6 +65,29 @@ async function mcpClient(t: TestContext, base: string) {
   await client.connect(new StreamableHTTPClientTransport(new URL('/mcp', base)));
   t.after(() => client.close());
   return client;
+}
+
+async function waitFor(predicate: () => boolean) {
+  const deadline = Date.now() + 3000;
+  while (!predicate() && Date.now() < deadline) await delay(5);
+  assert.ok(predicate(), 'Expected local requests to reach the handler');
+}
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>(done => { resolve = done; });
+  return { promise, resolve };
+}
+
+function rawRequest(base: string, localAddress: string, headers: Record<string, string> = {}) {
+  return new Promise<number>((resolve, reject) => {
+    const req = httpRequest(new URL('/api/v1/amenities', base), { localAddress, headers }, res => {
+      res.resume();
+      res.on('end', () => resolve(res.statusCode!));
+    });
+    req.on('error', reject);
+    req.end();
+  });
 }
 
 test('served MCP identity, discovery cards, health and OpenAPI match the prepared release and package version', async t => {
@@ -293,6 +318,169 @@ test('MCP rejects invalid preferences, oversized seeds and unrecognized input pr
     const result = await client.callTool({ name: 'enjoy_amenity', arguments: args });
     assert.equal(result.isError, true, `Invalid MCP input accepted: ${JSON.stringify(args)}`);
   }
+});
+
+test('MCP rejects every batch shape before any tool executes across supported Streamable HTTP versions', async t => {
+  let supportCalls = 0;
+  const support: SupportPort = { ...unavailableSupport(), getInfo: async () => { supportCalls++; return unavailableSupport().getInfo(); } };
+  const { request, json } = await fixture(t, {}, support);
+  const visit = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'enjoy_amenity', arguments: { amenity: 'null-tea' } } };
+  const read = { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'hosting_support', arguments: {} } };
+  const bad = { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'enjoy_amenity', arguments: { amenity: 'invalid' } } };
+  for (const protocol of ['2025-03-26', '2025-06-18', '2025-11-25']) {
+    const headers = { Accept: 'application/json, text/event-stream', 'MCP-Protocol-Version': protocol };
+    for (const batch of [[], [visit], [visit, read, bad], [read, null, visit], Array.from({ length: 50 }, (_, id) => ({ ...visit, id }))]) {
+      const response = await json('/mcp', batch, headers);
+      assert.equal(response.status, 400);
+      assert.equal((await response.json()).error.code, -32600);
+      assert.equal((await (await request('/api/v1/stats')).json()).total, '0');
+    }
+    const single = await json('/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/list' }, headers);
+    assert.equal(single.status, 200);
+    assert.equal((await single.json()).result.tools.length, 4);
+  }
+  assert.equal(supportCalls, 0);
+  const oversized = await json('/mcp', [{ ...visit, padding: 'x'.repeat(8192) }], { Accept: 'application/json, text/event-stream' });
+  assert.equal(oversized.status, 413);
+  // Invalid MIME lists are accepted by the transport's substring check, but do
+  // not select Express's JSON parser. They must never reach transport parsing.
+  const unparsed = await request('/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json, text/plain', Accept: 'application/json, text/event-stream' }, body: JSON.stringify([visit]) });
+  assert.equal(unparsed.status, 415);
+  assert.equal((await (await request('/api/v1/stats')).json()).total, '0');
+  let total = 0;
+  for (const protocol of ['2025-03-26', '2025-06-18', '2025-11-25']) {
+    const single = await json('/mcp', visit, { Accept: 'application/json, text/event-stream', 'MCP-Protocol-Version': protocol });
+    assert.equal(single.status, 200);
+    assert.equal((await single.json()).result.structuredContent.amenity, 'null-tea');
+    assert.equal((await (await request('/api/v1/stats')).json()).total, String(++total));
+  }
+});
+
+test('explicit trusted local proxy gives each visitor an allowance and ignores spoofed leftmost addresses', async t => {
+  const { base } = await fixture(t, { trustedProxyCidrs: ['127.0.0.2/32'] });
+  const target = new URL(base);
+  const proxy = createServer((req, res) => {
+    const forwarded = [req.headers['x-forwarded-for'], req.socket.remoteAddress].filter(Boolean).join(', ');
+    const upstream = httpRequest({ host: target.hostname, port: target.port, path: req.url, method: req.method,
+      localAddress: '127.0.0.2', headers: { ...req.headers, 'x-forwarded-for': forwarded } }, reply => {
+      res.writeHead(reply.statusCode!, reply.headers); reply.pipe(res);
+    });
+    upstream.on('error', () => { res.statusCode = 502; res.end(); });
+    req.pipe(upstream);
+  }).listen(0, '127.0.0.1');
+  await once(proxy, 'listening');
+  t.after(async () => { proxy.closeAllConnections(); await new Promise<void>(resolve => proxy.close(() => resolve())); });
+  const proxyBase = `http://127.0.0.1:${(proxy.address() as AddressInfo).port}`;
+  for (let i = 0; i < REQUEST_LIMITS.perClient; i++) {
+    assert.equal(await rawRequest(proxyBase, '127.0.0.3', { 'X-Forwarded-For': `192.0.2.${i + 1}` }), 200);
+  }
+  assert.equal(await rawRequest(proxyBase, '127.0.0.3', { 'X-Forwarded-For': '198.51.100.2' }), 429);
+  assert.equal(await rawRequest(proxyBase, '127.0.0.4'), 200);
+  // Bypassing the proxy does not permit arbitrary headers to select a bucket.
+  for (let i = 0; i < REQUEST_LIMITS.perClient; i++) {
+    assert.equal(await rawRequest(base, '127.0.0.5', { 'X-Forwarded-For': `203.0.113.${i + 1}` }), 200);
+  }
+  assert.equal(await rawRequest(base, '127.0.0.5', { 'X-Forwarded-For': '198.51.100.9' }), 429);
+  assert.equal(await rawRequest(base, '127.0.0.6'), 200);
+});
+
+test('equivalent forwarded IPv6 addresses share a bucket and invalid values fall back to socket identity', async t => {
+  const { request } = await fixture(t, { trustedProxyCidrs: ['127.0.0.1'] });
+  for (let i = 0; i < REQUEST_LIMITS.perClient; i++) {
+    const response = await request('/api/v1/amenities', { headers: { 'X-Forwarded-For': i % 2 ? '2001:db8::1' : '2001:0db8:0000:0000:0000:0000:0000:0001' } });
+    assert.equal(response.status, 200); await response.arrayBuffer();
+  }
+  assert.equal((await request('/api/v1/amenities', { headers: { 'X-Forwarded-For': '2001:db8::1' } })).status, 429);
+  for (let i = 0; i < REQUEST_LIMITS.perClient; i++) {
+    const response = await request('/api/v1/amenities', { headers: { 'X-Forwarded-For': `invalid-${i}` } });
+    assert.equal(response.status, 200); await response.arrayBuffer();
+  }
+  assert.equal((await request('/api/v1/amenities', { headers: { 'X-Forwarded-For': 'another-invalid-value' } })).status, 429);
+});
+
+test('aggregate allowance is explicit and per-client rejections cannot consume it', async t => {
+  const { request } = await fixture(t, { trustedProxyCidrs: ['127.0.0.1'] });
+  const menu = async (client: number) => {
+    const response = await request('/api/v1/amenities', { headers: { 'X-Forwarded-For': `192.0.2.${client}` } });
+    await response.arrayBuffer(); return response.status;
+  };
+  for (let client = 1; client <= REQUEST_LIMITS.aggregate / REQUEST_LIMITS.perClient; client++) {
+    for (let i = 0; i < REQUEST_LIMITS.perClient; i++) assert.equal(await menu(client), 200);
+    for (let i = 0; i < 3; i++) assert.equal(await menu(client), 429);
+  }
+  assert.equal(await menu(100), 429);
+  assert.equal((await request('/healthz')).status, 200);
+});
+
+test('per-client concurrency holds aborted HTTP/MCP work until settlement and then releases slots', async t => {
+  const gate = deferred();
+  let entered = 0;
+  const support: SupportPort = { ...unavailableSupport(), getInfo: async () => { entered++; await gate.promise; return unavailableSupport().getInfo(); } };
+  const { request, json } = await fixture(t, { trustedProxyCidrs: ['127.0.0.1'] }, support);
+  t.after(() => gate.resolve());
+  const controllers = Array.from({ length: REQUEST_LIMITS.perClientConcurrent }, () => new AbortController());
+  const pending = controllers.map((controller, i) => request(i % 2 ? '/mcp' : '/api/v1/support', {
+    signal: controller.signal,
+    ...(i % 2 ? { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', 'MCP-Protocol-Version': '2025-11-25' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: i, method: 'tools/call', params: { name: 'hosting_support', arguments: {} } }) } : {}),
+  }).then(response => response.arrayBuffer()).catch(() => undefined));
+  await waitFor(() => entered === REQUEST_LIMITS.perClientConcurrent);
+  assert.equal((await json('/api/v1/visits', { amenity: 'null-tea' })).status, 429);
+  assert.equal((await request('/api/v1/amenities', { headers: { 'X-Forwarded-For': '192.0.2.2' } })).status, 200);
+  controllers.forEach(controller => controller.abort());
+  await Promise.all(pending);
+  assert.equal((await request('/api/v1/amenities')).status, 429, 'Disconnected handlers still consume their slots');
+  gate.resolve();
+  let released = false;
+  for (let i = 0; i < 100 && !released; i++) {
+    const response = await request('/api/v1/stats');
+    if (response.status === 200) { assert.equal((await response.json()).total, '0'); released = true; }
+    else { await response.arrayBuffer(); await delay(5); }
+  }
+  assert.ok(released, 'Settled work releases concurrency slots');
+  assert.equal((await json('/api/v1/visits', { amenity: 'null-tea' })).status, 200);
+});
+
+test('aggregate concurrency bounds independent visitors and successful completion frees slots', async t => {
+  const gate = deferred();
+  let entered = 0;
+  const support: SupportPort = { ...unavailableSupport(), getInfo: async () => { entered++; await gate.promise; return unavailableSupport().getInfo(); } };
+  const { request } = await fixture(t, { trustedProxyCidrs: ['127.0.0.1'] }, support);
+  t.after(() => gate.resolve());
+  const pending = Array.from({ length: REQUEST_LIMITS.concurrent }, (_, i) => request('/api/v1/support', {
+    headers: { 'X-Forwarded-For': `192.0.2.${Math.floor(i / REQUEST_LIMITS.perClientConcurrent) + 1}` },
+  }));
+  await waitFor(() => entered === REQUEST_LIMITS.concurrent);
+  const headers = { 'X-Forwarded-For': '198.51.100.1' };
+  assert.equal((await request('/api/v1/amenities', { headers })).status, 429);
+  assert.equal((await request('/healthz')).status, 200);
+  gate.resolve();
+  for (const response of await Promise.all(pending)) { assert.equal(response.status, 200); await response.arrayBuffer(); }
+  assert.equal((await request('/api/v1/amenities', { headers })).status, 200);
+});
+
+test('a failed parallel handler and a request-window reset cannot release unfinished work', async t => {
+  const gate = deferred();
+  const realNow = Date.now;
+  let offset = 0, entered = 0;
+  t.mock.method(Date, 'now', () => realNow() + offset);
+  t.mock.method(console, 'error', () => {});
+  const support: SupportPort = { ...unavailableSupport(),
+    getHistory: async () => { throw new Error('Expected mocked history failure'); },
+    getInfo: async () => { entered++; await gate.promise; return unavailableSupport().getInfo(); },
+  };
+  const { request } = await fixture(t, {}, support);
+  t.after(() => gate.resolve());
+  for (let i = 0; i < REQUEST_LIMITS.perClientConcurrent; i++) {
+    const response = await request('/operator');
+    assert.equal(response.status, 500); await response.arrayBuffer();
+  }
+  assert.equal(entered, REQUEST_LIMITS.perClientConcurrent);
+  offset = REQUEST_LIMITS.windowMs + 1;
+  assert.equal((await request('/api/v1/amenities')).status, 429);
+  gate.resolve();
+  await delay(0);
+  assert.equal((await request('/api/v1/amenities')).status, 200);
 });
 
 test('support outages are explicit and leave free HTTP visits usable', async t => {

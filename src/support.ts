@@ -1,10 +1,5 @@
 import { createHash } from 'node:crypto';
-import {
-  createConfig,
-  createManifestReadClient,
-  parseAddress,
-  type ManifestReadClient,
-} from '@manifest-network/manifest-sdk';
+import { parseAddress } from '@manifest-network/manifest-sdk';
 import { liftedinit } from '@manifest-network/manifestjs';
 import { TxBody, TxRaw } from 'cosmjs-types/cosmos/tx/v1beta1/tx.js';
 
@@ -12,6 +7,8 @@ export const FUND_CREDIT_TYPE = '/liftedinit.billing.v1.MsgFundCredit';
 const HASH = /^[0-9a-fA-F]{64}$/;
 const INTEGER = /^(0|[1-9][0-9]{0,77})$/;
 const MAX_TX_BYTES = 1_000_000;
+const MAX_CREDIT_RESPONSE_BYTES = 64 * 1024;
+const UINT64_MAX = 18_446_744_073_709_551_615n;
 const HISTORY_LIMIT = 100;
 
 export interface SupportConfig {
@@ -257,24 +254,60 @@ function summarizeHistory(page: FundingHistoryPage, config: Readonly<SupportConf
   };
 }
 
-async function readBoundedJson(response: Response): Promise<Record<string, any>> {
+function creditCoins(value: unknown): HostingCredit['available'] {
+  if (!Array.isArray(value)) throw new Error('Invalid credit coins');
+  const denoms = new Set<string>();
+  return value.map((value) => {
+    const coin = object(value);
+    if (typeof coin?.denom !== 'string' || !/^[a-zA-Z][a-zA-Z0-9/:._-]{2,255}$/.test(coin.denom)
+      || typeof coin.amount !== 'string' || !INTEGER.test(coin.amount) || denoms.has(coin.denom)) {
+      throw new Error('Invalid credit coin');
+    }
+    denoms.add(coin.denom);
+    return { denom: coin.denom, amount: coin.amount };
+  });
+}
+
+function hostingCredit(value: unknown, tenant: string): HostingCredit {
+  const response = object(value);
+  const account = object(response?.credit_account);
+  if (!account || !addressIsValid(account.tenant) || account.tenant.toLowerCase() !== tenant.toLowerCase()
+    || !addressIsValid(account.credit_address)
+    || typeof account.active_lease_count !== 'string' || !INTEGER.test(account.active_lease_count)
+    || BigInt(account.active_lease_count) > UINT64_MAX) throw new Error('Invalid credit account');
+  return {
+    available: creditCoins(response?.available_balances),
+    reserved: creditCoins(account.reserved_amounts),
+    activeLeases: account.active_lease_count,
+  };
+}
+
+async function readBoundedJson(response: Response, signal: AbortSignal, limit = MAX_TX_BYTES * 2): Promise<Record<string, any>> {
   if (!response.body) throw new Error('Empty chain response');
-  const limit = MAX_TX_BYTES * 2;
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let length = 0;
+  let cancellation: Promise<void> | undefined;
+  // Also cancel the reader explicitly: custom transports need not wire their body
+  // stream to fetch's signal. Keep this work pending until cancellation settles.
+  const cancel = () => cancellation ??= reader.cancel(signal.reason).catch(() => {});
+  const abort = () => { void cancel(); };
+  signal.addEventListener('abort', abort, { once: true });
   try {
     for (;;) {
+      signal.throwIfAborted();
       const { value, done } = await reader.read();
+      signal.throwIfAborted();
       if (done) break;
       length += value.byteLength;
-      if (length > limit) {
-        await reader.cancel();
-        throw new Error('Chain response exceeds limit');
-      }
+      if (length > limit) throw new Error('Chain response exceeds limit');
       chunks.push(value);
     }
+  } catch (error) {
+    await cancel();
+    throw error;
   } finally {
+    signal.removeEventListener('abort', abort);
     reader.releaseLock();
   }
   const parsed: unknown = JSON.parse(Buffer.concat(chunks, length).toString('utf8'));
@@ -282,55 +315,35 @@ async function readBoundedJson(response: Response): Promise<Record<string, any>>
   return parsed as Record<string, any>;
 }
 
-/** Runtime uses only the SDK read client. Pin both transports to the configured chain. */
+/** Read-only native fetch keeps the service deadline attached to sockets and bodies. */
 class ManifestChainGateway implements ChainGateway {
-  private client?: Promise<ManifestReadClient>;
   private disposed = false;
 
   constructor(private readonly config: SupportConfig) {}
 
-  private getClient(): Promise<ManifestReadClient> {
+  private fetch(url: string, signal: AbortSignal): Promise<Response> {
     if (this.disposed) return Promise.reject(new Error('Support service closed'));
-    if (!this.client) {
-      const pending = createManifestReadClient({
-        config: createConfig({
-          chainId: this.config.chainId,
-          rpcUrl: this.config.rpcUrl,
-          ...(this.config.restUrl ? { restUrl: this.config.restUrl } : {}),
-          gasPrice: this.config.gasPrice,
-          retry: { maxRetries: 0, baseDelayMs: 100, maxDelayMs: 100 },
-        }),
-      });
-      this.client = pending;
-      void pending.then((client) => {
-        if (this.disposed) client.dispose();
-      }, () => {
-        if (this.client === pending) this.client = undefined;
-      });
-    }
-    return this.client;
+    signal.throwIfAborted();
+    return fetch(url, { signal, redirect: 'error' });
   }
 
   private async rpc(path: string, signal: AbortSignal): Promise<Record<string, any>> {
-    const client = await this.getClient();
-    signal.throwIfAborted();
-    const response = await client.fetch(`${this.config.rpcUrl.replace(/\/$/, '')}/${path}`, { signal });
-    const body = await readBoundedJson(response);
+    const response = await this.fetch(`${this.config.rpcUrl.replace(/\/$/, '')}/${path}`, signal);
+    const body = await readBoundedJson(response, signal);
     // CometBFT uses HTTP 500 for JSON-RPC errors, including an absent transaction.
     if (!response.ok && !([400, 500].includes(response.status) && body.error)) throw new Error('Chain query unavailable');
     return body;
   }
 
   async getChainId(signal: AbortSignal): Promise<string> {
-    // The published SDK does not validate identity itself; check live endpoints explicitly.
+    // Check both configured endpoints before using their data.
     const status = await this.rpc('status', signal);
     const chainId: unknown = status.result?.node_info?.network;
     if (typeof chainId !== 'string') throw new Error('Chain identity unavailable');
     if (this.config.restUrl) {
-      const client = await this.getClient();
-      const response = await client.fetch(`${this.config.restUrl.replace(/\/$/, '')}/cosmos/base/tendermint/v1beta1/node_info`, { signal });
+      const response = await this.fetch(`${this.config.restUrl.replace(/\/$/, '')}/cosmos/base/tendermint/v1beta1/node_info`, signal);
+      const info = await readBoundedJson(response, signal);
       if (!response.ok) throw new Error('REST chain identity unavailable');
-      const info = await readBoundedJson(response);
       if (info.default_node_info?.network !== chainId) throw new Error('REST and RPC chains differ');
     }
     return chainId;
@@ -354,32 +367,30 @@ class ManifestChainGateway implements ChainGateway {
   }
 
   async getCredit(tenant: string, signal: AbortSignal): Promise<HostingCredit | null> {
-    const client = await this.getClient();
-    const balance = await client.getBalance(tenant, { signal });
-    return balance.credits ? {
-      available: balance.credits.available_balances,
-      reserved: balance.credits.reserved_amounts,
-      activeLeases: balance.credits.active_leases,
-    } : null;
+    if (!this.config.restUrl) throw new Error('REST endpoint is not configured');
+    const response = await this.fetch(`${this.config.restUrl.replace(/\/$/, '')}/liftedinit/billing/v1/credit/${encodeURIComponent(tenant)}`, signal);
+    const body = await readBoundedJson(response, signal, MAX_CREDIT_RESPONSE_BYTES);
+    // Only the chain's structured gRPC NotFound means no credit account. A proxy
+    // 404, malformed/partial data or another query failure must stay unavailable.
+    if (response.status === 404 && body.code === 5 && typeof body.message === 'string') return null;
+    if (!response.ok) throw new Error('Credit query unavailable');
+    return hostingCredit(body, tenant);
   }
 
   async getFundingHistory(tenant: string, signal: AbortSignal): Promise<FundingHistoryPage> {
     if (!this.config.restUrl) throw new Error('REST endpoint is not configured');
-    const client = await this.getClient();
-    signal.throwIfAborted();
     const query = new URLSearchParams({
       query: `credit_funded.tenant='${tenant}'`, order_by: 'ORDER_BY_DESC', limit: String(HISTORY_LIMIT), page: '1',
     });
-    const response = await client.fetch(`${this.config.restUrl.replace(/\/$/, '')}/cosmos/tx/v1beta1/txs?${query}`, { signal });
+    const response = await this.fetch(`${this.config.restUrl.replace(/\/$/, '')}/cosmos/tx/v1beta1/txs?${query}`, signal);
+    const page = await readBoundedJson(response, signal);
     if (!response.ok) throw new Error('Contribution index unavailable');
-    const page = await readBoundedJson(response);
     if (typeof page.total !== 'string' || !Array.isArray(page.tx_responses)) throw new Error('Invalid contribution index response');
     return { total: page.total, txResponses: page.tx_responses };
   }
 
   dispose(): void {
     this.disposed = true;
-    void this.client?.then((client) => client.dispose(), () => {});
   }
 }
 

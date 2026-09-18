@@ -1,4 +1,5 @@
 import { isAbsolute } from 'node:path';
+import { isIP } from 'node:net';
 
 export type Network = 'testnet' | 'mainnet';
 
@@ -12,7 +13,7 @@ export interface Config {
   gasPrice: string;
   pwrDenom: string;
   tenant: string;
-  trustProxyHops: number;
+  trustedProxyCidrs: string[];
   mainnetOrigin?: string;
   visitCountsPath?: string;
 }
@@ -42,6 +43,23 @@ function endpoint(value: string, name: string): string {
   return url.toString().replace(/\/$/, '');
 }
 
+function trustedProxies(env: NodeJS.ProcessEnv): string[] {
+  // The old zero value is safe and remains accepted for existing manifests.
+  if (env.TRUST_PROXY_HOPS && env.TRUST_PROXY_HOPS !== '0') {
+    throw new Error('TRUST_PROXY_HOPS is no longer supported; configure explicit TRUSTED_PROXY_CIDRS');
+  }
+  const value = env.TRUSTED_PROXY_CIDRS?.trim();
+  if (!value) return [];
+  const entries = value.split(',').map(entry => entry.trim());
+  if (entries.length > 32 || entries.some(entry => {
+    const [address = '', prefix, ...extra] = entry.split('/');
+    const family = isIP(address);
+    return !family || address.includes('%') || extra.length > 0
+      || (prefix !== undefined && (!/^[1-9][0-9]*$/.test(prefix) || Number(prefix) > (family === 4 ? 32 : 128)));
+  })) throw new Error('TRUSTED_PROXY_CIDRS requires at most 32 explicit IP addresses or nonzero CIDR ranges');
+  return [...new Set(entries)];
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const network = env.NETWORK || 'testnet';
   if (network !== 'testnet' && network !== 'mainnet') throw new Error('NETWORK must be testnet or mainnet');
@@ -64,9 +82,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new Error('Mainnet must use an HTTPS origin and mainnet chain endpoints and token denomination');
   }
   const port = Number(env.PORT || 8080);
-  const trustProxyHops = Number(env.TRUST_PROXY_HOPS || 0);
+  const trustedProxyCidrs = trustedProxies(env);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
-  if (!Number.isInteger(trustProxyHops) || trustProxyHops < 0 || trustProxyHops > 3) throw new Error('Invalid TRUST_PROXY_HOPS');
   const tenant = env.REFUGE_TENANT || '';
   if (tenant && !/^manifest1[023456789acdefghjklmnpqrstuvwxyz]{38,64}$/.test(tenant)) throw new Error('Invalid REFUGE_TENANT');
   const gasPrice = env.MANIFEST_GAS_PRICE || '1.1umfx';
@@ -79,5 +96,5 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (visitCountsPath && (!isAbsolute(visitCountsPath) || visitCountsPath.includes('\0'))) {
     throw new Error('VISIT_COUNTS_PATH must be an absolute filesystem path');
   }
-  return { network, chainId, publicOrigin, port, rpcUrl, restUrl, gasPrice, pwrDenom, tenant, trustProxyHops, mainnetOrigin, visitCountsPath };
+  return { network, chainId, publicOrigin, port, rpcUrl, restUrl, gasPrice, pwrDenom, tenant, trustedProxyCidrs, mainnetOrigin, visitCountsPath };
 }

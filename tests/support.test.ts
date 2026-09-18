@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { once } from 'node:events';
+import { createServer } from 'node:http';
 import test from 'node:test';
 import { liftedinit } from '@manifest-network/manifestjs';
 import { TxBody, TxRaw } from 'cosmjs-types/cosmos/tx/v1beta1/tx.js';
@@ -192,7 +194,7 @@ test('outages time out quickly and open a circuit instead of repeating chain req
   assert.equal(reads, 1);
 });
 
-test('published SDK gateway recognizes CometBFT absent transaction despite HTTP 500', async (context) => {
+test('chain gateway recognizes CometBFT absent transaction despite HTTP 500', async (context) => {
   const hash = 'A'.repeat(64);
   context.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
     const url = String(input);
@@ -211,7 +213,7 @@ test('published SDK gateway recognizes CometBFT absent transaction despite HTTP 
   }
 });
 
-test('published SDK gateway stops oversized chain streams before parsing', async (context) => {
+test('chain gateway stops oversized chain streams before parsing', async (context) => {
   let cancelled = false;
   context.mock.method(globalThis, 'fetch', async () => new Response(new ReadableStream({
     pull(controller) { controller.enqueue(new Uint8Array(1_100_000)); },
@@ -223,6 +225,235 @@ test('published SDK gateway stops oversized chain streams before parsing', async
     assert.equal(cancelled, true);
   } finally {
     service.dispose();
+  }
+});
+
+function creditResponse() {
+  return {
+    credit_account: {
+      tenant, credit_address: 'manifest1u38rpxv2ynqy5fe8xsqyzp6w37qkmdcya9jmuqwfxqxrldru0wrqqd8yzt',
+      active_lease_count: '1', pending_lease_count: '0', reserved_amounts: [{ denom: 'upwr', amount: '20' }],
+    },
+    balances: [{ denom: 'upwr', amount: '2220' }],
+    available_balances: [{ denom: 'upwr', amount: '2200' }],
+  };
+}
+
+function identityResponse(input: string | URL | Request) {
+  const url = new URL(String(input));
+  if (url.pathname.endsWith('/status')) return Response.json({ result: { node_info: { network: config.chainId } } });
+  if (url.pathname.endsWith('/node_info')) return Response.json({ default_node_info: { network: config.chainId } });
+  return undefined;
+}
+
+test('credit gateway makes only one credit query after both identity checks and caches independent snapshots', async (context) => {
+  let now = 1000;
+  const paths: string[] = [];
+  const signals = new Set<AbortSignal>();
+  context.mock.method(globalThis, 'fetch', async (input: string | URL | Request, init?: RequestInit) => {
+    assert.ok(init?.signal instanceof AbortSignal);
+    signals.add(init.signal);
+    assert.equal(init.redirect, 'error');
+    const url = new URL(String(input));
+    paths.push(url.pathname);
+    const identity = identityResponse(input);
+    if (identity) return identity;
+    assert.equal(url.origin, 'https://rest.example.com');
+    assert.equal(url.pathname, `/liftedinit/billing/v1/credit/${tenant}`);
+    return Response.json(creditResponse());
+  });
+  const service = new SupportService({ ...config, restUrl: 'https://rest.example.com' }, undefined, { now: () => now, cacheMs: 100 });
+  try {
+    const [a, b] = await Promise.all([service.getInfo(), service.getInfo()]);
+    assert.equal(a.status, 'available');
+    assert.deepEqual(a.hostingCredit, { available: [{ denom: 'upwr', amount: '2200' }], reserved: [{ denom: 'upwr', amount: '20' }], activeLeases: '1' });
+    assert.deepEqual(paths, ['/status', '/cosmos/base/tendermint/v1beta1/node_info', `/liftedinit/billing/v1/credit/${tenant}`]);
+    assert.equal(signals.size, 1);
+    a.hostingCredit!.available[0]!.amount = '999';
+    assert.equal(b.hostingCredit?.available[0]?.amount, '2200');
+    assert.equal((await service.getInfo()).hostingCredit?.available[0]?.amount, '2200');
+    assert.equal(paths.length, 3);
+    now += 101;
+    await service.getInfo();
+    assert.equal(paths.length, 6);
+  } finally { service.dispose(); }
+});
+
+test('credit gateway preserves precise absent-account semantics and rejects malformed or failed responses', async (context) => {
+  let response: unknown = creditResponse();
+  let status = 200;
+  context.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => identityResponse(input) ?? Response.json(response, { status }));
+  const read = async () => {
+    const service = new SupportService({ ...config, restUrl: 'https://rest.example.com' });
+    try { return await service.getInfo(); } finally { service.dispose(); }
+  };
+  const malformed: unknown[] = [null, [], {}, { ...creditResponse(), credit_account: null },
+    { ...creditResponse(), available_balances: null }, { ...creditResponse(), available_balances: {} }];
+  for (const patch of [
+    { tenant: sender }, { tenant: 'invalid' }, { credit_address: 'invalid' }, { reserved_amounts: null },
+    { active_lease_count: 1 }, { active_lease_count: '-1' }, { active_lease_count: '01' },
+    { active_lease_count: '18446744073709551616' },
+  ]) malformed.push({ ...creditResponse(), credit_account: { ...creditResponse().credit_account, ...patch } });
+  for (const coins of [[{ denom: 'upwr', amount: 1 }], [{ denom: 'upwr', amount: '-1' }],
+    [{ denom: 'upwr', amount: '1.5' }], [{ denom: 'upwr', amount: '01' }], [{ denom: 'upwr', amount: '1'.repeat(79) }],
+    [{ denom: 'x', amount: '1' }], [{ denom: 'upwr', amount: '1' }, { denom: 'upwr', amount: '2' }]]) {
+    malformed.push({ ...creditResponse(), available_balances: coins });
+    malformed.push({ ...creditResponse(), credit_account: { ...creditResponse().credit_account, reserved_amounts: coins } });
+  }
+  for (response of malformed) {
+    const info = await read();
+    assert.equal(info.status, 'unavailable', JSON.stringify(response));
+    assert.equal(info.hostingCredit, null);
+    assert.equal(info.instructions, null);
+  }
+  for (const pair of [[404, { message: 'proxy not found' }], [404, { code: 13, message: 'internal error' }],
+    [500, { code: 5, message: 'unreliable upstream' }], [200, { code: 5, message: 'not found' }]] as const) {
+    [status, response] = pair;
+    assert.equal((await read()).status, 'unavailable');
+  }
+  status = 404;
+  response = { code: 5, message: 'credit account not found', details: [] };
+  const absent = await read();
+  assert.equal(absent.status, 'available');
+  assert.equal(absent.hostingCredit, null);
+  status = 200;
+  response = { ...creditResponse(), available_balances: [{ denom: 'upwr', amount: '9007199254740993' }] };
+  assert.equal((await read()).hostingCredit?.available[0]?.amount, '9007199254740993');
+  response = { ...creditResponse(), available_balances: [], credit_account: { ...creditResponse().credit_account, active_lease_count: '0', reserved_amounts: [] } };
+  assert.deepEqual((await read()).hostingCredit, { available: [], reserved: [], activeLeases: '0' });
+});
+
+test('credit gateway stops before credit queries on identity mismatch or partial identity failure', async (context) => {
+  let restNetwork = 'wrong-chain';
+  let rpcNetwork = config.chainId;
+  let status = 200;
+  let credits = 0;
+  context.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
+    if (String(input).endsWith('/status')) return Response.json({ result: { node_info: { network: rpcNetwork } } });
+    if (String(input).endsWith('/node_info')) return Response.json({ default_node_info: { network: restNetwork } }, { status });
+    credits++;
+    return Response.json(creditResponse());
+  });
+  for (const endpoints of [[config.chainId, 'wrong-chain', 200], ['wrong-chain', 'wrong-chain', 200], [config.chainId, config.chainId, 503]] as const) {
+    [rpcNetwork, restNetwork, status] = endpoints;
+    const service = new SupportService({ ...config, restUrl: 'https://rest.example.com' });
+    try {
+      assert.equal((await service.getInfo()).status, 'unavailable');
+      assert.equal((await service.verify({ transactionHash: 'A'.repeat(64) })).status, 'unavailable');
+      assert.equal(credits, 0);
+    } finally { service.dispose(); }
+  }
+});
+
+test('credit gateway cancels oversized streams before parsing even with a false content length', async (context) => {
+  let cancelled = false;
+  let pulls = 0;
+  context.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => identityResponse(input) ?? new Response(new ReadableStream({
+    pull(controller) { pulls++; controller.enqueue(new Uint8Array(33 * 1024)); },
+    cancel() { cancelled = true; },
+  }), { headers: { 'content-length': '1' } }));
+  const service = new SupportService({ ...config, restUrl: 'https://rest.example.com' });
+  try {
+    assert.equal((await service.getInfo()).status, 'unavailable');
+    assert.equal(cancelled, true);
+    assert.ok(pulls <= 3);
+  } finally { service.dispose(); }
+});
+
+test('credit gateway rejects a body that fails after partial JSON and opens the shared circuit', async (context) => {
+  let requests = 0;
+  context.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
+    requests++;
+    return identityResponse(input) ?? new Response(new ReadableStream({
+      start(controller) { controller.enqueue(new TextEncoder().encode('{"credit_account":')); },
+      pull(controller) { controller.error(new Error('upstream disconnected')); },
+    }));
+  });
+  const service = new SupportService({ ...config, restUrl: 'https://rest.example.com' });
+  try {
+    assert.equal((await service.getInfo()).status, 'unavailable');
+    assert.equal((await service.getHistory()).status, 'unavailable');
+    assert.equal(requests, 3);
+  } finally { service.dispose(); }
+});
+
+test('credit deadline cancels pending body reads and holds concurrency slots until cancellation terminates', async (context) => {
+  let credits = 0;
+  let aborted = 0;
+  let succeed = false;
+  const finishCancellation: (() => void)[] = [];
+  context.mock.method(globalThis, 'fetch', async (input: string | URL | Request, init?: RequestInit) => {
+    const identity = identityResponse(input);
+    if (identity) return identity;
+    credits++;
+    init?.signal?.addEventListener('abort', () => { aborted++; }, { once: true });
+    if (succeed) return Response.json(creditResponse());
+    return new Response(new ReadableStream({
+      start(controller) { controller.enqueue(new TextEncoder().encode('{')); },
+      cancel() { return new Promise<void>((resolve) => finishCancellation.push(resolve)); },
+    }));
+  });
+  const service = new SupportService({ ...config, restUrl: 'https://rest.example.com' }, undefined, { timeoutMs: 15, circuitMs: 0 });
+  try {
+    for (let i = 0; i < 4; i++) assert.equal((await service.getInfo()).status, 'unavailable');
+    assert.equal(credits, 4);
+    assert.equal(aborted, 4);
+    assert.equal(finishCancellation.length, 4);
+    assert.equal((await service.getInfo()).status, 'unavailable');
+    assert.equal(credits, 4);
+    succeed = true;
+    finishCancellation.forEach((finish) => finish());
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal((await service.getInfo()).status, 'available');
+    assert.equal(credits, 5);
+  } finally {
+    finishCancellation.forEach((finish) => finish());
+    service.dispose();
+  }
+});
+
+test('credit transport closes local upstream sockets at the deadline and byte limit', async (context) => {
+  for (const failure of ['headers', 'body', 'oversized'] as const) {
+    await context.test(failure, async (context) => {
+      let closeSocket!: () => void;
+      const closed = new Promise<void>((resolve) => { closeSocket = resolve; });
+      let credits = 0;
+      const server = createServer((request, response) => {
+        const identity = request.url === '/status'
+          ? { result: { node_info: { network: config.chainId } } }
+          : request.url?.endsWith('/node_info') ? { default_node_info: { network: config.chainId } } : undefined;
+        response.setHeader('content-type', 'application/json');
+        if (identity) { response.end(JSON.stringify(identity)); return; }
+        credits++;
+        assert.equal(request.url, `/liftedinit/billing/v1/credit/${tenant}`);
+        request.socket.once('close', closeSocket);
+        if (failure === 'body') response.write('{"credit_account":');
+        if (failure === 'oversized') response.write(Buffer.alloc(64 * 1024 + 1, ' '));
+      });
+      context.after(async () => {
+        server.closeAllConnections();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      });
+      server.listen(0, '127.0.0.1');
+      await once(server, 'listening');
+      const address = server.address();
+      assert.ok(address && typeof address !== 'string');
+      const url = `http://127.0.0.1:${address.port}`;
+      const service = new SupportService({ ...config, rpcUrl: url, restUrl: url }, undefined, { timeoutMs: 150 });
+      let closeTimer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const result = await service.getInfo();
+        assert.equal(result.status, 'unavailable');
+        assert.equal(result.instructions, null);
+        assert.equal(credits, 1);
+        await Promise.race([closed, new Promise<never>((_, reject) => {
+          closeTimer = setTimeout(() => reject(new Error('upstream socket remained open')), 1000);
+        })]);
+      } finally {
+        if (closeTimer) clearTimeout(closeTimer);
+        service.dispose();
+      }
+    });
   }
 });
 
@@ -451,7 +682,7 @@ test('history timeout and circuit keep chain outages bounded', async () => {
   assert.equal(calls, 1);
 });
 
-test('published SDK gateway uses only the fixed tenant history query and validates live network identities', async (context) => {
+test('chain gateway uses only the fixed tenant history query and validates live network identities', async (context) => {
   let queries = 0;
   context.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
     const url = new URL(String(input));

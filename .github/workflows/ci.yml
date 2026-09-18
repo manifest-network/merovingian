@@ -32,3 +32,47 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Check metadata, types, tests, and build
         run: npm run check
+
+  image:
+    name: Final image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked check dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build candidate without publishing
+        run: |
+          mkdir -p .local/image-security
+          docker --host unix:///var/run/docker.sock build --tag merovingian:ci --iidfile .local/image-security/image-id .
+      - name: Check isolated runtime and persistence
+        run: node scripts/check-runtime-image.mjs "$(cat .local/image-security/image-id)" .local/image-security/runtime.json
+      - name: Scan the exact candidate and apply advisory policy
+        run: bash scripts/scan-runtime-image.sh "$(cat .local/image-security/image-id)" .local/image-security
+      - name: Record confinement verification gap
+        if: always()
+        run: |
+          printf '%s\n' 'AppArmor: unavailable. Named-profile enforcement and attributed denial tests require a separately reviewed profile and isolated capable runner (ENG-1038/ENG-1041).' >> "$GITHUB_STEP_SUMMARY"
+      - name: Keep sanitized image evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: image-security
+          retention-days: 14
+          if-no-files-found: warn
+          include-hidden-files: true
+          path: |
+            .local/image-security/runtime.json
+            .local/image-security/vulnerabilities.json
+            .local/image-security/sbom.cdx.json
+            .local/image-security/scanner.json
+            .local/image-security/scan-provenance.json
+            .local/image-security/policy.json

@@ -1,0 +1,60 @@
+import assert from 'node:assert/strict';
+import { once } from 'node:events';
+import { createRequire } from 'node:module';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { setTimeout as delay } from 'node:timers/promises';
+const moduleAt = file => import(pathToFileURL(resolve(process.cwd(), file)).href);
+const { createApp } = await moduleAt('src/app.ts');
+const { loadConfig } = await moduleAt('src/config.ts');
+const { VisitCounter } = await moduleAt('src/counts.ts');
+const { SupportService } = await moduleAt('src/support.ts');
+const config = loadConfig({});
+const counts = new VisitCounter(config);
+const refuse = async () => { throw new Error('Unexpected upstream blocked'); };
+const server = createApp(config, { getInfo: refuse, getHistory: refuse, verify: refuse }, counts).listen(0, '127.0.0.1');
+await once(server, 'listening');
+const origin = `http://127.0.0.1:${server.address().port}`;
+try {
+  const batch = Array.from({ length: 50 }, (_, id) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'enjoy_amenity', arguments: { amenity: 'null-tea' } } }));
+  const body = JSON.stringify(batch);
+  const response = await fetch(origin + '/mcp', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', 'mcp-protocol-version': '2025-03-26', 'x-forwarded-for': '192.0.2.1' }, body, signal: AbortSignal.timeout(5000) });
+  const results = await response.json();
+  const successfulResults = results.filter(item => item.result?.structuredContent?.amenity === 'null-tea' && !item.error && !item.result.isError).length;
+  assert.equal(successfulResults, 50); assert.equal(counts.snapshot().total, '50');
+  console.log(JSON.stringify({ proof: 'mcp_batch_one_http_request', bodyBytes: Buffer.byteLength(body), httpStatus: response.status, successfulResults, actualInMemorySqliteVisitsRecorded: counts.snapshot().total }));
+  for (let i = 0; i < 119; i++) {
+    const fill = await fetch(origin + '/api/v1/amenities', { headers: { 'x-forwarded-for': '192.0.2.1' } });
+    assert.equal(fill.status, 200); await fill.arrayBuffer();
+  }
+  const second = await fetch(origin + '/api/v1/amenities', { headers: { 'x-forwarded-for': '192.0.2.2' } });
+  assert.equal(second.status, 429);
+  console.log(JSON.stringify({ proof: 'shared_proxy_bucket_with_trust_zero', differentForwardedVisitorStatus: second.status, retryAfter: second.headers.get('retry-after') }));
+  await second.arrayBuffer();
+} finally { server.close(); server.closeAllConnections(); await once(server, 'close'); counts.close(); }
+const require = createRequire(pathToFileURL(resolve(process.cwd(), 'package.json')));
+const axios = require('axios');
+const originalCreate = axios.create;
+const originalFetch = globalThis.fetch;
+let outstanding = 0;
+const optionsSeen = [];
+axios.create = factoryOptions => ({ get: async (_endpoint, callOptions) => {
+  outstanding++;
+  optionsSeen.push({ timeoutMs: callOptions.timeout, hasSignal: Boolean(callOptions.signal), maxContentLength: callOptions.maxContentLength ?? factoryOptions.maxContentLength ?? axios.defaults.maxContentLength });
+  try { await delay(400); throw new Error('Mock upstream completed after caller deadline'); }
+  finally { outstanding--; }
+} });
+globalThis.fetch = async input => {
+  const url = String(input);
+  if (url.endsWith('/status')) return Response.json({ result: { node_info: { network: 'manifest-ledger-testnet' } } });
+  if (url.endsWith('/node_info')) return Response.json({ default_node_info: { network: 'manifest-ledger-testnet' } });
+  throw new Error('Unexpected external request blocked');
+};
+const service = new SupportService({ network: 'testnet', chainId: 'manifest-ledger-testnet', rpcUrl: 'https://rpc.example.com', restUrl: 'https://rest.example.com', gasPrice: '1umfx', pwrDenom: 'upwr', tenant: 'manifest1am058pdux3hyulcmfgj4m3hhrlfn8nzmx97smg' }, undefined, { timeoutMs: 100 });
+try {
+  const response = await service.getInfo();
+  assert.equal(response.status, 'unavailable'); assert.equal(outstanding, 3);
+  console.log(JSON.stringify({ proof: 'credit_reads_survive_service_timeout', result: response.status, outstandingUnderlyingQueries: outstanding, queryOptions: optionsSeen }));
+  await delay(450); assert.equal(outstanding, 0);
+  console.log(JSON.stringify({ proof: 'mock_queries_settle_independently', outstandingUnderlyingQueries: outstanding }));
+} finally { service.dispose(); axios.create = originalCreate; globalThis.fetch = originalFetch; }

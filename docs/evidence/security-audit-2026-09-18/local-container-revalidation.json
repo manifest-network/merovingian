@@ -1,0 +1,108 @@
+{
+  "checkedAt": "2026-09-18T18:43:17.412084+00:00",
+  "scope": "Fresh isolated local compatibility test. No live requests or serving calls; not provider evidence.",
+  "image": "ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
+  "configurationDigest": "sha256:c7579b288032d121996496cab6293549ebdf1d054be6c2b640a44f6558160e15",
+  "archiveManifestAndConfigHashesVerified": true,
+  "imageDefaults": {
+    "User": "node",
+    "Entrypoint": [
+      "docker-entrypoint.sh"
+    ],
+    "Cmd": [
+      "node",
+      "dist/index.js"
+    ]
+  },
+  "localControls": {
+    "readOnlyRoot": true,
+    "privileged": false,
+    "capDrop": [
+      "ALL"
+    ],
+    "noNewPrivileges": true,
+    "network": "none",
+    "publishedPorts": 0,
+    "hostBindMounts": 0,
+    "dataMount": "rw,noexec,nosuid,nodev,size=64m,uid=1000,gid=1000,mode=0700",
+    "pidsLimit": 64,
+    "memoryBytes": 536870912,
+    "nanoCpus": 500000000
+  },
+  "observed": {
+    "statuses": {
+      "/healthz": 200,
+      "/api/v1/amenities": 200,
+      "/api/v1/stats": 200
+    },
+    "version": "0.4.3",
+    "counts": {
+      "status": "available",
+      "storage": "persistent",
+      "total": "0"
+    },
+    "processFields": {
+      "Uid": "1000\t1000\t1000\t1000",
+      "Gid": "1000\t1000\t1000\t1000",
+      "CapInh": "0000000000000000",
+      "CapPrm": "0000000000000000",
+      "CapEff": "0000000000000000",
+      "CapBnd": "0000000000000000",
+      "CapAmb": "0000000000000000",
+      "NoNewPrivs": "1",
+      "Seccomp": "2"
+    },
+    "ownership": {
+      "/app": {
+        "uid": 0,
+        "gid": 0,
+        "mode": "755"
+      },
+      "/app/dist": {
+        "uid": 1000,
+        "gid": 1000,
+        "mode": "755"
+      },
+      "/app/node_modules": {
+        "uid": 1000,
+        "gid": 1000,
+        "mode": "755"
+      },
+      "/app/package.json": {
+        "uid": 1000,
+        "gid": 1000,
+        "mode": "644"
+      },
+      "/data": {
+        "uid": 1000,
+        "gid": 1000,
+        "mode": "700"
+      }
+    },
+    "codeWrite": "EROFS",
+    "dataWrite": "passed",
+    "dataMount": {
+      "type": "tmpfs",
+      "options": [
+        "rw",
+        "nosuid",
+        "nodev",
+        "noexec",
+        "relatime"
+      ]
+    },
+    "versions": {
+      "node": "24.21.0",
+      "openssl": "3.5.8",
+      "undici": "7.29.1",
+      "sqlite": "3.53.4"
+    }
+  },
+  "gracefulStopExitCode": 0,
+  "limitations": [
+    "Resource values are local Docker settings, not stress-tested ceilings.",
+    "No AppArmor enforcement or provider runtime inspection was performed.",
+    "Disposable tmpfs does not test persistence across container replacement.",
+    "No new vulnerability scan; original scan retains its original timestamp."
+  ]
+}

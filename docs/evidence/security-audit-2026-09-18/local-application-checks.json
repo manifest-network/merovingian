@@ -1,0 +1,54 @@
+{
+  "date": "2026-09-18",
+  "scope": "Loopback-only server, real in-memory SQLite, mocked upstream. No production requests. MCP batch uses protocol header2025-03-26.",
+  "relevantExistingTests": {
+    "passed": 57,
+    "failed": 0,
+    "suites": [
+      "app",
+      "support",
+      "config",
+      "webmcp"
+    ]
+  },
+  "proofs": [
+    {
+      "proof": "mcp_batch_one_http_request",
+      "bodyBytes": 5841,
+      "httpStatus": 200,
+      "successfulResults": 50,
+      "actualInMemorySqliteVisitsRecorded": "50"
+    },
+    {
+      "proof": "shared_proxy_bucket_with_trust_zero",
+      "differentForwardedVisitorStatus": 429,
+      "retryAfter": "60"
+    },
+    {
+      "proof": "credit_reads_survive_service_timeout",
+      "result": "unavailable",
+      "outstandingUnderlyingQueries": 3,
+      "queryOptions": [
+        {
+          "timeoutMs": 10000,
+          "hasSignal": false,
+          "maxContentLength": -1
+        },
+        {
+          "timeoutMs": 10000,
+          "hasSignal": false,
+          "maxContentLength": -1
+        },
+        {
+          "timeoutMs": 10000,
+          "hasSignal": false,
+          "maxContentLength": -1
+        }
+      ]
+    },
+    {
+      "proof": "mock_queries_settle_independently",
+      "outstandingUnderlyingQueries": 0
+    }
+  ]
+}
