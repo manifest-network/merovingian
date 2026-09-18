@@ -43,21 +43,30 @@ function endpoint(value: string, name: string): string {
   return url.toString().replace(/\/$/, '');
 }
 
+export function parseTrustedProxyCidrs(value: string | undefined): string[] {
+  if (!value?.trim()) return [];
+  const entries = value.split(',').map(entry => entry.trim());
+  if (entries.length > 32 || entries.some(entry => {
+    const [address = '', prefix, ...extra] = entry.split('/');
+    const family = isIP(address);
+    if (!family || address.includes('%') || extra.length > 0) return true;
+    if (prefix === undefined) return false;
+    // Use IPv4 notation for mapped CIDRs so an IPv6 prefix cannot hide a wide
+    // IPv4 trust range. URL canonicalization also catches hexadecimal spellings.
+    const mapped = family === 6 && new URL(`http://[${address}]`).hostname.startsWith('[::ffff:');
+    return mapped || !/^[1-9][0-9]*$/.test(prefix)
+      || Number(prefix) < (family === 4 ? 24 : 64)
+      || Number(prefix) > (family === 4 ? 32 : 128);
+  })) throw new Error('TRUSTED_PROXY_CIDRS requires at most 32 explicit IPs or IPv4 /24–/32 and IPv6 /64–/128 ranges; use IPv4 notation for mapped CIDRs');
+  return [...new Set(entries)];
+}
+
 function trustedProxies(env: NodeJS.ProcessEnv): string[] {
   // The old zero value is safe and remains accepted for existing manifests.
   if (env.TRUST_PROXY_HOPS && env.TRUST_PROXY_HOPS !== '0') {
     throw new Error('TRUST_PROXY_HOPS is no longer supported; configure explicit TRUSTED_PROXY_CIDRS');
   }
-  const value = env.TRUSTED_PROXY_CIDRS?.trim();
-  if (!value) return [];
-  const entries = value.split(',').map(entry => entry.trim());
-  if (entries.length > 32 || entries.some(entry => {
-    const [address = '', prefix, ...extra] = entry.split('/');
-    const family = isIP(address);
-    return !family || address.includes('%') || extra.length > 0
-      || (prefix !== undefined && (!/^[1-9][0-9]*$/.test(prefix) || Number(prefix) > (family === 4 ? 32 : 128)));
-  })) throw new Error('TRUSTED_PROXY_CIDRS requires at most 32 explicit IP addresses or nonzero CIDR ranges');
-  return [...new Set(entries)];
+  return parseTrustedProxyCidrs(env.TRUSTED_PROXY_CIDRS);
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {

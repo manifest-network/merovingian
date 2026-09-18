@@ -268,7 +268,8 @@ test('credit gateway makes only one credit query after both identity checks and 
     assert.equal(a.status, 'available');
     assert.deepEqual(a.hostingCredit, { available: [{ denom: 'upwr', amount: '2200' }], reserved: [{ denom: 'upwr', amount: '20' }], activeLeases: '1' });
     assert.deepEqual(paths, ['/status', '/cosmos/base/tendermint/v1beta1/node_info', `/liftedinit/billing/v1/credit/${tenant}`]);
-    assert.equal(signals.size, 1);
+    assert.equal(signals.size, 3);
+    assert.ok([...signals].every((signal) => signal.aborted));
     a.hostingCredit!.available[0]!.amount = '999';
     assert.equal(b.hostingCredit?.available[0]?.amount, '2200');
     assert.equal((await service.getInfo()).hostingCredit?.available[0]?.amount, '2200');
@@ -290,7 +291,8 @@ test('credit gateway preserves precise absent-account semantics and rejects malf
   const malformed: unknown[] = [null, [], {}, { ...creditResponse(), credit_account: null },
     { ...creditResponse(), available_balances: null }, { ...creditResponse(), available_balances: {} }];
   for (const patch of [
-    { tenant: sender }, { tenant: 'invalid' }, { credit_address: 'invalid' }, { reserved_amounts: null },
+    { tenant: sender }, { tenant: 'invalid' }, { tenant: undefined }, { credit_address: 'invalid' },
+    { credit_address: undefined }, { reserved_amounts: null }, { active_lease_count: null },
     { active_lease_count: 1 }, { active_lease_count: '-1' }, { active_lease_count: '01' },
     { active_lease_count: '18446744073709551616' },
   ]) malformed.push({ ...creditResponse(), credit_account: { ...creditResponse().credit_account, ...patch } });
@@ -321,6 +323,26 @@ test('credit gateway preserves precise absent-account semantics and rejects malf
   assert.equal((await read()).hostingCredit?.available[0]?.amount, '9007199254740993');
   response = { ...creditResponse(), available_balances: [], credit_account: { ...creditResponse().credit_account, active_lease_count: '0', reserved_amounts: [] } };
   assert.deepEqual((await read()).hostingCredit, { available: [], reserved: [], activeLeases: '0' });
+});
+
+test('credit gateway accepts omitted protobuf default fields without accepting a missing account identity', async (context) => {
+  const full = creditResponse();
+  let response: unknown;
+  context.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => identityResponse(input) ?? Response.json(response));
+  for (const [body, expected] of [
+    [{ ...full, available_balances: undefined }, { available: [], reserved: full.credit_account.reserved_amounts, activeLeases: '1' }],
+    [{ ...full, credit_account: { ...full.credit_account, reserved_amounts: undefined } }, { available: full.available_balances, reserved: [], activeLeases: '1' }],
+    [{ ...full, credit_account: { ...full.credit_account, active_lease_count: undefined } }, { available: full.available_balances, reserved: full.credit_account.reserved_amounts, activeLeases: '0' }],
+    [{ credit_account: { tenant, credit_address: full.credit_account.credit_address } }, { available: [], reserved: [], activeLeases: '0' }],
+  ]) {
+    response = body;
+    const service = new SupportService({ ...config, restUrl: 'https://rest.example.com' });
+    try {
+      const info = await service.getInfo();
+      assert.equal(info.status, 'available');
+      assert.deepEqual(info.hostingCredit, expected);
+    } finally { service.dispose(); }
+  }
 });
 
 test('credit gateway stops before credit queries on identity mismatch or partial identity failure', async (context) => {
@@ -377,7 +399,33 @@ test('credit gateway rejects a body that fails after partial JSON and opens the 
   } finally { service.dispose(); }
 });
 
-test('credit deadline cancels pending body reads and holds concurrency slots until cancellation terminates', async (context) => {
+test('REST identity and history errors abort transport and cancel bodies without consuming error pages', async (context) => {
+  let failedPath = '';
+  let reads = 0;
+  let cancelled = 0;
+  let errorSignal: AbortSignal | undefined;
+  context.mock.method(globalThis, 'fetch', async (input: string | URL | Request, init?: RequestInit) => {
+    if (new URL(String(input)).pathname.endsWith(failedPath)) {
+      errorSignal = init?.signal ?? undefined;
+      return new Response(new ReadableStream({
+        pull(controller) { reads++; controller.enqueue(new TextEncoder().encode('<html>upstream error'.repeat(100_000))); },
+        cancel() { cancelled++; assert.equal(errorSignal?.aborted, true); },
+      }, { highWaterMark: 0 }), { status: 503 });
+    }
+    return identityResponse(input) ?? Response.json({ total: '0', tx_responses: [] });
+  });
+  for (failedPath of ['/node_info', '/txs']) {
+    const service = new SupportService({ ...config, restUrl: 'https://rest.example.com' });
+    try {
+      assert.equal((await service.getHistory()).status, 'unavailable');
+      assert.equal(reads, 0);
+      assert.equal(errorSignal?.aborted, true);
+    } finally { service.dispose(); }
+  }
+  assert.equal(cancelled, 2);
+});
+
+test('credit deadline retains concurrency slots during bounded body cancellation cleanup', async (context) => {
   let credits = 0;
   let aborted = 0;
   let succeed = false;
@@ -412,12 +460,75 @@ test('credit deadline cancels pending body reads and holds concurrency slots unt
   }
 });
 
+test('stuck body cancellation cannot exhaust concurrency after transport abort and cleanup grace', async (context) => {
+  let failure: 'deadline' | 'oversized' = 'deadline';
+  let succeed = false;
+  const failedBodies: ReadableStream[] = [];
+  const failedSignals: AbortSignal[] = [];
+  let cancellationCalls = 0;
+  context.mock.method(globalThis, 'fetch', async (input: string | URL | Request, init?: RequestInit) => {
+    const identity = identityResponse(input);
+    if (identity) return identity;
+    if (succeed) return Response.json(creditResponse());
+    assert.ok(init?.signal instanceof AbortSignal);
+    const signal = init.signal;
+    failedSignals.push(signal);
+    const body = new ReadableStream({
+      start(controller) { controller.enqueue(new Uint8Array(failure === 'oversized' ? 65_537 : 1)); },
+      cancel() {
+        cancellationCalls++;
+        assert.equal(signal.aborted, true, 'native transport abort must precede cancel cleanup');
+        return new Promise<void>(() => {});
+      },
+    });
+    failedBodies.push(body);
+    return new Response(body);
+  });
+  for (failure of ['deadline', 'oversized'] as const) {
+    const service = new SupportService({ ...config, restUrl: 'https://rest.example.com' }, undefined,
+      { timeoutMs: failure === 'deadline' ? 15 : 1000, circuitMs: 0, cacheMs: 0 });
+    try {
+      succeed = false;
+      for (let i = 0; i < 4; i++) assert.equal((await service.getInfo()).status, 'unavailable');
+      assert.ok(failedSignals.every((signal) => signal.aborted));
+      // The native transport is already aborted; allow bounded reader cleanup to
+      // expire even though every cancellation promise deliberately stays pending.
+      await new Promise<void>((resolve) => setTimeout(resolve, 150));
+      assert.ok(failedBodies.every((body) => !body.locked));
+      succeed = true;
+      assert.equal((await service.getInfo()).status, 'available');
+    } finally { service.dispose(); }
+  }
+  assert.equal(cancellationCalls, 8);
+  assert.equal(failedSignals.length, 8);
+});
+
+test('a custom gateway that ignores cancellation remains counted until its work actually settles', async () => {
+  let calls = 0;
+  const finish: (() => void)[] = [];
+  const f = fixture(null, { getCredit: async () => {
+    calls++;
+    await new Promise<void>((resolve) => finish.push(resolve));
+    return null;
+  } }, { timeoutMs: 10, circuitMs: 0 });
+  try {
+    for (let i = 0; i < 4; i++) assert.equal((await f.service.getInfo()).status, 'unavailable');
+    await new Promise<void>((resolve) => setTimeout(resolve, 150));
+    assert.equal((await f.service.getInfo()).status, 'unavailable');
+    assert.equal(calls, 4);
+  } finally {
+    finish.forEach((resolve) => resolve());
+    f.service.dispose();
+  }
+});
+
 test('credit transport closes local upstream sockets at the deadline and byte limit', async (context) => {
   for (const failure of ['headers', 'body', 'oversized'] as const) {
     await context.test(failure, async (context) => {
       let closeSocket!: () => void;
       const closed = new Promise<void>((resolve) => { closeSocket = resolve; });
       let credits = 0;
+      let succeed = false;
       const server = createServer((request, response) => {
         const identity = request.url === '/status'
           ? { result: { node_info: { network: config.chainId } } }
@@ -426,6 +537,7 @@ test('credit transport closes local upstream sockets at the deadline and byte li
         if (identity) { response.end(JSON.stringify(identity)); return; }
         credits++;
         assert.equal(request.url, `/liftedinit/billing/v1/credit/${tenant}`);
+        if (succeed) { response.end(JSON.stringify(creditResponse())); return; }
         request.socket.once('close', closeSocket);
         if (failure === 'body') response.write('{"credit_account":');
         if (failure === 'oversized') response.write(Buffer.alloc(64 * 1024 + 1, ' '));
@@ -439,7 +551,7 @@ test('credit transport closes local upstream sockets at the deadline and byte li
       const address = server.address();
       assert.ok(address && typeof address !== 'string');
       const url = `http://127.0.0.1:${address.port}`;
-      const service = new SupportService({ ...config, rpcUrl: url, restUrl: url }, undefined, { timeoutMs: 150 });
+      const service = new SupportService({ ...config, rpcUrl: url, restUrl: url }, undefined, { timeoutMs: 150, circuitMs: 0 });
       let closeTimer: ReturnType<typeof setTimeout> | undefined;
       try {
         const result = await service.getInfo();
@@ -449,6 +561,9 @@ test('credit transport closes local upstream sockets at the deadline and byte li
         await Promise.race([closed, new Promise<never>((_, reject) => {
           closeTimer = setTimeout(() => reject(new Error('upstream socket remained open')), 1000);
         })]);
+        succeed = true;
+        assert.equal((await service.getInfo()).status, 'available');
+        assert.equal(credits, 2);
       } finally {
         if (closeTimer) clearTimeout(closeTimer);
         service.dispose();

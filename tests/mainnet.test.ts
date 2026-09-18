@@ -5,6 +5,7 @@ import {
   MAINNET, advertisedResources, assertIdentity, buildPlan, chooseCandidate,
   mainnetPaths, publicInputs, type Candidate, type Quote,
 } from '../scripts/mainnet-config.js';
+import { withTrustedProxyCidrs } from '../scripts/runtime-proxy.js';
 
 const now = Date.parse('2026-09-17T18:00:00.000Z');
 const denom = 'factory/manifest1afk9zr2hn2jsac63h4hm60vl9z3e5u69gndzf7c99cqge3vzwjzsfmy9qj/upwr';
@@ -26,6 +27,36 @@ function quote(patch: Partial<Quote> = {}): Quote {
   };
 }
 const inputs = () => publicInputs({ tenant, image, monthlyBudgetPwr: '5', gasPrice: `0.5${denom}` });
+
+test('mainnet public inputs emit only explicit validated proxy trust and honor the environment override', () => {
+  const ordinary = buildPlan(quote(), inputs(), now);
+  assert.equal(ordinary.runtimeEnv.TRUST_PROXY_HOPS, '0');
+  assert.equal('TRUSTED_PROXY_CIDRS' in ordinary.runtimeEnv, false);
+  const trusted = publicInputs({ ...inputs(), trustedProxyCidrs: ' 192.0.2.0/24, 2001:db8::/64,192.0.2.0/24 ' });
+  assert.equal(trusted.trustedProxyCidrs, '192.0.2.0/24,2001:db8::/64');
+  assert.equal(buildPlan(quote(), trusted, now).runtimeEnv.TRUSTED_PROXY_CIDRS, trusted.trustedProxyCidrs);
+  assert.equal(publicInputs(trusted, { MAINNET_TRUSTED_PROXY_CIDRS: '192.0.2.12' }).trustedProxyCidrs, '192.0.2.12');
+  const cleared = publicInputs(trusted, { MAINNET_TRUSTED_PROXY_CIDRS: '' });
+  assert.equal(cleared.trustedProxyCidrs, '');
+  assert.equal('TRUSTED_PROXY_CIDRS' in buildPlan(quote(), cleared, now).runtimeEnv, false);
+  for (const value of ['0.0.0.0/1', '192.0.2.0/23', '2001:db8::/63', '::ffff:192.0.2.0/120', 'proxy.example.com']) {
+    assert.throws(() => publicInputs({ ...inputs(), trustedProxyCidrs: value }));
+    assert.throws(() => publicInputs({}, { MAINNET_TRUSTED_PROXY_CIDRS: value }));
+  }
+});
+
+test('testnet runtime proxy helper preserves existing trust unless explicitly changed or cleared', () => {
+  const env = { NETWORK: 'testnet', TRUST_PROXY_HOPS: '0', PUBLIC_ORIGIN: 'https://refuge.invalid' };
+  assert.deepEqual(withTrustedProxyCidrs(env), env);
+  const trusted = withTrustedProxyCidrs(env, ' 192.0.2.10,192.0.2.10,2001:db8::/64 ');
+  assert.equal(trusted.TRUSTED_PROXY_CIDRS, '192.0.2.10,2001:db8::/64');
+  assert.deepEqual(withTrustedProxyCidrs(trusted), trusted);
+  assert.deepEqual(withTrustedProxyCidrs(trusted, ''), env);
+  assert.equal('TRUSTED_PROXY_CIDRS' in env, false);
+  assert.throws(() => withTrustedProxyCidrs(env, '192.0.0.0/16'));
+  assert.throws(() => withTrustedProxyCidrs({ ...env, TRUSTED_PROXY_CIDRS: '::/1' }));
+  assert.throws(() => withTrustedProxyCidrs({ ...env, TRUST_PROXY_HOPS: '1' }));
+});
 
 test('mainnet identities must agree, be synchronized and have a recent block before SDK reads', () => {
   const rpc = { jsonrpc: '2.0', id: 1, result: { node_info: { network: String(MAINNET.chainId) }, sync_info: { catching_up: false, latest_block_height: '123', latest_block_time: new Date(now).toISOString() } } };

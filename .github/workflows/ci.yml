@@ -39,29 +39,59 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Check out source
+        id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Set up Node.js
+        id: node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
           cache: npm
       - name: Install locked check dependencies
+        id: dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Build candidate without publishing
+        id: build
         run: |
           mkdir -p .local/image-security
           docker --host unix:///var/run/docker.sock build --tag merovingian:ci --iidfile .local/image-security/image-id .
       - name: Check isolated runtime and persistence
+        id: runtime
         run: node scripts/check-runtime-image.mjs "$(cat .local/image-security/image-id)" .local/image-security/runtime.json
       - name: Scan the exact candidate and apply advisory policy
+        id: scan
         run: bash scripts/scan-runtime-image.sh "$(cat .local/image-security/image-id)" .local/image-security
       - name: Record confinement verification gap
         if: always()
         run: |
           printf '%s\n' 'AppArmor: unavailable. Named-profile enforcement and attributed denial tests require a separately reviewed profile and isolated capable runner (ENG-1038/ENG-1041).' >> "$GITHUB_STEP_SUMMARY"
-      - name: Keep sanitized image evidence
+      - name: Record image job outcome
+        # The status step uses runner Python, so failed checkout/setup/install/build
+        # still leave evidence without requiring repository code or dependencies.
+        if: always()
+        id: image_status
+        env:
+          IMAGE_CHECKOUT: ${{ steps.checkout.outcome }}
+          IMAGE_NODE: ${{ steps.node.outcome }}
+          IMAGE_DEPENDENCIES: ${{ steps.dependencies.outcome }}
+          IMAGE_BUILD: ${{ steps.build.outcome }}
+          IMAGE_RUNTIME: ${{ steps.runtime.outcome }}
+          IMAGE_SCAN: ${{ steps.scan.outcome }}
+        run: |
+          python3 - <<'PY'
+          import datetime, json, os, pathlib
+          allowed = {'success', 'failure', 'cancelled', 'skipped'}
+          stages = ['checkout', 'node', 'dependencies', 'build', 'runtime', 'scan']
+          outcomes = {stage: os.environ.get('IMAGE_' + stage.upper(), '') for stage in stages}
+          outcomes = {stage: value if value in allowed else 'unknown' for stage, value in outcomes.items()}
+          output = pathlib.Path('.local/image-security/job-status.json')
+          output.parent.mkdir(parents=True, exist_ok=True)
+          output.write_text(json.dumps({'checkedAt': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              'passed': all(value == 'success' for value in outcomes.values()), 'stageOutcomes': outcomes}, indent=2) + '\n')
+          PY
+      - name: Upload sanitized image evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -70,6 +100,7 @@ jobs:
           if-no-files-found: warn
           include-hidden-files: true
           path: |
+            .local/image-security/job-status.json
             .local/image-security/runtime.json
             .local/image-security/vulnerabilities.json
             .local/image-security/sbom.cdx.json

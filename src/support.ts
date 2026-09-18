@@ -8,6 +8,7 @@ const HASH = /^[0-9a-fA-F]{64}$/;
 const INTEGER = /^(0|[1-9][0-9]{0,77})$/;
 const MAX_TX_BYTES = 1_000_000;
 const MAX_CREDIT_RESPONSE_BYTES = 64 * 1024;
+const BODY_CLEANUP_GRACE_MS = 100;
 const UINT64_MAX = 18_446_744_073_709_551_615n;
 const HISTORY_LIMIT = 100;
 
@@ -255,6 +256,9 @@ function summarizeHistory(page: FundingHistoryPage, config: Readonly<SupportConf
 }
 
 function creditCoins(value: unknown): HostingCredit['available'] {
+  // Protobuf JSON may omit repeated fields at their empty default. Explicit
+  // null and other malformed values remain invalid at this transport boundary.
+  if (value === undefined) return [];
   if (!Array.isArray(value)) throw new Error('Invalid credit coins');
   const denoms = new Set<string>();
   return value.map((value) => {
@@ -271,25 +275,40 @@ function creditCoins(value: unknown): HostingCredit['available'] {
 function hostingCredit(value: unknown, tenant: string): HostingCredit {
   const response = object(value);
   const account = object(response?.credit_account);
+  const activeLeases = account?.active_lease_count === undefined ? '0' : account.active_lease_count;
   if (!account || !addressIsValid(account.tenant) || account.tenant.toLowerCase() !== tenant.toLowerCase()
     || !addressIsValid(account.credit_address)
-    || typeof account.active_lease_count !== 'string' || !INTEGER.test(account.active_lease_count)
-    || BigInt(account.active_lease_count) > UINT64_MAX) throw new Error('Invalid credit account');
+    || typeof activeLeases !== 'string' || !INTEGER.test(activeLeases)
+    || BigInt(activeLeases) > UINT64_MAX) throw new Error('Invalid credit account');
   return {
     available: creditCoins(response?.available_balances),
     reserved: creditCoins(account.reserved_amounts),
-    activeLeases: account.active_lease_count,
+    activeLeases,
   };
 }
 
-async function readBoundedJson(response: Response, signal: AbortSignal, limit = MAX_TX_BYTES * 2): Promise<Record<string, any>> {
+async function settleBodyCancellation(cancellation: Promise<void>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    // The native fetch controller must already be aborted. A broken body cancel
+    // hook cannot keep the service's concurrency slot or reader lock forever.
+    await Promise.race([cancellation.catch(() => {}), new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, BODY_CLEANUP_GRACE_MS);
+    })]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function readBoundedJson(response: Response, signal: AbortSignal, abortTransport: (reason: unknown) => void,
+  limit: number): Promise<Record<string, any>> {
   if (!response.body) throw new Error('Empty chain response');
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let length = 0;
   let cancellation: Promise<void> | undefined;
-  // Also cancel the reader explicitly: custom transports need not wire their body
-  // stream to fetch's signal. Keep this work pending until cancellation settles.
+  // Cancel the reader as well as the native transport, including custom response
+  // bodies whose cancel hooks are independent of fetch's signal.
   const cancel = () => cancellation ??= reader.cancel(signal.reason).catch(() => {});
   const abort = () => { void cancel(); };
   signal.addEventListener('abort', abort, { once: true });
@@ -304,7 +323,8 @@ async function readBoundedJson(response: Response, signal: AbortSignal, limit = 
       chunks.push(value);
     }
   } catch (error) {
-    await cancel();
+    abortTransport(error);
+    await settleBodyCancellation(cancel());
     throw error;
   } finally {
     signal.removeEventListener('abort', abort);
@@ -321,15 +341,31 @@ class ManifestChainGateway implements ChainGateway {
 
   constructor(private readonly config: SupportConfig) {}
 
-  private fetch(url: string, signal: AbortSignal): Promise<Response> {
-    if (this.disposed) return Promise.reject(new Error('Support service closed'));
+  private async query(url: string, signal: AbortSignal, limit = MAX_TX_BYTES * 2,
+    errorStatuses: readonly number[] = []): Promise<{ response: Response; body: Record<string, any> }> {
+    if (this.disposed) throw new Error('Support service closed');
     signal.throwIfAborted();
-    return fetch(url, { signal, redirect: 'error' });
+    const transport = new AbortController();
+    const requestSignal = AbortSignal.any([signal, transport.signal]);
+    try {
+      const response = await fetch(url, { signal: requestSignal, redirect: 'error' });
+      if (!response.ok && !errorStatuses.includes(response.status)) {
+        const error = new Error('Chain query unavailable');
+        transport.abort(error);
+        if (response.body) await settleBodyCancellation(response.body.cancel());
+        throw error;
+      }
+      const body = await readBoundedJson(response, requestSignal, (reason) => transport.abort(reason), limit);
+      return { response, body };
+    } finally {
+      // On read/size/status failure this has already aborted the socket before
+      // cleanup. It also covers fetch failures and a service deadline racing it.
+      transport.abort();
+    }
   }
 
   private async rpc(path: string, signal: AbortSignal): Promise<Record<string, any>> {
-    const response = await this.fetch(`${this.config.rpcUrl.replace(/\/$/, '')}/${path}`, signal);
-    const body = await readBoundedJson(response, signal);
+    const { response, body } = await this.query(`${this.config.rpcUrl.replace(/\/$/, '')}/${path}`, signal, MAX_TX_BYTES * 2, [400, 500]);
     // CometBFT uses HTTP 500 for JSON-RPC errors, including an absent transaction.
     if (!response.ok && !([400, 500].includes(response.status) && body.error)) throw new Error('Chain query unavailable');
     return body;
@@ -341,9 +377,7 @@ class ManifestChainGateway implements ChainGateway {
     const chainId: unknown = status.result?.node_info?.network;
     if (typeof chainId !== 'string') throw new Error('Chain identity unavailable');
     if (this.config.restUrl) {
-      const response = await this.fetch(`${this.config.restUrl.replace(/\/$/, '')}/cosmos/base/tendermint/v1beta1/node_info`, signal);
-      const info = await readBoundedJson(response, signal);
-      if (!response.ok) throw new Error('REST chain identity unavailable');
+      const { body: info } = await this.query(`${this.config.restUrl.replace(/\/$/, '')}/cosmos/base/tendermint/v1beta1/node_info`, signal);
       if (info.default_node_info?.network !== chainId) throw new Error('REST and RPC chains differ');
     }
     return chainId;
@@ -368,8 +402,7 @@ class ManifestChainGateway implements ChainGateway {
 
   async getCredit(tenant: string, signal: AbortSignal): Promise<HostingCredit | null> {
     if (!this.config.restUrl) throw new Error('REST endpoint is not configured');
-    const response = await this.fetch(`${this.config.restUrl.replace(/\/$/, '')}/liftedinit/billing/v1/credit/${encodeURIComponent(tenant)}`, signal);
-    const body = await readBoundedJson(response, signal, MAX_CREDIT_RESPONSE_BYTES);
+    const { response, body } = await this.query(`${this.config.restUrl.replace(/\/$/, '')}/liftedinit/billing/v1/credit/${encodeURIComponent(tenant)}`, signal, MAX_CREDIT_RESPONSE_BYTES, [404]);
     // Only the chain's structured gRPC NotFound means no credit account. A proxy
     // 404, malformed/partial data or another query failure must stay unavailable.
     if (response.status === 404 && body.code === 5 && typeof body.message === 'string') return null;
@@ -382,9 +415,7 @@ class ManifestChainGateway implements ChainGateway {
     const query = new URLSearchParams({
       query: `credit_funded.tenant='${tenant}'`, order_by: 'ORDER_BY_DESC', limit: String(HISTORY_LIMIT), page: '1',
     });
-    const response = await this.fetch(`${this.config.restUrl.replace(/\/$/, '')}/cosmos/tx/v1beta1/txs?${query}`, signal);
-    const page = await readBoundedJson(response, signal);
-    if (!response.ok) throw new Error('Contribution index unavailable');
+    const { body: page } = await this.query(`${this.config.restUrl.replace(/\/$/, '')}/cosmos/tx/v1beta1/txs?${query}`, signal);
     if (typeof page.total !== 'string' || !Array.isArray(page.tx_responses)) throw new Error('Invalid contribution index response');
     return { total: page.total, txResponses: page.tx_responses };
   }

@@ -57,7 +57,7 @@ async function fixture(t: TestContext, overrides: Partial<Config> = {}, support 
   const json = (path: string, body: unknown, headers: Record<string, string> = {}) => request(path, {
     method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body),
   });
-  return { base, request, json };
+  return { base, request, json, server };
 }
 
 async function mcpClient(t: TestContext, base: string) {
@@ -507,6 +507,51 @@ test('abuse limits return a retry interval while health remains available', asyn
   assert.equal((await request('/healthz')).status, 200);
 });
 
+test('unknown paths and unsupported discovery methods consume a budget before either body parser', async t => {
+  const { request } = await fixture(t);
+  const paths = ['/anything', '/healthz', '/openapi.json'];
+  for (let i = 0; i < REQUEST_LIMITS.perClient; i++) {
+    const response = await request(paths[i % paths.length]!, { method: 'POST',
+      headers: { 'Content-Type': i % 2 ? 'application/json' : 'application/x-www-form-urlencoded' },
+      body: i % 2 ? '{}' : 'a=b' });
+    assert.equal(response.status, 404); await response.arrayBuffer();
+  }
+  for (const contentType of ['application/json', 'application/x-www-form-urlencoded']) {
+    const response = await request('/another-unknown-path', { method: 'POST', headers: { 'Content-Type': contentType }, body: 'x'.repeat(8193) });
+    assert.equal(response.status, 429, 'Reject at the budget before parsing an oversized body');
+    await response.arrayBuffer();
+  }
+  for (const method of ['GET', 'HEAD']) for (const path of ['/healthz', '/openapi.json', '/mcp/server-card']) {
+    const response = await request(path, { method });
+    assert.equal(response.status, 200); await response.arrayBuffer();
+  }
+});
+
+test('unfinished bodies on unknown routes share concurrency slots and release them on completion', async t => {
+  const { base, request, server } = await fixture(t);
+  let arrived = 0;
+  server.on('request', () => { arrived++; });
+  const uploads = Array.from({ length: REQUEST_LIMITS.perClientConcurrent }, (_, i) => {
+    const body = i % 2 ? '{"a":1}' : 'a=1';
+    const req = httpRequest(new URL('/unknown-upload', base), { method: 'POST', headers: {
+      'Content-Type': i % 2 ? 'application/json' : 'application/x-www-form-urlencoded', 'Content-Length': String(body.length),
+    } });
+    const response = new Promise<number>((resolve, reject) => {
+      req.on('error', reject);
+      req.on('response', res => { res.resume(); res.on('end', () => resolve(res.statusCode!)); });
+    });
+    t.after(() => req.destroy());
+    req.write(body[0]);
+    return { req, response, remainder: body.slice(1) };
+  });
+  await waitFor(() => arrived === REQUEST_LIMITS.perClientConcurrent);
+  assert.equal((await request('/another-upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).status, 429);
+  assert.equal((await request('/healthz')).status, 200);
+  uploads.forEach(({ req, remainder }) => req.end(remainder));
+  assert.deepEqual(await Promise.all(uploads.map(upload => upload.response)), Array(REQUEST_LIMITS.perClientConcurrent).fill(404));
+  assert.equal((await request('/another-upload', { method: 'POST' })).status, 404);
+});
+
 const dashboardTenant = 'manifest1am058pdux3hyulcmfgj4m3hhrlfn8nzmx97smg';
 const dashboardVisitor = 'manifest19rl4cm2hmr8afy4kldpxz3fka4jguq0aaz02ta';
 
@@ -639,4 +684,87 @@ test('mainnet operator views are nonindexable and excluded from the marketing si
   }
   const sitemap = await (await request('/sitemap.xml')).text();
   assert.doesNotMatch(sitemap, /\/operator|\/api\/v1\/contributions/);
+});
+
+test('all MCP concurrency slots remain held after disconnect until tools settle, then all can be reused', async t => {
+  const firstGate = deferred(), secondGate = deferred();
+  let entered = 0, settled = 0;
+  let activeGate = firstGate;
+  const hold = async () => { entered++; await activeGate.promise; settled++; };
+  const support: SupportPort = { ...unavailableSupport(),
+    getInfo: async () => { await hold(); return unavailableSupport().getInfo(); },
+    verify: async () => { await hold(); return { status: 'unavailable', message: 'Local fixture.' }; },
+  };
+  const { request } = await fixture(t, {}, support);
+  const controllers = Array.from({ length: REQUEST_LIMITS.perClientConcurrent }, () => new AbortController());
+  const call = (i: number, signal?: AbortSignal) => request('/mcp', {
+    method: 'POST', ...(signal ? { signal } : {}),
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', 'MCP-Protocol-Version': '2025-11-25' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: i, method: 'tools/call', params: i % 2
+      ? { name: 'verify_contribution', arguments: { transactionHash: 'A'.repeat(64) } }
+      : { name: 'hosting_support', arguments: {} } }),
+  });
+  t.after(() => { controllers.forEach(controller => controller.abort()); firstGate.resolve(); secondGate.resolve(); });
+  const disconnected = controllers.map((controller, i) => call(i, controller.signal)
+    .then(response => response.arrayBuffer()).catch(() => undefined));
+  await waitFor(() => entered === REQUEST_LIMITS.perClientConcurrent);
+  controllers.forEach(controller => controller.abort());
+  await Promise.all(disconnected);
+  // Ensure the server observes close before checking retained tool work. Merely
+  // awaiting client abort promises does not establish that server-side event.
+  await delay(25);
+  const busy = await request('/api/v1/amenities');
+  assert.equal(busy.status, 429, 'Disconnect must not release still-running tools');
+  await busy.arrayBuffer();
+  firstGate.resolve();
+  await waitFor(() => settled === REQUEST_LIMITS.perClientConcurrent);
+  await delay(0);
+  activeGate = secondGate;
+  const reused = Array.from({ length: REQUEST_LIMITS.perClientConcurrent }, (_, i) => call(i + 10));
+  await waitFor(() => entered === REQUEST_LIMITS.perClientConcurrent * 2);
+  secondGate.resolve();
+  for (const response of await Promise.all(reused)) { assert.equal(response.status, 200); await response.arrayBuffer(); }
+  assert.equal(settled, REQUEST_LIMITS.perClientConcurrent * 2);
+});
+
+test('MCP validation resumed after disconnect cannot start chain reads or serving mutations', async t => {
+  const { McpServer } = await import('@modelcontextprotocol/sdk/server/mcp.js');
+  const prototype = McpServer.prototype as unknown as { validateToolInput: (...args: unknown[]) => Promise<unknown> };
+  const validate = prototype.validateToolInput;
+  const gate = deferred();
+  let validated = 0, supportCalls = 0, verifyCalls = 0;
+  t.mock.method(prototype, 'validateToolInput', async function (this: typeof prototype, ...args: unknown[]) {
+    const input = await validate.apply(this, args);
+    validated++;
+    await gate.promise;
+    return input;
+  });
+  const support: SupportPort = { ...unavailableSupport(),
+    getInfo: async () => { supportCalls++; return unavailableSupport().getInfo(); },
+    verify: async () => { verifyCalls++; return { status: 'unavailable', message: 'Local fixture.' }; },
+  };
+  const { request } = await fixture(t, {}, support);
+  const tools = [
+    { name: 'hosting_support', arguments: {} },
+    { name: 'verify_contribution', arguments: { transactionHash: 'A'.repeat(64) } },
+    { name: 'enjoy_amenity', arguments: { amenity: 'null-tea' } },
+  ];
+  const controllers = tools.map(() => new AbortController());
+  t.after(() => { controllers.forEach(controller => controller.abort()); gate.resolve(); });
+  const pending = tools.map((params, i) => request('/mcp', {
+    method: 'POST', signal: controllers[i]!.signal,
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', 'MCP-Protocol-Version': '2025-11-25' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: i, method: 'tools/call', params }),
+  }).then(response => response.arrayBuffer()).catch(() => undefined));
+  await waitFor(() => validated === tools.length);
+  controllers.forEach(controller => controller.abort());
+  await Promise.all(pending);
+  await delay(25);
+  gate.resolve();
+  await delay(25);
+  assert.equal(supportCalls, 0);
+  assert.equal(verifyCalls, 0);
+  const stats = await request('/api/v1/stats');
+  assert.equal(stats.status, 200);
+  assert.equal((await stats.json()).total, '0');
 });

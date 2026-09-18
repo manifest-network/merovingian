@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 
@@ -25,25 +26,63 @@ const scannerSchema = z.object({
   VulnerabilityDB: z.object({Version: z.literal(2), UpdatedAt: z.iso.datetime({offset:true}), NextUpdate: z.iso.datetime({offset:true})}),
 });
 
+const policyFailures = {
+  invalid_arguments: 'Expected scan, scanner metadata, exceptions, and output arguments.',
+  unreadable_scan: 'Scan evidence could not be read.',
+  unreadable_scanner: 'Scanner metadata could not be read.',
+  unreadable_exceptions: 'Advisory exceptions could not be read.',
+  invalid_scan_json: 'Scan evidence is not valid JSON.',
+  invalid_scanner_json: 'Scanner metadata is not valid JSON.',
+  invalid_exceptions_json: 'Advisory exceptions are not valid JSON.',
+  invalid_scan_schema: 'Scan evidence does not match the required schema.',
+  invalid_scanner_schema: 'Scanner metadata does not match the pinned version and required schema.',
+  invalid_exceptions_schema: 'Advisory exceptions do not match the required schema.',
+  stale_database: 'Vulnerability database is stale or future-dated.',
+  unsupported_os: 'Unsupported image OS release.',
+  missing_coverage: 'Expected OS and application dependency scan coverage.',
+  detected_credentials: 'Possible credentials found in candidate image.',
+  invalid_exception_window: 'Exception is expired or outside its review window.',
+  duplicate_exception: 'Duplicate advisory exception.',
+  unused_exception: 'Unused exception must be removed or reviewed.',
+  unexpected_failure: 'Unexpected image policy evaluation failure.',
+  artifact_write_failed: 'Image policy evidence could not be written.',
+} as const;
+type PolicyFailureCode = keyof typeof policyFailures;
+
+class ImagePolicyError extends Error {
+  constructor(readonly code: PolicyFailureCode) { super(policyFailures[code]); }
+}
+function fail(code: PolicyFailureCode): never { throw new ImagePolicyError(code); }
+function parse<T>(schema: z.ZodType<T>, value: unknown, code: PolicyFailureCode): T {
+  const result = schema.safeParse(value);
+  if (!result.success) return fail(code);
+  return result.data;
+}
+
+export function imagePolicyFailure(error: unknown, now = Date.now()) {
+  const code = error instanceof ImagePolicyError ? error.code : 'unexpected_failure';
+  return { checkedAt: new Date(now).toISOString(), passed: false as const, error: { code, message: policyFailures[code] } };
+}
+
 export function evaluateImageScan(rawScan: unknown, rawScanner: unknown, rawExceptions: unknown, now = Date.now()) {
-  const scan = scanSchema.parse(rawScan);
-  const scanner = scannerSchema.parse(rawScanner);
-  const exceptions = z.array(exceptionSchema).parse(rawExceptions);
+  const scan = parse(scanSchema, rawScan, 'invalid_scan_schema');
+  const scanner = parse(scannerSchema, rawScanner, 'invalid_scanner_schema');
+  const exceptions = parse(z.array(exceptionSchema), rawExceptions, 'invalid_exceptions_schema');
   const updated = Date.parse(scanner.VulnerabilityDB.UpdatedAt);
-  if (updated > now + 5 * 60_000 || now - updated > 48 * 60 * 60_000) throw new Error('Vulnerability database is stale or future-dated');
-  if (scan.Metadata.OS.EOSL) throw new Error('Unsupported image OS release');
+  if (updated > now + 5 * 60_000 || now - updated > 48 * 60 * 60_000) fail('stale_database');
+  if (scan.Metadata.OS.EOSL) fail('unsupported_os');
   if (!scan.Results.some(result => result.Class === 'os-pkgs' && result.Packages?.length)
     || !scan.Results.some(result => result.Class === 'lang-pkgs' && result.Type === 'node-pkg' && result.Packages?.length)) {
-    throw new Error('Expected OS and application dependency scan coverage');
+    fail('missing_coverage');
   }
-  if (scan.Results.some(result => result.Secrets?.length)) throw new Error('Possible credentials found in candidate image');
+  if (scan.Results.some(result => result.Secrets?.length)) fail('detected_credentials');
   const key = (advisory: string, pkg: string, version: string, target: string, path: string) => JSON.stringify([advisory,pkg,version,target,path]);
   const allowed = new Map<string, z.infer<typeof exceptionSchema>>();
   for (const item of exceptions) {
     const review = Date.parse(item.reviewedAt), expiry = Date.parse(item.expiresAt);
-    if (review > now || expiry <= now || expiry <= review || expiry - review > 90 * 24 * 60 * 60_000) throw new Error('Exception is expired or outside its review window');
+    if (review > now || expiry <= now || expiry <= review || expiry - review > 90 * 24 * 60 * 60_000) fail('invalid_exception_window');
     const id = key(item.advisory,item.package,item.version,item.target,item.path);
-    if (allowed.has(id)) throw new Error('Duplicate advisory exception');
+    if (allowed.has(id)) fail('duplicate_exception');
     allowed.set(id,item);
   }
   const blocked = [], accepted = [], reported = [];
@@ -59,19 +98,36 @@ export function evaluateImageScan(rawScan: unknown, rawScanner: unknown, rawExce
       else blocked.push(row);
     } else reported.push(row);
   }
-  if ([...allowed.keys()].some(id => !used.has(id))) throw new Error('Unused exception must be removed or reviewed');
+  if ([...allowed.keys()].some(id => !used.has(id))) fail('unused_exception');
   return {checkedAt:new Date(now).toISOString(), imageId:scan.Metadata.ImageID,
     scannerVersion:scanner.Version, databaseUpdatedAt:scanner.VulnerabilityDB.UpdatedAt,
     passed:blocked.length === 0, blocked, accepted, reported};
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+export function readImagePolicy(scan: string, scanner: string, exceptions: string, now = Date.now()) {
   try {
-    const [scan, scanner, exceptions, output] = process.argv.slice(2);
-    if (!scan || !scanner || !exceptions || !output) throw new Error('Expected scan, scanner metadata, exceptions, and output');
-    const result = evaluateImageScan(...[scan, scanner, exceptions].map(path => JSON.parse(readFileSync(path,'utf8'))) as [unknown,unknown,unknown]);
+    const read = (path: string, kind: 'scan' | 'scanner' | 'exceptions') => {
+      let text: string;
+      try { text = readFileSync(path, 'utf8'); } catch { return fail(`unreadable_${kind}`); }
+      try { return JSON.parse(text) as unknown; } catch { return fail(`invalid_${kind}_json`); }
+    };
+    return evaluateImageScan(read(scan, 'scan'), read(scanner, 'scanner'), read(exceptions, 'exceptions'), now);
+  } catch (error) { return imagePolicyFailure(error, now); }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const [scan, scanner, exceptions, output] = process.argv.slice(2);
+  try {
+    if (!scan || !scanner || !exceptions || !output) fail('invalid_arguments');
+    const result = readImagePolicy(scan, scanner, exceptions);
+    mkdirSync(dirname(output), {recursive:true});
     writeFileSync(output, JSON.stringify(result,null,2)+'\n');
-    console.log(`Image advisory policy: ${result.blocked.length} blocked, ${result.accepted.length} reviewed exceptions, ${result.reported.length} nonblocking records.`);
+    if ('error' in result) console.error(`Image advisory policy failed [${result.error.code}]: ${result.error.message}`);
+    else console.log(`Image advisory policy: ${result.blocked.length} blocked, ${result.accepted.length} reviewed exceptions, ${result.reported.length} nonblocking records.`);
     if (!result.passed) process.exitCode = 1;
-  } catch { console.error('Image advisory policy failed: invalid/missing evidence, stale database or invalid exception.'); process.exitCode = 1; }
+  } catch (error) {
+    const failure = imagePolicyFailure(error instanceof ImagePolicyError ? error : new ImagePolicyError('artifact_write_failed'));
+    console.error(`Image advisory policy failed [${failure.error.code}]: ${failure.error.message}`);
+    process.exitCode = 1;
+  }
 }

@@ -21,8 +21,10 @@ transport's fallback body parser. Form input permits at most five parameters.
 
 ## Request and concurrency budgets
 
-The `/api`, `/mcp`, `/visit`, and `/operator` routes share these process-local
-limits. Public health and discovery remain available when a budget is exhausted.
+All requests that reach body parsing share these process-local limits, including
+unknown paths and unsupported methods on health and discovery paths. Public
+GET/HEAD pages, health, discovery and discovery preflights terminate before body
+parsing and remain available when a budget is exhausted.
 
 | Budget | Limit |
 | --- | ---: |
@@ -42,7 +44,11 @@ guarantees against distributed clients. HTTP 429 includes `Retry-After`.
 
 Concurrency covers body parsing, handling and the response lifetime. Async HTTP
 handlers and MCP chain tools retain their slot after the requester disconnects
-until the work settles. Finished or abandoned uploads release their slots. A
+until the work settles. MCP's HTTP response wait ends on disconnect even when
+the SDK leaves its JSON response promise unresolved; independent tool accounting
+then releases the slot when the actual work finishes. Deferred tool dispatch
+cannot start a chain read or record a serving after the response closes.
+Finished or abandoned uploads release their slots. A
 request-window reset does not reset outstanding work. The chain service also has
 its own transport bounds and concurrency budget. These limits do not replace
 provider connection, resource, and ingress controls. Process restarts reset the
@@ -53,8 +59,11 @@ in-memory budgets; multiple replicas do not coordinate them.
 `TRUSTED_PROXY_CIDRS` is a comma-separated list of explicit IPv4/IPv6 addresses or
 CIDR ranges, limited to 32 entries. Empty or absent means no forwarded address is
 trusted: the socket peer identifies the client. Hostnames, Express range aliases
-such as `loopback` or `uniquelocal`, zero-length prefixes and hop counts are
-rejected. The legacy `TRUST_PROXY_HOPS=0` setting remains a safe compatibility
+such as `loopback` or `uniquelocal`, hop counts, and ranges wider than IPv4 `/24`
+or IPv6 `/64` are rejected. IPv4-mapped CIDRs must use IPv4 notation; bare mapped
+IP addresses are accepted. These prefix limits are configuration guardrails,
+not proof that every address in an accepted range belongs to trusted ingress.
+The legacy `TRUST_PROXY_HOPS=0` setting remains a safe compatibility
 value for accepted deployment manifests; every nonzero legacy value fails startup.
 
 For example, an isolated local fixture can trust `127.0.0.2/32` as its sole proxy
@@ -87,5 +96,6 @@ networking allowed. Fixtures use in-memory counters and mocked chain support.
 They cover batch rejection with zero side effects, normal single calls, malformed
 MIME types, a real loopback proxy that appends the peer address, forged forwarded
 headers through and around that proxy, equivalent IPv6 spellings, request budget
-fairness, and concurrency behavior on completion and disconnect. They make no
+fairness, body parsing on unknown routes, and concurrency behavior on completion
+and disconnect. They make no
 production requests or payments.

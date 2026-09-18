@@ -5,7 +5,7 @@ import { Lease, LeaseState } from '@manifest-network/manifestjs/dist/codegen/lif
 import { MAINNET } from '../scripts/mainnet-config.js';
 import type { LaunchBinding } from '../scripts/mainnet-launch-plan.js';
 import { MAINNET_PROVIDER } from '../scripts/mainnet-provider.js';
-import { MAINNET_UPDATE_LEASE, advanceMainnetUpdate, assertUpdateHistoryCanProceed, decodeReleaseManifest, mainnetUpdateFetch, prepareMainnetUpdate, type MainnetUpdateState, type UpdateObservation } from '../scripts/mainnet-update.js';
+import { MAINNET_UPDATE_LEASE, advanceMainnetUpdate, assertMainnetUpdateIntent, assertUpdateHistoryCanProceed, decodeReleaseManifest, mainnetUpdateFetch, parseMainnetUpdateArguments, prepareMainnetUpdate, type MainnetUpdateState, type UpdateObservation } from '../scripts/mainnet-update.js';
 
 const tenant = 'manifest1hkmrmsc6zjr7gm2wgtrtce7vgxeq9e402x5rf5';
 const denom = 'factory/manifest1afk9zr2hn2jsac63h4hm60vl9z3e5u69gndzf7c99cqge3vzwjzsfmy9qj/upwr';
@@ -53,6 +53,70 @@ test('update refuses other lease identities, domain changes, price changes and n
     const changed = structuredClone(current); mutate(changed);
     assert.throws(() => prepareMainnetUpdate(binding, changed, image('b')));
   }
+});
+
+test('image update preserves, replaces or explicitly clears validated existing proxy trust', () => {
+  const { binding, current } = fixture();
+  const raw = JSON.parse(current.active!.manifestJson);
+  raw.services.refuge.env.TRUSTED_PROXY_CIDRS = '192.0.2.0/24';
+  current.active!.manifestJson = JSON.stringify(raw);
+  current.active!.manifestHash = hash(current.active!.manifestJson);
+  const preserve = prepareMainnetUpdate(binding, current, image('b'));
+  assert.equal(JSON.parse(preserve.manifestJson).services.refuge.env.TRUSTED_PROXY_CIDRS, '192.0.2.0/24');
+  const replace = prepareMainnetUpdate(binding, current, image('b'), { trustedProxyCidrs: ' 192.0.2.12,2001:db8::/64 ' });
+  assert.equal(JSON.parse(replace.manifestJson).services.refuge.env.TRUSTED_PROXY_CIDRS, '192.0.2.12,2001:db8::/64');
+  assert.equal(replace.manifestHash, hash(replace.manifestJson));
+  assert.notEqual(replace.manifestHash, preserve.manifestHash);
+  const clear = prepareMainnetUpdate(binding, current, image('b'), { trustedProxyCidrs: '' });
+  assert.equal('TRUSTED_PROXY_CIDRS' in JSON.parse(clear.manifestJson).services.refuge.env, false);
+  assert.equal(JSON.parse(clear.manifestJson).services.refuge.env.TRUST_PROXY_HOPS, '0');
+  assert.throws(() => prepareMainnetUpdate(binding, current, current.active!.image, { trustedProxyCidrs: '' }), /requested_image_already_active/);
+  for (const value of ['0.0.0.0/1', '192.0.2.0/23', '2001:db8::/63', '::ffff:192.0.2.0/120', 'proxy.example.com']) {
+    assert.throws(() => prepareMainnetUpdate(binding, current, image('b'), { trustedProxyCidrs: value }), /invalid_update_configuration/);
+    raw.services.refuge.env.TRUSTED_PROXY_CIDRS = value;
+    const text = JSON.stringify(raw);
+    assert.throws(() => prepareMainnetUpdate(binding, { ...current, active: { ...current.active!, manifestJson: text, manifestHash: hash(text) } }, image('b')), /update_manifest_not_in_reviewed_scope/);
+  }
+});
+
+test('modern manifests without legacy hop counts remain within the reviewed update scope', () => {
+  const { binding, current } = fixture();
+  const raw = JSON.parse(current.active!.manifestJson);
+  delete raw.services.refuge.env.TRUST_PROXY_HOPS;
+  raw.services.refuge.env.TRUSTED_PROXY_CIDRS = '192.0.2.10';
+  current.active!.manifestJson = JSON.stringify(raw);
+  current.active!.manifestHash = hash(current.active!.manifestJson);
+  const state = prepareMainnetUpdate(binding, current, image('b'));
+  assert.equal(JSON.parse(state.manifestJson).services.refuge.env.TRUSTED_PROXY_CIDRS, '192.0.2.10');
+  assert.equal('TRUST_PROXY_HOPS' in JSON.parse(state.manifestJson).services.refuge.env, false);
+});
+
+test('update CLI accepts explicit clear and rejects malformed or ambiguous proxy arguments', () => {
+  const args = ['prepare', '--image', image('b'), '--helper', 'fixture-helper', '--home', 'fixture-home', '--key-name', 'fixture-key'];
+  assert.equal(parseMainnetUpdateArguments(args).trustedProxyCidrs, undefined);
+  assert.equal(parseMainnetUpdateArguments([...args, '--trusted-proxy-cidrs', ' 192.0.2.10 ']).trustedProxyCidrs, '192.0.2.10');
+  assert.equal(parseMainnetUpdateArguments([...args, '--trusted-proxy-cidrs', '']).trustedProxyCidrs, '');
+  for (const extra of [ ['--trusted-proxy-cidrs'], ['--trusted-proxy-cidrs', '0.0.0.0/1'], ['--trusted-proxy-cidrs', '192.0.2.10', '--trusted-proxy-cidrs', ''], ['--unknown', '192.0.2.10'] ]) {
+    assert.throws(() => parseMainnetUpdateArguments([...args, ...extra]));
+  }
+  assert.throws(() => parseMainnetUpdateArguments(['prepare', '--image', image('b'), '--helper', '', '--home', 'fixture-home', '--key-name', 'fixture-key']));
+});
+
+test('resumed update intent rejects a conflicting explicit proxy flag without changing reviewed bytes', () => {
+  const { binding, current, state: legacy } = fixture();
+  assert.doesNotThrow(() => assertMainnetUpdateIntent(legacy));
+  assert.doesNotThrow(() => assertMainnetUpdateIntent(legacy, ''));
+  assert.throws(() => assertMainnetUpdateIntent(legacy, '192.0.2.10'), /conflicts_with_journal/);
+  const state = prepareMainnetUpdate(binding, current, image('b'), { trustedProxyCidrs: '192.0.2.10' });
+  const original = structuredClone(state);
+  assert.doesNotThrow(() => assertMainnetUpdateIntent(state));
+  assert.doesNotThrow(() => assertMainnetUpdateIntent(state, ' 192.0.2.10,192.0.2.10 '));
+  for (const phase of ['prepared', 'attempted', 'accepted', 'uncertain', 'ready'] as const) {
+    assert.throws(() => assertMainnetUpdateIntent({ ...state, phase }, '192.0.2.11'), /conflicts_with_journal/);
+    assert.throws(() => assertMainnetUpdateIntent({ ...state, phase }, ''), /conflicts_with_journal/);
+  }
+  assert.deepEqual(state, original);
+  assert.throws(() => assertMainnetUpdateIntent({ ...state, manifestJson: state.manifestJson + ' ' }, '192.0.2.10'), /update_intent_changed/);
 });
 
 test('update attempt is persisted before the one POST and readiness requires matching authoritative release', async () => {

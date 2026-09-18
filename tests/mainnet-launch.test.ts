@@ -3,7 +3,7 @@ import test from 'node:test';
 import { Lease, LeaseState } from '@manifest-network/manifestjs/dist/codegen/liftedinit/billing/v1/types.js';
 import { MAINNET, type Quote } from '../scripts/mainnet-config.js';
 import { prepareDeployment } from '../scripts/mainnet-preview.js';
-import { approvedFeeBudget, launchBinding, prepareLaunch, remainingFeeBudget, verifyLaunchLease } from '../scripts/mainnet-launch-plan.js';
+import { approvedFeeBudget, inputHash, launchBinding, prepareLaunch, remainingFeeBudget, verifyLaunchLease } from '../scripts/mainnet-launch-plan.js';
 import { advanceLaunch, type LaunchDependencies, type LaunchState } from '../scripts/mainnet-launch.js';
 import type { TransactionRecord } from '../scripts/mainnet-transactions.js';
 import type { PublicProviderStatus } from '../scripts/mainnet-provider.js';
@@ -63,6 +63,16 @@ async function fixture() {
   return { initial, deps, records, events, lease: () => lease, uploads: () => uploads, signs: () => signs, status };
 }
 
+test('launch input hashes preserve old journals and bind every explicit proxy setting', () => {
+  const historicalHash = '39e9d1acce9aa15b2e7baa3859a7670c5a7f9e6e30e05cecc9495df4b051d500';
+  assert.equal(inputHash(inputs), historicalHash);
+  assert.equal(inputHash({ ...inputs, trustedProxyCidrs: undefined }), historicalHash);
+  assert.notEqual(inputHash({ ...inputs, trustedProxyCidrs: '' }), historicalHash);
+  assert.notEqual(inputHash({ ...inputs, trustedProxyCidrs: '192.0.2.10' }), historicalHash);
+  assert.notEqual(inputHash({ ...inputs, trustedProxyCidrs: '192.0.2.10' }), inputHash({ ...inputs, trustedProxyCidrs: '192.0.2.11' }));
+  assert.equal(inputHash({ ...inputs, trustedProxyCidrs: ' 192.0.2.10,192.0.2.10 ' }), inputHash({ ...inputs, trustedProxyCidrs: '192.0.2.10' }));
+});
+
 test('launch commits one lease then domain then provider payload; rerun reuses both transactions and upload', async () => {
   const f = await fixture();
   const state = await advanceLaunch(f.initial, inputs, f.deps);
@@ -110,6 +120,7 @@ test('resume refuses changed configuration, foreign leases, wrong locked price, 
   const f = await fixture();
   await advanceLaunch(f.initial, inputs, f.deps);
   await assert.rejects(advanceLaunch(f.initial, { ...inputs, image: `ghcr.io/fmorency/merovingian@sha256:${'b'.repeat(64)}` }, f.deps), /changed_launch_state/);
+  await assert.rejects(advanceLaunch(f.initial, { ...inputs, trustedProxyCidrs: '192.0.2.10' }, f.deps), /changed_launch_state/);
   for (const modify of [
     (l: Lease) => { l.providerUuid = leaseUuid; },
     (l: Lease) => { l.items[0].lockedPrice.amount = '2'; },

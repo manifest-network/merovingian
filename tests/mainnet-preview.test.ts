@@ -52,6 +52,14 @@ test('preview rejects stale network/price/budget/state inputs before simulation'
   await assert.rejects(() => prepareDeployment(lease, inputs(), now), /plan_not_ready/);
 });
 
+test('unsigned preview binds explicit proxy trust into the provider manifest and lease hash', async () => {
+  const ordinary = await prepareDeployment(quote(), inputs(), now);
+  const trusted = await prepareDeployment(quote(), publicInputs({ ...inputs(), trustedProxyCidrs: '192.0.2.0/24,2001:db8::/64' }), now);
+  assert.equal(JSON.parse(trusted.manifestJson).services.refuge.env.TRUSTED_PROXY_CIDRS, '192.0.2.0/24,2001:db8::/64');
+  assert.notEqual(trusted.metaHash, ordinary.metaHash);
+  assert.equal(Buffer.from(trusted.createLease.value.metaHash).toString('hex'), createHash('sha256').update(trusted.manifestJson).digest('hex'));
+});
+
 test('preview gas arithmetic is exact, validates both limits, and refuses excessive or malformed RPC gas', () => {
   assert.deepEqual(previewFee(101, denom), { simulatedGas: '101', gasMultiplier: '1.5', gasLimit: '152', gasPrice: `0.5${denom}`, amountBase: '76', amountPwr: '0.000076', denom });
   assert.equal(previewFee(3, denom).amountBase, '3');
