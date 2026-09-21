@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "version": "0.4.4",
+  "origin": "https://merovingian.manifest.network",
+  "source": {
+    "pullRequest": "https://github.com/manifest-network/merovingian/pull/4",
+    "mergedCommit": "feacd4ec129fbbaa8b8d661eaef279ded623d55b",
+    "imageSourceCommit": "685ce96949fdb3fd5cc12f2c9d901a3ab76187c1",
+    "gitTree": "c277db71ab8fafdf04c05df606ec6e8bf9faa635",
+    "sameSourceTree": true,
+    "mainCi": "https://github.com/manifest-network/merovingian/actions/runs/35602896692",
+    "ciPassed": true
+  },
+  "preparationEvidence": {
+    "path": "release-0.4.4-preparation.json",
+    "sha256": "a7c5df5e2822d80cfdd3d44555a37675e604e11d39edf2e1635fd934c6039b74",
+    "testsPassed": 193,
+    "reusedVerifiedCandidateWithoutRebuild": true
+  },
+  "imagePublication": {
+    "image": "ghcr.io/manifest-network/merovingian@sha256:4af4d3da11a31914d796da3f29a55e679c5c3ec366311b4601e4e38426e97621",
+    "tag": "0.4.4",
+    "anonymous": true,
+    "manifestDigestVerified": true,
+    "tagManifestBytesMatchLocal": true,
+    "digestManifestBytesMatchLocal": true,
+    "configurationDigest": "sha256:24423d7d74c3a91fddb530a659e7c555154a21f0385dfbc0e36542ea6f47127d",
+    "configurationBytesMatchLocal": true,
+    "architecture": "amd64",
+    "os": "linux",
+    "user": "1000:1000",
+    "dataVolume": "/data",
+    "allLayersAnonymouslyDownloadedAndHashed": true,
+    "layerCount": 10,
+    "verificationStartedAt": "2026-09-21T13:09:53.334982+00:00",
+    "verificationCompletedBeforeDeploymentReadyAt": "2026-09-21T13:11:11.444Z",
+    "timingNote": "Verification completed before the lease update was submitted; its exact completion time was not recorded. The ready observation is a conservative upper bound."
+  },
+  "deployment": {
+    "leaseId": "01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd",
+    "providerRelease": 6,
+    "status": "ready",
+    "manifestHash": "7c9773072774c5f02736cda525d2a77892ba449a56258512f0f84fd85043985d",
+    "activeImage": "ghcr.io/manifest-network/merovingian@sha256:4af4d3da11a31914d796da3f29a55e679c5c3ec366311b4601e4e38426e97621",
+    "readyRecordedAt": "2026-09-21T13:11:11.444Z",
+    "timingNote": "Recorded after observing the active provider release ready; not the exact provider transition time.",
+    "imageOnlyChange": true,
+    "runtimeEnvironmentPreserved": true,
+    "counterPath": "/data/visits.sqlite",
+    "runtimeUser": "1000:1000",
+    "proxyTrust": "empty",
+    "updatePostAttempts": 1,
+    "newLease": false,
+    "chainTransaction": false,
+    "additionalFunding": false,
+    "dnsChange": false
+  },
+  "liveAcceptance": {
+    "checkedAt": "2026-09-21T13:13:36.048Z",
+    "origin": "https://merovingian.manifest.network",
+    "passed": true,
+    "health": {
+      "status": "ok",
+      "network": "mainnet",
+      "chainId": "manifest-ledger-mainnet",
+      "retired": false,
+      "version": "0.4.4"
+    },
+    "identities": {
+      "currentCard": {
+        "name": "io.github.manifest-network/merovingian",
+        "version": "0.4.4"
+      },
+      "legacyCard": {
+        "name": "io.github.manifest-network/merovingian",
+        "version": "0.4.4"
+      },
+      "mcp": {
+        "name": "io.github.manifest-network/merovingian",
+        "version": "0.4.4"
+      },
+      "openapiVersion": "0.4.4"
+    },
+    "mcp": {
+      "protocolVersion": "2025-03-26",
+      "availableTools": [
+        "enjoy_amenity",
+        "hosting_support",
+        "list_amenities",
+        "verify_contribution"
+      ],
+      "calls": [
+        "initialize",
+        "tools/list"
+      ],
+      "toolCallsPerformed": false
+    },
+    "servingPersistence": {
+      "beforeCheckedAt": "2026-09-21T13:09:51.909Z",
+      "before": {
+        "network": "mainnet",
+        "chainId": "manifest-ledger-mainnet",
+        "status": "available",
+        "since": "2026-09-17T20:29:18.301Z",
+        "counts": {
+          "byte-chip-cookie": "8",
+          "null-tea": "6",
+          "rgb-sauna": "5"
+        },
+        "total": "19",
+        "storage": "persistent"
+      },
+      "after": {
+        "network": "mainnet",
+        "chainId": "manifest-ledger-mainnet",
+        "status": "available",
+        "since": "2026-09-17T20:29:18.301Z",
+        "counts": {
+          "byte-chip-cookie": "8",
+          "null-tea": "6",
+          "rgb-sauna": "5"
+        },
+        "total": "19",
+        "storage": "persistent"
+      },
+      "sameStartDate": true,
+      "noDecrease": true,
+      "observedDifferences": {
+        "byte-chip-cookie": "0",
+        "null-tea": "0",
+        "rgb-sauna": "0",
+        "total": "0"
+      },
+      "differenceAttribution": "Not attributed; other visitors may use the live service during the release.",
+      "afterObservedByAt": "2026-09-21T13:13:36.048Z",
+      "timingNote": "Final counts were parsed and checked before this report timestamp; exact final response time was not recorded."
+    },
+    "testVisitPerformed": false,
+    "paymentPerformed": false,
+    "scope": "Read-only production health, identities, discovery, MCP initialize/tool listing, and persistent counters. No serving or chain-tool calls."
+  },
+  "acceptanceHarnessCorrection": {
+    "initialFailure": "The local checker expected application/json for the current MCP server card.",
+    "correctedExpectedMediaType": "application/mcp-server-card+json",
+    "endpoint": "/mcp/server-card",
+    "productionCodeChanged": false,
+    "finalAcceptancePassed": true
+  },
+  "registryPublication": {
+    "checkedAt": "2026-09-21T13:13:54.816064+00:00",
+    "registry": "https://registry.modelcontextprotocol.io",
+    "name": "io.github.manifest-network/merovingian",
+    "version": "0.4.4",
+    "metadataSha256": "c2c33a0105b9f0af82cb6ae0ab5d774b5c9e4b5c480c10aecb5358dbe77c2f69",
+    "exactRecordUrl": "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.4",
+    "latestRecordUrl": "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/latest",
+    "publishedAt": "2026-09-21T13:13:54.140771Z",
+    "active": true,
+    "isLatest": true,
+    "exactMetadataMatch": true,
+    "hashedFile": "server.json",
+    "hashedFileCommit": "feacd4ec129fbbaa8b8d661eaef279ded623d55b",
+    "metadataComparison": "Parsed server objects in both exact-version and latest records equal the committed server.json. The SHA-256 covers the exact committed file bytes, including whitespace and trailing newline."
+  },
+  "scope": "Explicitly authorized image publication, existing-lease image update, and registry publication; acceptance used read-only production checks with no live serving or payment.",
+  "remainingProviderAcceptance": [
+    "ENG-1038 ingress topology and effective runtime attestation",
+    "ENG-1041 named AppArmor profile enforcement and denial attribution"
+  ]
+}

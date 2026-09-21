@@ -1,21 +1,30 @@
 # MCP Registry publication and discovery
 
-Version `0.4.3` is deployed on mainnet and published as the latest version in the
+Version `0.4.4` is deployed on mainnet and published as the latest version in the
 official MCP Registry. The generated `server.json` uses the registry identity
 `io.github.manifest-network/merovingian` and Streamable HTTP at
 `https://merovingian.manifest.network/mcp`.
 
-For the [prepared `0.4.4` release](RELEASE-0.4.4.md), the working `server.json`
-now identifies `0.4.4`; it has not been published. Version `0.4.3` remains live
-and published. The dated metadata matches and saved responses below describe
-their original release files, not the current prepared file.
+Version `0.4.4` was published after successful live acceptance and explicit
+approval at **2026-09-21T13:13:54.140771Z** using official `mcp-publisher` 1.8.1.
+The [exact-version record](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.4)
+and [latest record](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/latest)
+returned `active`, `isLatest: true`, and metadata exactly matching the approved
+`server.json`, checked at **2026-09-21T13:13:54.816064Z**. Its exact file SHA-256 is
+`c2c33a0105b9f0af82cb6ae0ab5d774b5c9e4b5c480c10aecb5358dbe77c2f69`.
+The temporary registry login was removed after verification. See the
+[release notes](RELEASE-0.4.4.md) and
+[publication evidence](evidence/release-0.4.4.json).
+
+The dated metadata matches and saved responses below describe their original
+release files. They remain historical records after the `0.4.4` publication.
 
 Version `0.4.3` was published after explicit approval at
 **2026-09-18T15:13:34.27966Z** using official `mcp-publisher` 1.8.1. The
 [exact-version record](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.3)
-and [latest record](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/latest)
+and [then-latest record](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/latest)
 both returned `active`, `isLatest: true`, and metadata exactly matching
-`server.json` at **2026-09-18T15:13:44.812579Z**. The
+the then-current `server.json` at **2026-09-18T15:13:44.812579Z**. The
 [saved `0.4.3` response](evidence/mcp-registry-0.4.3.json) preserves that public
 result. The temporary local registry login was removed after verification.
 
@@ -26,7 +35,7 @@ both returned the approved metadata with status `active` and `isLatest: true` at
 the publication check.
 Publication used the official `mcp-publisher` 1.8.1 release after explicit user
 approval. Those publication checks describe the historical `0.4.2` release;
-the live application has since advanced to `0.4.3`.
+the live application has since advanced through `0.4.3` to `0.4.4`.
 The [saved `0.4.2` registry response](evidence/mcp-registry-0.4.2.json) preserves
 the exact published metadata; do not regenerate or overwrite that historical record.
 
@@ -37,8 +46,8 @@ snapshot named by the index and rejects missing, unsafe, or changed artifacts.
 It also requires every `mcp-registry-*.json` file in the evidence directory,
 except the index itself, to have an index entry.
 It never rewrites the snapshots or repairs hashes automatically.
-Both responses retain `isLatest: true` because each described a different moment;
-neither is a claim about the current registry state. The original standalone
+Earlier responses retain `isLatest: true` because each described a different moment;
+these saved values are not claims about the current registry state. The original standalone
 `0.4.2` capture time was not recorded, but its complete parsed object matches the
 independent discovery response observed between **13:44:54.588Z and 13:44:56.009Z**
 on 2026-09-18. The `0.4.3` capture completed by **15:13:44.812579Z**; its individual
@@ -57,9 +66,10 @@ git show 300ac773f28dd61bd804d376cbddcd6ffbd5e82a:server.json | sha256sum
 ## Identity and access
 
 The GitHub namespace is controlled through an owner of the `manifest-network`
-organization. Live `0.4.3` aligns the registry, server card, and MCP initialization
+organization. Release `0.4.3` aligned the registry, server card, and MCP initialization
 names to `io.github.manifest-network/merovingian`; read-only acceptance verified
-the change on 2026-09-18. The earlier `0.4.2` card and runtime returned
+the change on 2026-09-18. Release `0.4.4` preserves that identity, verified again
+on 2026-09-21. The earlier `0.4.2` card and runtime returned
 `network.manifest.merovingian/merovingian`, as preserved in the historical
 [discovery report](MCP-DISCOVERY.md). The HTTPS origin and remote endpoint stay
 the same.
@@ -115,8 +125,8 @@ npm run registry:check
 Validation sends this public JSON to the official registry validation API. It does
 not publish and is not an offline check. Do not add credentials or private headers
 to the record. Review the exact namespace, version, description, endpoint, and
-repository URL before publication. The `0.4.3` release completed this workflow
-after its deployment passed verification. Future publications require review
+repository URL before publication. The `0.4.3` and `0.4.4` releases completed this workflow
+after their deployments passed verification. Future publications require review
 and explicit authorization for their own version and metadata.
 
 As checked on 2026-09-18, the interactive device flow cannot grant our organization
