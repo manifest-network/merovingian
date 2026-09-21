@@ -1,15 +1,19 @@
-# Release 0.4.4 — historical preparation
+# Release 0.4.4 — live
 
-This document records the original `0.4.4` preparation, before the publication
-and acceptance documented in [PR #5](https://github.com/manifest-network/merovingian/pull/5).
-Its immutable image has the original Node healthcheck and does **not** contain
-ENG-1044. The healthcheck fix is a separate [0.4.5 candidate](RELEASE-0.4.5.md);
-use that record and its exact evidence for any proposed healthcheck update.
-Preparation does not authorize publication or deployment.
+Release `0.4.4` is live on Manifest mainnet and published as the latest version
+in the official MCP Registry as of 2026-09-21. The user explicitly approved
+publication of the exact candidate image, the existing-lease update, and
+registry publication after successful live acceptance. The
+[publication and acceptance evidence](evidence/release-0.4.4.json) records the
+completed actions and their verification limits.
+
+This immutable `0.4.4` image predates ENG-1044 and retains the original Node
+healthcheck. The healthcheck fix is a separate [0.4.5 candidate](RELEASE-0.4.5.md);
+the `0.4.4` digest below must not be reused as the candidate for that fix.
 
 This release packages the security remediation merged in
 [PR #3](https://github.com/manifest-network/merovingian/pull/3), merge commit
-`b77ca46d82006c3d577961874cd11aa1a805cdf9`. Release preparation changes the
+`b77ca46d82006c3d577961874cd11aa1a805cdf9`. Release preparation changed the
 application version and generated registry metadata to `0.4.4`, with no further
 dependency upgrades. The registry identity
 `io.github.manifest-network/merovingian` and `/mcp` endpoint are unchanged.
@@ -55,11 +59,13 @@ dependency upgrades. The registry identity
 
 The durable data contract remains aggregate amenity totals and their start date
 in SQLite at `VISIT_COUNTS_PATH=/data/visits.sqlite`, owned by UID/GID
-`1000:1000`. An existing-lease update must retain that data volume and path.
-Local replacement fixtures verify persistence using disposable local servings;
-they do not establish that a production `0.4.4` update has occurred or that live
-counts have survived it. Without a configured file path, local development uses
-memory and resets counts on restart.
+`1000:1000`. The existing-lease update retained that data volume and path.
+Read-only production acceptance at **2026-09-21T13:13:36.048Z** confirmed the
+same 8 cookies, 5 sauna sessions, and 6 teas, totaling 19 servings, before and
+after the update. The original counting start time
+`2026-09-17T20:29:18.301Z` was unchanged. These are dated observations, not a
+claim about future live totals. Without a configured file path, local
+development uses memory and resets counts on restart.
 
 Provider ingress topology and effective confinement remain open in ENG-1038.
 The named AppArmor profile, its enforce mode and denial attribution, and an
@@ -91,7 +97,7 @@ following checks on September 21:
   advisories. The unfixed LOW `elliptic@6.6.1` advisory `CVE-2025-14505` remains
   visible; no exception or suppression was applied.
 
-The historical `0.4.4` candidate was:
+The exact candidate was published and deployed as:
 
 ```text
 ghcr.io/manifest-network/merovingian@sha256:4af4d3da11a31914d796da3f29a55e679c5c3ec366311b4601e4e38426e97621
@@ -100,20 +106,44 @@ ghcr.io/manifest-network/merovingian@sha256:4af4d3da11a31914d796da3f29a55e679c5c
 Its separately verified configuration digest is
 `sha256:24423d7d74c3a91fddb530a659e7c555154a21f0385dfbc0e36542ea6f47127d`.
 The local OCI manifest, configuration, and all ten layer blobs were independently
-hashed. These hashes bind only the historical `0.4.4` image. They must not be
-reused as the candidate for ENG-1044; a rebuilt image requires its own version,
-verification and publication authorization.
+hashed. Anonymous GHCR verification after publication confirmed that both the
+`0.4.4` tag and digest reference preserved the exact manifest, configuration, and
+layer bytes. A rebuild or changed manifest format requires renewed verification
+and review.
 
 Authenticated provider reads prepared an image-only update for the existing
 lease `01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd`. Its exact manifest SHA-256 is
 `7c9773072774c5f02736cda525d2a77892ba449a56258512f0f84fd85043985d`.
-The runtime environment, counter path, UID/GID, and empty proxy trust are
-preserved. No new lease or chain transaction is required. This preparation did
-not send an update POST. Publication, deployment, and later registry publication
-still require authorization of the concrete actions; production acceptance must
-use read-only checks unless a separate live-serving test scope is authorized.
+The runtime environment, counter path, UID/GID, and empty proxy trust were
+preserved. The preparation evidence records the state before authorization and
+did not include an update POST; the subsequent publication and deployment are
+recorded separately below.
 
-This preparation record does not contain the subsequent publication evidence. The dated
+## Publication and live acceptance
+
+The provider confirmed **release 6** ready on the existing lease, with both the
+active image and active manifest hash matching the approved values above. No
+new lease was created and no chain transaction was sent. This provider response
+binds the update to the image and manifest; a public version string alone cannot
+prove the running image digest or effective confinement.
+
+Public acceptance confirmed healthy mainnet `0.4.4`, the current and legacy
+server cards, OpenAPI version, MCP initialization and the four-tool inventory,
+and persistent serving totals. It made no MCP tool calls, live servings, or
+payments. The first acceptance checker expected `application/json` for the
+current server card; correcting its expectation to
+`application/mcp-server-card+json` allowed acceptance to complete. No production
+code change was needed.
+
+The registry published `0.4.4` at **2026-09-21T13:13:54.140771Z**. Exact-version
+and latest records were verified as active, latest, and equal to the approved
+metadata at **2026-09-21T13:13:54.816064Z**. The exact `server.json` SHA-256 is
+`c2c33a0105b9f0af82cb6ae0ab5d774b5c9e4b5c480c10aecb5358dbe77c2f69`.
+The temporary registry login was removed after verification. See the
+[registry publication record](MCP-REGISTRY.md) and
+[sanitized release evidence](evidence/release-0.4.4.json).
+
+The original [preparation evidence](evidence/release-0.4.4-preparation.json) and dated
 [original audit](SECURITY-AUDIT-2026-09-18.md),
 [remediation evidence](evidence/security-remediation-2026-09-18/README.md), and
 [registry snapshots](evidence/mcp-registry-snapshots.json) remain unchanged
