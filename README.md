@@ -41,8 +41,9 @@ isolated local tests, and the build. It uses read-only repository permissions an
 does not publish releases or visit the live refuge.
 
 `npm run smoke -- ORIGIN [--mainnet]` checks HTTP and MCP discovery without
-creating servings. Explicit `--serve` adds seven visits and requires separate
-authorization against a live service. See [smoke checks and request budgets](docs/ACCEPTANCE.md#repeatable-smoke-checks-eng-1032)
+creating servings. Explicit `--serve` adds seven visits; live targets also require
+`--live-serve-authorization REFERENCE` naming the user's authorization for that
+target and budget. See [smoke checks and request budgets](docs/ACCEPTANCE.md#repeatable-smoke-checks-eng-1032)
 for timeouts, local fixtures, reports, and production authorization requirements.
 
 The final-image job also builds and scans a local candidate, checks code ownership

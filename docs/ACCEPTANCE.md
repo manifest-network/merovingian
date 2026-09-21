@@ -9,16 +9,29 @@ credentials, query, or fragment. HTTP is accepted only for loopback fixtures
 (`localhost`, `127.0.0.1`, or `[::1]`). The target must match the repository's
 application version.
 
+`ORIGIN` must exactly match the deployment's `PUBLIC_ORIGIN`, including hostname
+and port. For example, `localhost` and `127.0.0.1` are different origins even
+when they reach the same server. The server card checks this before the remaining
+discovery and serving checks. `.env.example` uses `http://localhost:8080`.
+
 ```sh
 # Read-only public acceptance: no visit endpoints or enjoy_amenity calls.
 npm run smoke -- https://merovingian.manifest.network --mainnet
 
 # Serving checks against a configured, disposable local fixture only.
-npm run smoke -- http://127.0.0.1:8080 --serve
+npm run smoke -- http://localhost:8080 --serve
 
 # Self-contained fixtures: no running service, chain access, or wallet needed.
 node --import tsx --test tests/smoke.test.ts
 ```
+
+For a non-loopback target, `--serve` also requires
+`--live-serve-authorization REFERENCE`, where `REFERENCE` names the authorization
+for that target and serving budget (1–80 letters, digits, dots, underscores, or
+hyphens). This reference is recorded in the report; it is an operator attestation,
+not a substitute for the user's explicit authorization. Do not put credentials
+or private context in it. A public `--serve` invocation without the reference
+fails before any request. Local serving fixtures need only `--serve`.
 
 Default checks read health, both MCP server cards, OpenAPI, homepage indexing
 controls, operator HTML, contribution history, sitemap, amenities, the visit
@@ -35,10 +48,15 @@ serving request. Isolated tests supply a local support fixture.
 | Either mode with an existing contribution hash | Add 3 | Add 3 | No additional servings | No additional servings |
 
 The default budget is 13 HTTP GETs, six MCP POSTs, and at most one SDK GET stream
-probe. Discovery is one page; unexpected pagination fails without following it.
+probe, which must return HTTP 405 for this stateless service. Probe errors and
+SDK background errors fail acceptance before serving. Discovery is one page;
+unexpected pagination fails without following it.
 `--serve` adds one browser-form tea visit, then one HTTP and one MCP visit for
 each of the three fixed amenities. The script enforces both request and serving
-caps. Supplying an existing contribution hash also checks its history entry,
+caps at the transport boundary using a closed allowlist of methods, paths, and
+MCP operations. Noncanonical path aliases, unknown tools, and unexpected verbs
+are rejected. Both URL/init and `Request` inputs use their effective fetch
+method and body. Supplying an existing contribution hash also checks its history entry,
 checks that an unknown hash is pending, and compares its confirmed HTTP and MCP
 receipts. These verification calls are read-only and never send a payment.
 
@@ -50,20 +68,41 @@ disabled. There are no automatic retries, including after HTTP 429 or 503. The
 first failure stops the run and closes the owned MCP transport, including when
 initialization fails. A timed-out or failed serving response may already have
 incremented a counter; the failure summary records attempts, not confirmed
-servings. Reconcile an uncertain result before seeking authorization for another
-run. Rerunning `--serve` starts another seven-serving budget.
+servings, including attempts that a rate limiter may have rejected. Reconcile an
+uncertain result before seeking authorization for another run. Rerunning
+`--serve` starts another seven-serving budget. Network diagnostics name the
+method/path and distinguish blocked redirects and transport error codes without
+copying arbitrary nested diagnostics into reports.
 
-Successful reports go to `.local/smoke-read-only.json` or
-`.local/smoke-serving.json`, under `.local/mainnet/` when `--mainnet` is set.
-They use private file permissions, record mode, budgets, attempted requests, and
-before/after counters, and do not overwrite historical `live-acceptance.json`.
+Each CLI run first reserves a unique `.local/smoke-MODE-RUN_ID.json` report
+(under `.local/mainnet/` with `--mainnet`). Storage preflight must succeed before
+any HTTP or MCP request. A pending record is written and synced, then replaced
+atomically with that run's final result. Each new report has mode `0600`; previous
+reports, including legacy fixed filenames, are never overwritten. Reports record
+the mode, budget, authorization reference, attempted requests, counters, and
+available souvenirs and receipt. A check failure retains the evidence collected
+so far, including attempts that may have counted despite an uncertain response.
+
+The CLI exits **0** when checks pass and evidence is saved, **1** for a preflight
+or check failure, and **2** if checks passed but final report storage failed. In
+the last case stdout still reports `passed: true`, `reportWritten: false`, and
+the complete `recoveryReport`, including before/after counters, souvenirs, and
+any receipt. Save that JSON; do not repeat serving requests to recover a report.
+A `running` report without a final result indicates an interrupted run requiring
+reconciliation. Failed checks also print their available evidence to stderr if
+it cannot be saved. Use the emitted report path/run ID to identify each run.
+
 Read-only reports mark serving checks `not-run` and serving HTTP/MCP equivalence
 `null`. Both modes verify counter identity and continuity. Concurrent public
 visitors can increase totals during a read-only check: `countsUnchanged: false`
-reports that observation without attributing those visits to the check. Isolated
-tests assert exact unchanged counters in read-only mode and exactly seven
-additional servings in serving mode. A failed run exits nonzero and does not
-write a success report; check the report timestamp before using an older file.
+reports that observation without attributing those visits to the check. The
+default therefore checks monotonic counters and enforces the outbound read-only
+allowlist, rather than claiming to prove the absence of other visitors. For a
+quiet acceptance window, add **`--expect-unchanged-counts`**: any counter increase
+then fails read-only acceptance, whether caused by the check or another visitor.
+This option cannot be combined with `--serve`. Isolated tests assert unchanged
+read-only counters, exactly seven additional servings in serving mode, and direct
+rejection of unauthorized or over-budget calls at the transport boundary.
 
 **Production authorization:** preparing or testing these changes, approving a
 plan, selecting `--mainnet`, and supplying `--serve` do not grant production
