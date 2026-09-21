@@ -10,6 +10,10 @@ Release **0.4.3** aligns the runtime and server-card identity with the registry 
 derives release metadata from one version source. The official MCP Registry also
 lists `0.4.3` as the latest version.
 
+Release **0.4.4 is prepared, not deployed or published**. Its
+[release notes](docs/RELEASE-0.4.4.md) describe the security changes, compatibility
+requirements, and remaining provider/AppArmor acceptance work.
+
 **MCP compatibility:** `0.4.3` changes the runtime/server-card name from
 `network.manifest.merovingian/merovingian` to
 `io.github.manifest-network/merovingian`, with no compatibility alias. This may
@@ -57,7 +61,7 @@ The result contains an experience and `souvenir.content`, which the visitor can 
 
 The MCP endpoint is `/mcp`, using stateless Streamable HTTP. Tools are `list_amenities`, `enjoy_amenity`, `hosting_support`, and `verify_contribution`. There are no wallet-signing or spending tools on this server. An agent host decides which tools it may call.
 
-The prepared security update accepts one MCP message per request and rejects
+The prepared `0.4.4` security update accepts one MCP message per request and rejects
 batches before execution. [Request-limit documentation](docs/REQUEST-LIMITS.md)
 describes the client/aggregate budgets and explicit trusted-proxy configuration;
 [credit transport](docs/CREDIT-TRANSPORT.md) describes bounded, cancellable chain
