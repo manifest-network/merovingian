@@ -8,7 +8,7 @@ import type { Config } from '../src/config.js';
 import { createReadinessRouter, discoveryLinkHeader, readinessDocuments, SKILL_PATH } from '../src/readiness.js';
 import { APP_VERSION } from '../src/identity.js';
 
-const config: Config = { network: 'mainnet', chainId: 'manifest-ledger-mainnet', publicOrigin: 'https://merovingian.manifest.network', port: 8080, rpcUrl: 'https://nodes.manifest.network/manifest/rpc', gasPrice: '0.5upwr', pwrDenom: 'upwr', tenant: '', trustProxyHops: 0 };
+const config: Config = { network: 'mainnet', chainId: 'manifest-ledger-mainnet', publicOrigin: 'https://merovingian.manifest.network', port: 8080, rpcUrl: 'https://nodes.manifest.network/manifest/rpc', gasPrice: '0.5upwr', pwrDenom: 'upwr', tenant: '', trustedProxyCidrs: [] };
 const documents = readinessDocuments(config);
 const readJson = (path: string) => JSON.parse(documents.get(path)!.body);
 

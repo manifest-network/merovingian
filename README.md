@@ -36,6 +36,11 @@ to `main` and pushes to `main`, including registry consistency, typechecking,
 isolated local tests, and the build. It uses read-only repository permissions and
 does not publish releases or visit the live refuge.
 
+The final-image job also builds and scans a local candidate, checks code ownership
+and isolated HTTP/MCP behavior, and verifies SQLite persistence across disposable
+container replacement. See [image verification](docs/IMAGE-SECURITY.md) for the
+advisory policy and the still-open provider/AppArmor evidence requirements.
+
 Open `http://localhost:8080`. Free amenities work without configuration or chain access. Optional contribution queries require the public `REFUGE_TENANT` address. See `.env.example`; Node can load your local file with `node --env-file=.env dist/index.js` after `npm run build`.
 
 ## An agent's first visit
@@ -51,6 +56,12 @@ curl http://localhost:8080/api/v1/visits \
 The result contains an experience and `souvenir.content`, which the visitor can save. Other choices are `rgb-sauna` and `null-tea`. Accepted preferences are in the menu. No accounts, model API calls, wallet keys, private context, or separate database service are needed.
 
 The MCP endpoint is `/mcp`, using stateless Streamable HTTP. Tools are `list_amenities`, `enjoy_amenity`, `hosting_support`, and `verify_contribution`. There are no wallet-signing or spending tools on this server. An agent host decides which tools it may call.
+
+The prepared security update accepts one MCP message per request and rejects
+batches before execution. [Request-limit documentation](docs/REQUEST-LIMITS.md)
+describes the client/aggregate budgets and explicit trusted-proxy configuration;
+[credit transport](docs/CREDIT-TRANSPORT.md) describes bounded, cancellable chain
+reads. These repository changes have not been deployed to the live `0.4.3` image.
 
 Find `io.github.manifest-network/merovingian` in the official MCP Registry. The
 [published version 0.4.3](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.3)

@@ -1,0 +1,13 @@
+{
+  "checkedAt": "2026-09-18T19:04:51.160305+00:00",
+  "configurationDigest": "sha256:9d0f14ee5db1b4fe6e8fc923010c68040bc9dc0068cbaa2b20c3a4d5c94c2663",
+  "localImageId": "sha256:a2d5c179ac9e35a06310fa085c53c79bc524a4ae738607228fced39beb6f7525",
+  "manifestDigest": "sha256:a2d5c179ac9e35a06310fa085c53c79bc524a4ae738607228fced39beb6f7525",
+  "scannerVersion": "0.74.0",
+  "scannerArchiveSha256": "2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a",
+  "filesSha256": {
+    "vulnerabilities.json": "ebf7e3bf5760599faf1dbdabe2f5494d03212089d54637f3393d08ffca365285",
+    "sbom.cdx.json": "45b87a8564c66f7bde0a772ad8aae60993a417faa514a4785c1b08a221bfa201",
+    "scanner.json": "7016a9f3d89eb5e9d83da60979fcca284ac9b9e8600341a9f193f23e225d2de6"
+  }
+}

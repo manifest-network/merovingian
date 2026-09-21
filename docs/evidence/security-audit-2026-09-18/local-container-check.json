@@ -1,0 +1,56 @@
+{
+  "date": "2026-09-18",
+  "image": "ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
+  "scope": "Fresh disposable local instance; not provider runtime inspection.",
+  "controls": {
+    "network": "none",
+    "readOnlyRoot": true,
+    "user": "1000:1000",
+    "capDrop": [
+      "ALL"
+    ],
+    "noNewPrivileges": true,
+    "pidsLimit": 64,
+    "memoryBytes": 536870912,
+    "cpus": 0.5,
+    "dataMount": "temporary tmpfs; noexec,nosuid,nodev"
+  },
+  "observations": {
+    "healthStatus": 200,
+    "menuStatus": 200,
+    "statsStatus": 200,
+    "servingTotal": "0",
+    "uid": 1000,
+    "gid": 1000,
+    "CapInh": "0",
+    "CapPrm": "0",
+    "CapEff": "0",
+    "CapBnd": "0",
+    "CapAmb": "0",
+    "NoNewPrivs": 1,
+    "Seccomp": 2,
+    "gracefulStopExitCode": 0
+  },
+  "imageFileOwnership": {
+    "/app": "root:root0755",
+    "/app/dist": "node:node0755",
+    "/app/node_modules": "node:node0755",
+    "/app/package.json": "node:node0644",
+    "/data": "node:node0700"
+  },
+  "runtimeVersions": {
+    "node": "24.21.0",
+    "openssl": "3.5.8",
+    "undici": "7.29.1",
+    "sqlite": "3.53.4"
+  },
+  "minimalImageGaps": {
+    "packageManagers": [
+      "npm",
+      "Yarn",
+      "apt"
+    ],
+    "suidOrSgidFiles": 11
+  },
+  "note": "This summary transcribes local Docker inspection and execution results observed during the audit. No host paths, container identifiers, credentials or operation journals are included."
+}

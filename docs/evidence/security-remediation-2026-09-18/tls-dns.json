@@ -1,0 +1,24 @@
+{
+  "tls": {
+    "protocol": "TLSv1.3",
+    "certificateValidation": true,
+    "defaultTrustRejectedFixture": "DEPTH_ZERO_SELF_SIGNED_CERT",
+    "builtInRootCertificates": 121,
+    "systemCABundlePresent": true,
+    "localhostLookup": "passed"
+  },
+  "dns": {
+    "transport": "loopback UDP only",
+    "queries": 1,
+    "answers": [
+      "127.0.0.1"
+    ]
+  },
+  "runtime": {
+    "node": "24.21.0",
+    "openssl": "3.5.8"
+  },
+  "checkedAt": "2026-09-18T19:04:22.211338+00:00",
+  "testedLocalImageId": "sha256:a2d5c179ac9e35a06310fa085c53c79bc524a4ae738607228fced39beb6f7525",
+  "scope": "Local container network=none; ephemeral certificate passed only over stdin; loopback HTTPS and UDP DNS fixtures; no external connections."
+}

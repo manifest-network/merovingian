@@ -1,0 +1,44 @@
+{
+  "checkedAt": "2026-09-18T18:46:41.643Z",
+  "scope": "Loopback MCP tools/list only; no serving calls or upstream requests. Not provider ingress evidence.",
+  "observations": [
+    {
+      "host": "configured",
+      "observedHost": "localhost:8080",
+      "origin": "absent",
+      "status": 200
+    },
+    {
+      "host": "configured",
+      "observedHost": "localhost:8080",
+      "origin": "allowed",
+      "status": 200
+    },
+    {
+      "host": "configured",
+      "observedHost": "localhost:8080",
+      "origin": "hostile",
+      "status": 403
+    },
+    {
+      "host": "arbitrary",
+      "observedHost": "audit.invalid",
+      "origin": "absent",
+      "status": 200
+    },
+    {
+      "host": "arbitrary",
+      "observedHost": "audit.invalid",
+      "origin": "allowed",
+      "status": 200
+    },
+    {
+      "host": "arbitrary",
+      "observedHost": "audit.invalid",
+      "origin": "hostile",
+      "status": 403
+    }
+  ],
+  "totalServings": "0",
+  "upstreamCalls": 0
+}

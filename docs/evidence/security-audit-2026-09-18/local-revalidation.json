@@ -1,0 +1,59 @@
+{
+  "recordedAt": "2026-09-18T18:47:27.459163+00:00",
+  "kind": "Sanitized summary of fresh local executions in the completion review; not a raw transcript.",
+  "sourceRevision": "11d9e7cb6554f982e12778819a3a52dbb3f18193",
+  "applicationVersion": "0.4.3",
+  "localNodeVersion": "24.15.0",
+  "sourceFilesUnchangedFromRevision": true,
+  "sourceSha256": {
+    "package-lock.json": "1f7c1ae63538c342bcc309a899713edcde1c45ced332dfff6e1067db26a4cce9",
+    "Dockerfile": "08522f4ea1ae513d344f8183c3b61db853fa3f41cc236c8cafb45be76e83b4ac",
+    ".dockerignore": "f96a326b9008449c33ea9ef2d6af147b19294f79634d4e2b57f2a437fef03f5c",
+    "src/app.ts": "6a4c5f5dec103b3e1997de8b6e83b9c848cb662d16e218d93c8c15aad6ff2b39",
+    "src/support.ts": "eca6e144d22ffd1b10cbd9fe3bb15bbcec1fe1e28f1bad9ed8a1eeb6f0385eb8",
+    "src/config.ts": "58623380769172a9855345d28393ac2f447f322c03177716d2b261ff1fa46d9f",
+    "src/index.ts": "39772711c930c7f27bcc9f58de584fa1ec76c5d2dd9dc89cadd106cb81b2c9a6"
+  },
+  "checks": {
+    "command": "npm run check",
+    "exitCode": 0,
+    "registryConsistency": "passed",
+    "typecheck": "passed",
+    "tests": {
+      "passed": 148,
+      "failed": 0,
+      "skipped": 0
+    },
+    "build": "passed"
+  },
+  "applicationReproducer": {
+    "fixture": "reproduce-local.mjs.txt",
+    "exitCode": 0,
+    "allFourArchivedProofsReproduced": true,
+    "batchBytes": 5841,
+    "batchSuccessfulResults": 50,
+    "inMemoryServings": "50",
+    "secondForwardedVisitorStatus": 429,
+    "outstandingCreditQueriesAtDeadline": 3,
+    "creditQueryTimeoutMs": 10000,
+    "creditQueryHasAbortSignal": false,
+    "creditQueryMaxContentLength": -1,
+    "outstandingQueriesAfterSettlement": 0
+  },
+  "additionalEvidence": [
+    "local-container-revalidation.json",
+    "local-http-boundaries.json"
+  ],
+  "boundaries": {
+    "productionRequests": 0,
+    "productionMutations": 0,
+    "payments": 0,
+    "providerRuntimeInspected": false,
+    "newVulnerabilityScan": false,
+    "originalEvidenceFilesModified": false
+  },
+  "executionNotes": [
+    "Local checks require loopback socket and temporary helper-process permissions; the initial restricted-sandbox run did not pass. The permitted local rerun passed all checks.",
+    "The initial Host fixture used fetch, which can replace Host. It was replaced with node:http and server-observed Host assertions; the archived matrix is the corrected successful run."
+  ]
+}

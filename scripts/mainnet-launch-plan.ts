@@ -24,9 +24,13 @@ export interface LaunchBinding {
 
 export function inputHash(rawInputs: PublicInputs): string {
   const inputs = publicInputs(rawInputs);
-  return createHash('sha256').update(JSON.stringify([
+  const values = [
     inputs.tenant, inputs.image, inputs.providerUuid, inputs.monthlyBudgetPwr, inputs.gasPrice,
-  ])).digest('hex');
+  ];
+  // Preserve historical journals exactly when the new setting was omitted.
+  // Explicit trust (including an explicit empty value) becomes approved intent.
+  if (inputs.trustedProxyCidrs !== undefined) values.push(inputs.trustedProxyCidrs);
+  return createHash('sha256').update(JSON.stringify(values)).digest('hex');
 }
 
 export function launchBinding(prepared: PreparedDeployment, inputs: PublicInputs): LaunchBinding {

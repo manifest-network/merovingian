@@ -1,0 +1,55 @@
+{
+  "checkedAt": "2026-09-18T19:02:43.797Z",
+  "imageId": "sha256:a2d5c179ac9e35a06310fa085c53c79bc524a4ae738607228fced39beb6f7525",
+  "repoDigests": [
+    "merovingian@sha256:a2d5c179ac9e35a06310fa085c53c79bc524a4ae738607228fced39beb6f7525"
+  ],
+  "applicationFilesChecked": 9136,
+  "rootOwnedCode": true,
+  "packageManagersAbsent": true,
+  "privilegedFilesAbsent": true,
+  "codeWriteDeniedOnWritableRoot": true,
+  "executions": [
+    {
+      "before": "0",
+      "after": "1",
+      "since": "2026-09-18T19:02:33.377Z",
+      "process": {
+        "Uid": "1000\t1000\t1000\t1000",
+        "Gid": "1000\t1000\t1000\t1000",
+        "CapInh": "0000000000000000",
+        "CapPrm": "0000000000000000",
+        "CapEff": "0000000000000000",
+        "CapBnd": "0000000000000000",
+        "CapAmb": "0000000000000000",
+        "NoNewPrivs": "1",
+        "Seccomp": "2"
+      },
+      "sqliteJournalMode": "delete"
+    },
+    {
+      "before": "1",
+      "after": "2",
+      "since": "2026-09-18T19:02:33.377Z",
+      "process": {
+        "Uid": "1000\t1000\t1000\t1000",
+        "Gid": "1000\t1000\t1000\t1000",
+        "CapInh": "0000000000000000",
+        "CapPrm": "0000000000000000",
+        "CapEff": "0000000000000000",
+        "CapBnd": "0000000000000000",
+        "CapAmb": "0000000000000000",
+        "NoNewPrivs": "1",
+        "Seccomp": "2"
+      },
+      "sqliteJournalMode": "delete"
+    }
+  ],
+  "persistenceAcrossReplacement": true,
+  "gracefulStop": true,
+  "scope": "Local isolated fixture; two intentional local MCP servings; no live visits or production configuration.",
+  "appArmor": {
+    "status": "unavailable",
+    "reason": "Named profile enforcement/denial attribution requires a separately reviewed profile and isolated capable runner. This check does not load host policy."
+  }
+}

@@ -78,7 +78,9 @@ npm run manifest -- status
 
 The app uses one service called `refuge`, listening on port 8080 with public ingress. During initial provisioning, its canonical origin is a non-routable staging placeholder. The script records the lease immediately after creation, waits for provider readiness, reads the provider-assigned HTTPS hostname, and updates `PUBLIC_ORIGIN` to that origin. The update must finish before announcing the URL. If connection discovery fails, inspect status and use `npm run manifest -- origin https://PROVIDER_HOSTNAME` to finish configuring the existing lease; never create a replacement merely because a readiness response was lost.
 
-The container initially uses `TRUST_PROXY_HOPS=0`; behind the provider ingress this may share one rate limit across visitors. Only enable forwarded IP handling after checking the provider's proxy topology. No deployment step disables HTTPS validation.
+Forwarded addresses are untrusted by default. `TRUST_PROXY_HOPS=0` remains accepted for historical manifests; any nonzero hop count now prevents startup. After verifying the provider ingress addresses and forwarded-header handling, set `TRUSTED_PROXY_CIDRS` to its explicit IPs or narrowly bounded CIDRs (IPv4 `/24`–`/32`, IPv6 `/64`–`/128`). IPv4-mapped IPv6 CIDRs are rejected; use IPv4 notation for those ranges. The application also keeps an aggregate request budget. Do not infer trusted ranges from a provider hostname or resource advertisement. No deployment step disables HTTPS validation.
+
+The testnet `deploy` command includes an explicitly supplied `TRUSTED_PROXY_CIDRS` environment value in its generated manifest. For `update`, `origin` and retirement updates, leaving that variable unset preserves the recorded setting; supplying an empty value removes it. Invalid values are rejected before wallet/client creation. These are public configuration inputs, not authorization to update a live service. For mainnet, use the separately reviewed configuration and update procedure in [MAINNET.md](MAINNET.md).
 
 ## Verify a visitor contribution
 

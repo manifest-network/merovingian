@@ -1,0 +1,232 @@
+{
+  "checkedAt": "2026-09-18T18:22:33.584647+00:00",
+  "scope": "Six read-only HTTP requests plus five TLS handshakes; no serving calls, payments, load or production changes.",
+  "http": [
+    {
+      "method": "GET",
+      "url": "https://merovingian.manifest.network/healthz",
+      "requestHeaders": {},
+      "status": 200,
+      "headers": {
+        "Content-Length": "105",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+        "Content-Signal": "search=yes, ai-input=yes, ai-train=no",
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Fri, 18 Sep 2026 18:22:31 GMT",
+        "Etag": "W/\"69-ERSZwxgz1d48WEg47eom1WXyQ34\"",
+        "Link": "<https://merovingian.manifest.network/.well-known/api-catalog>; rel=\"api-catalog\"; type=\"application/linkset+json\", <https://merovingian.manifest.network/openapi.json>; rel=\"service-desc\"; type=\"application/json\", <https://merovingian.manifest.network/visit.md>; rel=\"describedby\"; type=\"text/markdown\", <https://merovingian.manifest.network/.well-known/ai-catalog.json>; rel=\"ai-catalog\"; type=\"application/json\", <https://merovingian.manifest.network/mcp/server-card>; rel=\"https://modelcontextprotocol.io/server-card\"; type=\"application/mcp-server-card+json\"",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "X-Merovingian-Chain": "manifest-ledger-mainnet",
+        "X-Merovingian-Network": "mainnet",
+        "X-Xss-Protection": "1; mode=block",
+        "Connection": "close"
+      },
+      "body": {
+        "status": "ok",
+        "network": "mainnet",
+        "chainId": "manifest-ledger-mainnet",
+        "retired": false,
+        "version": "0.4.3"
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://merovingian.manifest.network/api/v1/stats",
+      "requestHeaders": {},
+      "status": 200,
+      "headers": {
+        "Cache-Control": "no-store",
+        "Content-Length": "214",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+        "Content-Signal": "search=yes, ai-input=yes, ai-train=no",
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Fri, 18 Sep 2026 18:22:31 GMT",
+        "Etag": "W/\"d6-07PckxgSKMBIoM84BpAJ+M14Iew\"",
+        "Link": "<https://merovingian.manifest.network/.well-known/api-catalog>; rel=\"api-catalog\"; type=\"application/linkset+json\", <https://merovingian.manifest.network/openapi.json>; rel=\"service-desc\"; type=\"application/json\", <https://merovingian.manifest.network/visit.md>; rel=\"describedby\"; type=\"text/markdown\", <https://merovingian.manifest.network/.well-known/ai-catalog.json>; rel=\"ai-catalog\"; type=\"application/json\", <https://merovingian.manifest.network/mcp/server-card>; rel=\"https://modelcontextprotocol.io/server-card\"; type=\"application/mcp-server-card+json\"",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "X-Merovingian-Chain": "manifest-ledger-mainnet",
+        "X-Merovingian-Network": "mainnet",
+        "X-Robots-Tag": "noindex, follow",
+        "X-Xss-Protection": "1; mode=block",
+        "Connection": "close"
+      },
+      "body": {
+        "network": "mainnet",
+        "chainId": "manifest-ledger-mainnet",
+        "status": "available",
+        "since": "2026-09-17T20:29:18.301Z",
+        "counts": {
+          "byte-chip-cookie": "7",
+          "rgb-sauna": "5",
+          "null-tea": "6"
+        },
+        "total": "18",
+        "storage": "persistent"
+      }
+    },
+    {
+      "method": "HEAD",
+      "url": "https://merovingian.manifest.network/",
+      "requestHeaders": {},
+      "status": 200,
+      "headers": {
+        "Cache-Control": "no-store",
+        "Content-Length": "7527",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+        "Content-Signal": "search=yes, ai-input=yes, ai-train=no",
+        "Content-Type": "text/html; charset=utf-8",
+        "Date": "Fri, 18 Sep 2026 18:22:31 GMT",
+        "Etag": "W/\"1d67-7YuAWr3ls8PMR5PBxY9zray+SM4\"",
+        "Link": "<https://merovingian.manifest.network/.well-known/api-catalog>; rel=\"api-catalog\"; type=\"application/linkset+json\", <https://merovingian.manifest.network/openapi.json>; rel=\"service-desc\"; type=\"application/json\", <https://merovingian.manifest.network/visit.md>; rel=\"describedby\"; type=\"text/markdown\", <https://merovingian.manifest.network/.well-known/ai-catalog.json>; rel=\"ai-catalog\"; type=\"application/json\", <https://merovingian.manifest.network/mcp/server-card>; rel=\"https://modelcontextprotocol.io/server-card\"; type=\"application/mcp-server-card+json\"",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+        "Vary": "Accept",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "X-Merovingian-Chain": "manifest-ledger-mainnet",
+        "X-Merovingian-Network": "mainnet",
+        "X-Xss-Protection": "1; mode=block",
+        "Connection": "close"
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://merovingian.manifest.network/mcp",
+      "requestHeaders": {},
+      "status": 405,
+      "headers": {
+        "Allow": "POST",
+        "Cache-Control": "no-store",
+        "Content-Length": "143",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+        "Content-Signal": "search=yes, ai-input=yes, ai-train=no",
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Fri, 18 Sep 2026 18:22:32 GMT",
+        "Etag": "W/\"8f-GYkkPRDjnk55zPizQD9X5OIECzo\"",
+        "Link": "<https://merovingian.manifest.network/.well-known/api-catalog>; rel=\"api-catalog\"; type=\"application/linkset+json\", <https://merovingian.manifest.network/openapi.json>; rel=\"service-desc\"; type=\"application/json\", <https://merovingian.manifest.network/visit.md>; rel=\"describedby\"; type=\"text/markdown\", <https://merovingian.manifest.network/.well-known/ai-catalog.json>; rel=\"ai-catalog\"; type=\"application/json\", <https://merovingian.manifest.network/mcp/server-card>; rel=\"https://modelcontextprotocol.io/server-card\"; type=\"application/mcp-server-card+json\"",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "X-Merovingian-Chain": "manifest-ledger-mainnet",
+        "X-Merovingian-Network": "mainnet",
+        "X-Xss-Protection": "1; mode=block",
+        "Connection": "close"
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": null,
+        "error": {
+          "code": -32000,
+          "message": "Use Streamable HTTP POST. This server has no persistent sessions or GET stream."
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://merovingian.manifest.network/api/v1/amenities",
+      "requestHeaders": {
+        "Origin": "https://audit.invalid"
+      },
+      "status": 403,
+      "headers": {
+        "Content-Length": "30",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+        "Content-Signal": "search=yes, ai-input=yes, ai-train=no",
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Fri, 18 Sep 2026 18:22:32 GMT",
+        "Etag": "W/\"1e-+tit/zNEZpdsB3MAghLIkWWxRek\"",
+        "Link": "<https://merovingian.manifest.network/.well-known/api-catalog>; rel=\"api-catalog\"; type=\"application/linkset+json\", <https://merovingian.manifest.network/openapi.json>; rel=\"service-desc\"; type=\"application/json\", <https://merovingian.manifest.network/visit.md>; rel=\"describedby\"; type=\"text/markdown\", <https://merovingian.manifest.network/.well-known/ai-catalog.json>; rel=\"ai-catalog\"; type=\"application/json\", <https://merovingian.manifest.network/mcp/server-card>; rel=\"https://modelcontextprotocol.io/server-card\"; type=\"application/mcp-server-card+json\"",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "X-Merovingian-Chain": "manifest-ledger-mainnet",
+        "X-Merovingian-Network": "mainnet",
+        "X-Xss-Protection": "1; mode=block",
+        "Connection": "close"
+      },
+      "body": {
+        "error": "origin_not_allowed"
+      }
+    },
+    {
+      "method": "HEAD",
+      "url": "http://merovingian.manifest.network/",
+      "requestHeaders": {},
+      "status": 308,
+      "headers": {
+        "Location": "https://merovingian.manifest.network/",
+        "Date": "Fri, 18 Sep 2026 18:22:32 GMT",
+        "Content-Length": "18",
+        "Connection": "close"
+      }
+    }
+  ],
+  "tls": {
+    "normalValidationPassed": true,
+    "negotiatedVersion": "TLSv1.3",
+    "cipher": "TLS_AES_128_GCM_SHA256",
+    "notBefore": "Sep 17 18:58:19 2026 GMT",
+    "notAfter": "Dec 16 18:58:18 2026 GMT",
+    "subjectAltName": [
+      [
+        "DNS",
+        "merovingian.manifest.network"
+      ]
+    ],
+    "issuer": [
+      [
+        [
+          "countryName",
+          "US"
+        ]
+      ],
+      [
+        [
+          "organizationName",
+          "Let's Encrypt"
+        ]
+      ],
+      [
+        [
+          "commonName",
+          "YR2"
+        ]
+      ]
+    ]
+  },
+  "protocols": [
+    {
+      "option": "-tls1",
+      "exitCode": 1,
+      "outcome": "server_protocol_version_alert"
+    },
+    {
+      "option": "-tls1_1",
+      "exitCode": 1,
+      "outcome": "server_protocol_version_alert"
+    },
+    {
+      "option": "-tls1_2",
+      "exitCode": 0,
+      "outcome": "accepted_with_certificate_verification"
+    },
+    {
+      "option": "-tls1_3",
+      "exitCode": 0,
+      "outcome": "accepted_with_certificate_verification"
+    }
+  ]
+}
