@@ -7,6 +7,10 @@ registry publication after successful live acceptance. The
 [publication and acceptance evidence](evidence/release-0.4.4.json) records the
 completed actions and their verification limits.
 
+This immutable `0.4.4` image predates ENG-1044 and retains the original Node
+healthcheck. The healthcheck fix is a separate [0.4.5 candidate](RELEASE-0.4.5.md);
+the `0.4.4` digest below must not be reused as the candidate for that fix.
+
 This release packages the security remediation merged in
 [PR #3](https://github.com/manifest-network/merovingian/pull/3), merge commit
 `b77ca46d82006c3d577961874cd11aa1a805cdf9`. Release preparation changed the

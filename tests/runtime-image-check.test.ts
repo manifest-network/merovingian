@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Script } from 'node:vm';
 import test, { type TestContext } from 'node:test';
-import { expectedDistribution, runRuntimeImageCheck } from '../scripts/check-runtime-image.mjs';
+import { loadConfig } from '../src/config.js';
+import { expectedDistribution, healthcheckCases, healthcheckCommand, healthcheckProbe, runRuntimeImageCheck } from '../scripts/check-runtime-image.mjs';
 
 function fixture(t: TestContext) {
   const directory = mkdtempSync(join(tmpdir(), 'merovingian-runtime-check-'));
@@ -13,20 +15,28 @@ function fixture(t: TestContext) {
   return {directory, output:join(directory, 'runtime.json')};
 }
 
-function dockerFixture(fault: (args: string[]) => void = () => {}) {
+function healthObservations() {
+  return Object.fromEntries(healthcheckCases.map(({name, code, deadline, redirectPort}) => [name,
+    {code, signal:null, stdoutBytes:0, stderrBytes:0, elapsedMilliseconds:deadline ? 4000 : 25,
+      ...(redirectPort ? {redirectRequests:0} : {})}]));
+}
+
+function dockerFixture(fault: (args: string[]) => void = () => {}, healthcheck: Record<string, unknown> = {}, observations = healthObservations()) {
   const calls: string[][] = [];
   let pass = -1;
   const execute = (args: string[]): string => {
     calls.push(args); fault(args);
     if (args[0] === 'image') return JSON.stringify([{Id:`sha256:${'a'.repeat(64)}`, Config:{
       User:'1000:1000', Entrypoint:['/usr/local/bin/node'], Cmd:['dist/index.js'], Env:['NODE_ENV=production'],
-      Healthcheck:{Test:['CMD', '/usr/local/bin/node', '-e', 'process.exit(0)']},
+      Healthcheck:{Test:healthcheckCommand, Interval:30_000_000_000,
+        Timeout:5_000_000_000, StartPeriod:15_000_000_000, Retries:3, ...healthcheck},
     }}]);
+    if (args[0] === 'run' && args.includes('--no-healthcheck')) return JSON.stringify(observations);
     if (args[0] === 'run') return JSON.stringify(args.includes('--read-only')
       ? {applicationFilesChecked:12, rootOwnedCode:true, packageManagersAbsent:true, privilegedFilesAbsent:true}
       : {codeWriteDeniedOnWritableRoot:true, writableRootTemporaryFiles:true});
     if (args[0] === 'create') { pass++; return 'fixture-container'; }
-    if (args[0] === 'inspect') return JSON.stringify([{State:{ExitCode:0}, HostConfig:{
+    if (args[0] === 'inspect') return JSON.stringify([{State:{Running:true, ExitCode:0}, HostConfig:{
       ReadonlyRootfs:true, Privileged:false, Binds:null, NetworkMode:'none', PidsLimit:64,
       Memory:536870912, NanoCpus:500000000, Tmpfs:{'/tmp':'rw,noexec,nosuid,nodev,size=16m,mode=1777'},
     }}]);
@@ -62,7 +72,7 @@ test('runtime probe diagnostics preserve the failed check and cleanup attempts t
   const raw = readFileSync(output, 'utf8'), report = JSON.parse(raw);
   assert.equal(report.error.probeCheck, 'sqlite-journal');
   assert.equal(report.error.exitCode, 1, 'cleanup cannot replace the original failure');
-  assert.deepEqual(report.completedChecks, ['image-metadata','image-inventory','writable-root-permissions']);
+  assert.deepEqual(report.completedChecks, ['image-metadata','image-inventory','writable-root-permissions','healthcheck-behavior']);
   assert.equal(report.cleanup.containersAttempted, 1);
   assert.equal(report.cleanup.volumesAttempted, 1);
   // The helper embeds JavaScript in Docker arguments; checking only the outer
@@ -96,9 +106,240 @@ test('runtime success reports both passes and temporary files; cleanup failure s
   assert.equal(report.writableRootTemporaryFiles, true);
   assert.equal(report.cleanup.volumesAttempted, 1);
   assert.ok(docker.calls.filter(args => args[0] === 'create').every(args => args.includes('/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777')));
+  const applications = docker.calls.filter(args => args[0] === 'create');
+  assert.equal(applications.length, 3);
+  assert.ok(applications.slice(0, 2).every(args => !args.some(arg => arg.startsWith('PORT='))));
+  assert.ok(applications[2]?.includes('PORT=18080'));
+  assert.ok(report.completedChecks.includes('application-custom-port'));
+  assert.equal(report.customPort, undefined);
+  assert.deepEqual(report.healthcheck, healthObservations());
   const failing = dockerFixture(args => { if (args[0] === 'volume' && args[1] === 'rm') throw new Error('private cleanup failure'); });
   await assert.rejects(runRuntimeImageCheck('fixture', output, {execute:failing.execute, distribution:['index.js']}), /cleanup_failed/);
   assert.equal(JSON.parse(readFileSync(output, 'utf8')).passed, false);
+});
+
+test('image acceptance rejects alternate commands and changed cadence before execution', async t => {
+  const {output} = fixture(t);
+  for (const changed of [
+    {Test:['CMD-SHELL', 'wget http://127.0.0.1:8080/healthz']},
+    {Test:['CMD', '/bin/sh', '-c', 'exec wget']},
+    {Test:['CMD', 'node', '-e', 'process.exit(0)']},
+    {Test:[...healthcheckCommand, '--url', 'http://example.test']},
+    {Interval:60_000_000_000}, {Timeout:30_000_000_000}, {StartPeriod:0}, {Retries:1},
+  ]) {
+    const docker = dockerFixture(() => {}, changed);
+    await assert.rejects(runRuntimeImageCheck('fixture', output, {execute:docker.execute, distribution:['index.js']}), /image-healthcheck/);
+    assert.ok(!docker.calls.some(args => args[0] === 'run'));
+  }
+});
+
+test('deadline acceptance rejects early failures and probes slower than Docker permits', async t => {
+  const {output} = fixture(t);
+  for (const elapsedMilliseconds of [2999, 4900, 8000]) {
+    const observations = healthObservations();
+    observations.timeout!.elapsedMilliseconds = elapsedMilliseconds;
+    const docker = dockerFixture(() => {}, {}, observations);
+    await assert.rejects(runRuntimeImageCheck('fixture', output, {execute:docker.execute, distribution:['index.js']}), /assertion_failed.*healthcheck-behavior/);
+  }
+});
+
+test('health fixture setup failures retain their section and remove settled listen-error callbacks', async () => {
+  let listenersRemoved = false, created = 0;
+  const errors: string[] = [];
+  class Server extends EventEmitter {
+    listen() {
+      if (++created === 1) {
+        const initial = this.listeners('error')[0];
+        this.emit('listening');
+        listenersRemoved = !this.listeners('error').includes(initial!);
+      } else this.emit('error', Object.assign(new Error('private diagnostic'), {code:'EADDRINUSE'}));
+    }
+    close() {}
+  }
+  const context = {require:(name: string) => {
+    if (name === 'node:assert/strict') return assert;
+    if (name === '/app/dist/config.js') return {loadConfig};
+    if (name === 'node:http' || name === 'node:net') return {createServer:() => new Server()};
+    if (name === 'node:child_process') return {spawn:() => assert.fail('setup must fail before probing')};
+    throw new Error('unexpected module');
+  }, console:{error:(message: string) => errors.push(message)}, process:{exitCode:0}};
+  await new Script(healthcheckProbe(healthcheckCommand.slice(1))).runInNewContext(context);
+  assert.equal(listenersRemoved, true);
+  assert.equal(context.process.exitCode, 1);
+  assert.deepEqual(errors, ['MEROVINGIAN_PROBE_FAILURE:healthcheck-setup']);
+});
+
+test('health fixture watchdog and HTTP failures preserve their distinct diagnostics', async t => {
+  const {output} = fixture(t);
+  for (const marker of ['healthcheck-watchdog', 'healthcheck-http10', 'build-toolchain']) {
+    const docker = dockerFixture(args => {
+      if (args[0] === 'run' && args.includes('--no-healthcheck')) throw Object.assign(new Error('private diagnostic'), {
+        stderr:'MEROVINGIAN_PROBE_FAILURE:' + marker, status:1,
+      });
+    });
+    await assert.rejects(runRuntimeImageCheck('fixture', output, {execute:docker.execute, distribution:['index.js']}), new RegExp(marker));
+    const report = JSON.parse(readFileSync(output, 'utf8'));
+    assert.equal(report.cleanup.containersAttempted, 1);
+    assert.equal(report.cleanup.volumesAttempted, 0);
+  }
+});
+
+test('a server error after listening writes its diagnostic synchronously before exit', async () => {
+  const events: string[] = [];
+  class Server extends EventEmitter {
+    listen() { this.emit('listening'); this.emit('error', new Error('private server error')); }
+    close() {}
+  }
+  const context = {require:(name: string) => {
+    if (name === 'node:assert/strict') return assert;
+    if (name === '/app/dist/config.js') return {loadConfig};
+    if (name === 'node:http' || name === 'node:net') return {createServer:() => new Server()};
+    if (name === 'node:child_process') return {spawn:() => assert.fail('server failed before probing')};
+    if (name === 'node:fs') return {writeSync:(fd: number, message: string) => {
+      assert.equal(fd, 2); events.push(message);
+    }};
+    throw new Error('unexpected module');
+  }, console:{error:() => {}}, process:{exit:(code: number) => {
+    events.push('exit:' + code); throw new Error('simulated exit');
+  }, exitCode:0}};
+  await new Script(healthcheckProbe(healthcheckCommand.slice(1))).runInNewContext(context);
+  assert.deepEqual(events, ['MEROVINGIAN_PROBE_FAILURE:healthcheck-server\n', 'exit:1']);
+});
+
+test('the fixture watchdog kills the wrapper process group and preserves its diagnostic', async () => {
+  const errors: string[] = [], kills: [number, string][] = [];
+  const child = Object.assign(new EventEmitter(), {pid:12345, stdout:new EventEmitter(), stderr:new EventEmitter()});
+  class Server extends EventEmitter {
+    listen() { this.emit('listening'); }
+    close() {}
+  }
+  const context = {require:(name: string) => {
+    if (name === 'node:assert/strict') return assert;
+    if (name === '/app/dist/config.js') return {loadConfig};
+    if (name === 'node:http' || name === 'node:net') return {createServer:() => new Server()};
+    if (name === 'node:child_process') return {spawn:(_command: string, _args: string[], options: {detached:boolean}) => {
+      assert.equal(options.detached, true); return child;
+    }};
+    throw new Error('unexpected module');
+  }, performance:{now:() => 0}, setTimeout:(callback: () => void, timeout: number) => {
+    assert.equal(timeout, 15000); queueMicrotask(callback); return 1;
+  }, clearTimeout:() => {}, console:{error:(message: string) => errors.push(message)}, process:{env:{}, exitCode:0,
+    kill:(pid: number, signal: string) => { kills.push([pid, signal]); child.emit('close', null, signal); }}};
+  await new Script(healthcheckProbe(healthcheckCommand.slice(1))).runInNewContext(context);
+  assert.deepEqual(kills, [[-12345, 'SIGKILL']]);
+  assert.deepEqual(errors, ['MEROVINGIAN_PROBE_FAILURE:healthcheck-watchdog']);
+  assert.equal(context.process.exitCode, 1);
+});
+
+test('the redirect fixture rejects a client that follows Location to a successful target', async () => {
+  type Handler = (request: unknown, response: {writeHead:(status: number, headers: Record<string, string>) => void; end:() => void}) => void;
+  const handlers = new Map<number, Handler>(), errors: string[] = [];
+  let nextCase = 0, location: string | undefined, targetStatus: number | undefined;
+  class Server extends EventEmitter {
+    constructor(private handler?: Handler) { super(); }
+    listen(port: number) { if (this.handler) handlers.set(port, this.handler); this.emit('listening'); }
+    close() {}
+  }
+  const request = (port: number) => {
+    let status = 0, headers: Record<string, string> = {};
+    handlers.get(port)!({method:'GET', url:'/healthz', headers:{host:'127.0.0.1:' + port}}, {
+      writeHead:(value, fields) => { status = value; headers = fields; }, end:() => {},
+    });
+    return {status, headers};
+  };
+  const context = {require:(name: string) => {
+    if (name === 'node:assert/strict') return assert;
+    if (name === '/app/dist/config.js') return {loadConfig};
+    if (name === 'node:http') return {createServer:(handler: Handler) => new Server(handler)};
+    if (name === 'node:net') return {createServer:() => new Server()};
+    if (name === 'node:child_process') return {spawn:() => {
+      const item = healthcheckCases[nextCase++]!;
+      const child = Object.assign(new EventEmitter(), {stdout:new EventEmitter(), stderr:new EventEmitter()});
+      queueMicrotask(() => {
+        if (item.redirectPort) {
+          const response = request(8080);
+          location = response.headers.Location;
+          if (location) targetStatus = request(Number(new URL(location).port)).status;
+          const status = targetStatus ?? response.status;
+          child.emit('close', status >= 200 && status < 300 ? 0 : 1, null);
+        } else if (item.code === 0) child.emit('close', 0, null);
+        else child.emit('error', new Error('redirect regression escaped its case'));
+      });
+      return child;
+    }};
+    throw new Error('unexpected module');
+  }, performance:{now:() => 0}, setTimeout:() => 1, clearTimeout:() => {},
+  console:{error:(message: string) => errors.push(message)}, process:{env:{}, exitCode:0}};
+  await new Script(healthcheckProbe(healthcheckCommand.slice(1))).runInNewContext(context);
+  assert.equal(location, 'http://127.0.0.1:18080/healthz');
+  assert.equal(targetStatus, 200);
+  assert.deepEqual(errors, ['MEROVINGIAN_PROBE_FAILURE:healthcheck-http-redirect']);
+  assert.equal(context.process.exitCode, 1);
+});
+
+test('startup retries only unhealthy exit 1 and preserves Docker or executable failures', async t => {
+  const {output} = fixture(t);
+  for (const failure of [
+    {code:'ENOENT', category:'docker_unavailable'}, {code:'ETIMEDOUT', category:'docker_timeout'},
+    {status:127, category:'docker_command_failed'}, {status:139, category:'docker_command_failed'},
+  ]) {
+    let attempts = 0, pauses = 0;
+    const docker = dockerFixture(args => {
+      if (args[0] === 'exec' && args[2] === healthcheckCommand[1]) {
+        attempts++; throw Object.assign(new Error('private diagnostic'), failure);
+      }
+    });
+    await assert.rejects(runRuntimeImageCheck('fixture', output, {execute:docker.execute, distribution:['index.js'], pause:async () => { pauses++; }}), new RegExp(failure.category + '.*startup-health'));
+    assert.equal(attempts, 1); assert.equal(pauses, 0);
+    assert.equal(JSON.parse(readFileSync(output, 'utf8')).error.exitCode, failure.status);
+  }
+  let attempts = 0, pauses = 0;
+  const docker = dockerFixture(args => {
+    if (args[0] === 'exec' && args[2] === healthcheckCommand[1] && ++attempts === 1) {
+      throw Object.assign(new Error('not ready'), {status:1});
+    }
+  });
+  const report = await runRuntimeImageCheck('fixture', output, {execute:docker.execute, distribution:['index.js'], pause:async () => { pauses++; }});
+  assert.equal(report.passed, true); assert.equal(attempts, 4); assert.equal(pauses, 1);
+});
+
+test('an exited application stops startup retries and preserves sanitized exit evidence before cleanup', async t => {
+  const {output} = fixture(t);
+  for (const containerExitCode of [0, 137]) {
+    let attempts = 0, pauses = 0;
+    const docker = dockerFixture(args => {
+      if (args[0] === 'exec' && args[2] === healthcheckCommand[1]) {
+        attempts++; throw Object.assign(new Error('private daemon diagnostic'), {
+          status:1, stderr:'Error response from daemon: container private-container is not running',
+        });
+      }
+    });
+    const execute = (args: string[]) => {
+      const result = docker.execute(args);
+      return args[0] === 'inspect' ? JSON.stringify([{State:{Running:false, ExitCode:containerExitCode,
+        Error:'private startup log'}}]) : result;
+    };
+    await assert.rejects(runRuntimeImageCheck('fixture', output, {execute, distribution:['index.js'], pause:async () => { pauses++; }}), /container_not_running.*startup-health/);
+    assert.equal(attempts, 1); assert.equal(pauses, 0);
+    const raw = readFileSync(output, 'utf8'), report = JSON.parse(raw);
+    assert.deepEqual(report.error, {category:'container_not_running', stage:'startup-health', operation:'exec', exitCode:1, containerExitCode});
+    assert.ok(docker.calls.findIndex(args => args[0] === 'inspect') < docker.calls.findIndex(args => args[0] === 'rm'));
+    assert.equal(report.cleanup.containersAttempted, 1); assert.equal(report.cleanup.volumesAttempted, 1);
+    assert.doesNotMatch(raw, /private-container|private startup log|private daemon diagnostic/);
+  }
+});
+
+test('a custom-port regression preserves completed persistence evidence', async t => {
+  const {output} = fixture(t);
+  const docker = dockerFixture(args => {
+    if (args[0] === 'exec' && args[1]!.endsWith('-custom-port')) throw Object.assign(new Error('connection refused'), {status:1});
+  });
+  await assert.rejects(runRuntimeImageCheck('fixture', output, {execute:docker.execute, distribution:['index.js'], pause:async () => {}}), /custom-port-health/);
+  const report = JSON.parse(readFileSync(output, 'utf8'));
+  assert.equal(report.persistenceAcrossReplacement, true);
+  assert.equal(report.executions.length, 2);
+  assert.ok(report.completedChecks.includes('application-pass-2'));
+  assert.equal(report.customPort, undefined);
 });
 
 test('distribution inventory follows TypeScript sources and options while rejecting operator tooling outside src', t => {

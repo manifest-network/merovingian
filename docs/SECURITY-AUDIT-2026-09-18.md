@@ -104,6 +104,16 @@ After confirming support, prepare a named Merovingian-specific profile in this r
 
 [ENG-1041](https://linear.app/liftedinit/issue/ENG-1041) will require an AppArmor-capable isolated runner for positive application tests and negative confinement tests. Attribute expected denials to the named AppArmor profile using sanitized audit evidence; a failure caused only by file ownership, a read-only mount or seccomp does not prove AppArmor worked. Verify profile attachment and enforce mode across restart/recreation. An unsupported runner must report that verification is unavailable, not pass it silently. Production policy loading or attachment remains a separately authorized provider action; no host policy was loaded or changed during this follow-up.
 
+**2026-09-21 source follow-up (ENG-1044):** the prepared `0.4.5` image uses Alpine's
+curl through `/usr/local/bin/merovingian-healthcheck`, a small shell wrapper.
+Application startup retains the explicit Node entrypoint, but health probes
+require the BusyBox shell, curl and their loader/library reads. A future profile
+must account for those executions; an unconditional shell denial would break
+this healthcheck. The custom C client was removed in favor of maintained software.
+The command and file permissions are checked locally. Provider/profile
+acceptance remains open; no AppArmor policy was loaded or verified here. See the
+[0.4.5 candidate record](RELEASE-0.4.5.md).
+
 ## Completion path
 
 The audit package and local verification are ready for review. The provider-evidence acceptance item remains open; public health responses and the repository's provider status/release API do not expose effective runtime controls. No provider host access or sanitized runtime attestation was available in this review, and no request was sent to the provider.

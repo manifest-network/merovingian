@@ -16,7 +16,7 @@ LABEL org.opencontainers.image.source="https://github.com/manifest-network/merov
 WORKDIR /app
 # Keep CA data explicitly when removing apk and its otherwise unused libraries.
 # The package database remains available for complete OS package scanning.
-RUN apk add --no-cache ca-certificates-bundle \
+RUN apk add --no-cache ca-certificates-bundle curl \
     && apk upgrade --no-cache \
     && apk del --no-network apk-tools scanelf musl-utils \
     && rm -rf /usr/local/lib/node_modules /opt/yarn-* /usr/local/include/node \
@@ -32,13 +32,15 @@ RUN apk add --no-cache ca-certificates-bundle \
 COPY --from=build --chown=0:0 /app/node_modules ./node_modules
 COPY --from=build --chown=0:0 /app/dist ./dist
 COPY --from=build --chown=0:0 /app/package.json ./package.json
+COPY --chown=0:0 tools/healthcheck.sh /usr/local/bin/merovingian-healthcheck
 # COPY creates its destination directories with default modes. Tighten only
 # those directories, then strip privilege bits from every final file input.
-RUN chmod 555 /app/node_modules /app/dist \
+RUN chmod 555 /app/node_modules /app/dist /usr/local/bin/merovingian-healthcheck \
     && find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -exec chmod a-s {} +
 USER 1000:1000
 VOLUME ["/data"]
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||'8080')+'/healthz',{signal:AbortSignal.timeout(4000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+# The wrapper supplies PORT; curl handles HTTP and the four-second total timeout.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 CMD ["/usr/local/bin/merovingian-healthcheck"]
 ENTRYPOINT ["/usr/local/bin/node"]
 CMD ["dist/index.js"]

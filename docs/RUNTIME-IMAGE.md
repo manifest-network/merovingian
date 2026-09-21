@@ -1,6 +1,6 @@
 # Runtime image hardening
 
-The [Dockerfile](../Dockerfile) prepares the local ENG-1037 candidate. It does not publish or deploy an image. The dated [original audit](SECURITY-AUDIT-2026-09-18.md) remains a record of release 0.4.3's original Debian image.
+The [Dockerfile](../Dockerfile) builds the runtime image. Building it does not publish or deploy an image. The dated [original audit](SECURITY-AUDIT-2026-09-18.md) remains a record of release 0.4.3's original Debian image.
 
 ## Runtime selection
 
@@ -10,11 +10,36 @@ This replaces the Debian runtime instead of carrying its unused package-manageme
 
 The runtime stage applies current signed Alpine package updates, explicitly retains the CA bundle, then removes apk, scanelf, musl utilities and unused dependency libraries. npm, npx, Yarn, corepack, Node headers and the inherited shell entrypoint are removed. The APK installed-package database stays present so scanners can inventory the remaining operating-system packages. BusyBox and its shell remain; none of the image's regular files retain SUID/SGID bits. Existing SGID directories only control group inheritance and do not grant executable privileges.
 
-`/app` and its contents are owned by root and have all write bits removed. Application artifact modes are set in the build stage and preserved by `COPY`; the final stage strips SUID/SGID bits after all application copies, including dependency files. This avoids a recursive final-stage chmod that would duplicate application file payloads in another image layer. UID/GID `1000:1000` owns the persistent application data directory, with mode `0700`; its former home is not writable. Node runs directly as the entrypoint, and the exec-form healthcheck uses the configured port and a four-second request deadline.
+`/app` and its contents are owned by root and have all write bits removed. Application artifact modes are set in the build stage and preserved by `COPY`; the final stage strips SUID/SGID bits after all application copies, including dependency files. This avoids a recursive final-stage chmod that would duplicate application file payloads in another image layer. UID/GID `1000:1000` owns the persistent application data directory, with mode `0700`; its former home is not writable. Node runs directly as the entrypoint.
+
+The exec-form healthcheck starts `/usr/local/bin/merovingian-healthcheck`, a small [shell wrapper](../tools/healthcheck.sh) around Alpine's curl package. The wrapper is root-owned with mode `0555`. Curl handles HTTP parsing, body reads and timeouts; there is no custom C client or compiler stage. Both the app and wrapper require ASCII decimal `PORT` in the range 1–65535, defaulting to 8080 when unset or empty. Whitespace and JavaScript numeric forms such as `8e3` are rejected at startup.
+
+The wrapper requests only IPv4 loopback `/healthz`, disables curl configuration files and proxies, does not follow redirects, and accepts only 2xx responses. Curl consumes the response body with a 64 KiB limit and discards it. Its `--max-time 4` bounds the whole transfer, including slowly arriving headers or bodies. Docker retains its five-second timeout, 30-second interval, 15-second startup period and three-failure threshold. See the [curl option reference](https://curl.se/docs/manpage.html).
+
+Image acceptance pins the wrapper command and Docker settings, exercises the real curl package, and checks deadline failures between three and 4.9 seconds. The upper bound is derived from the verified Docker timeout; a separate 15-second watchdog diagnoses stuck tests. Evidence records actual exit codes, elapsed times and stdout/stderr byte counts. Future AppArmor policy must permit the shell wrapper, curl and their required library reads. Their installed packages remain visible to the image scanner.
 
 The image retains conventional sticky mode `1777` on `/tmp` and `/var/tmp`, allowing temporary-file APIs during ordinary writable-root execution. A read-only runtime must provide a bounded writable `/tmp` tmpfs with `noexec,nosuid,nodev` and mode `1777`; the local fixture allocates 16 MiB and tests Node temporary-directory creation, writing and cleanup. `/var/tmp` need not be separately writable in that configuration. Temporary files are disposable, while durable SQLite data belongs under `/data`. These image properties complement the read-only root, dropped capabilities, no-new-privileges and resource limits required from the runtime provider.
 
 Base digests and the npm lockfile are pinned. Alpine update repositories still move over time, so rebuilding need not produce identical package versions or bytes. Record and scan each resulting immutable candidate; never substitute a tag for the tested digest.
+
+## ENG-1044 local validation — 2026-09-21
+
+The [0.4.5 candidate](RELEASE-0.4.5.md) replaces the per-probe Node startup, retains readiness behavior, and delegates HTTP to curl. The [sanitized evidence](evidence/healthcheck-2026-09-21.json) identifies the exact candidate and records validation and CPU counters. It supersedes the earlier wget and custom C candidates and their measurements.
+
+`npm run check` passed all 204 tests, metadata consistency, typechecking and build. The suite includes regression checks for all cadence settings, exited-container detection, startup failure classification, synchronous server diagnostics, redirect following and the wrapper process-group watchdog. The final-image check passed 32 health scenarios, independent custom-port application health, SQLite persistence, permissions and shutdown. Curl and libcurl are Alpine `8.22.0-r0`; the scan inventories 23 OS packages, **13 more than the previous candidate's 10**, including libcurl and OpenSSL dependencies. This package increase and the shell requirement are the tradeoff for using a maintained HTTP client. The image scan passed the existing advisory policy with the previously reported low, unfixed `elliptic` advisory still visible and no exceptions.
+
+Each CPU comparison used two disposable images whose filesystem layers and all configuration except the healthcheck command were verified identical. The baseline was built with the original `CMD ["node", "-e", ...]` healthcheck from commit `feacd4e`; the candidate uses `CMD ["/usr/local/bin/merovingian-healthcheck"]`. The Node baseline invokes Node directly; the candidate includes its shell wrapper and curl in the measured work. Both retain the 30-second probe interval, 512 MiB memory, read-only root, no external network, dropped capabilities and no-new-privileges. After healthy startup and ten seconds of settling, host reads of the container cgroup counters bracketed a 65-second idle window. No measuring processes ran inside those cgroups. Each window contained two successful scheduled probes and no visits.
+
+| CPU limit | Probe | Window CPU time | Added throttled periods | Added throttled time |
+| --- | --- | ---: | ---: | ---: |
+| 0.1 | Node baseline | 341.7 ms | 33 | 3,806.2 ms |
+| 0.1 | Curl wrapper | 56.0 ms | 5 | 326.5 ms |
+| 0.5 | Node baseline | 337.4 ms | 6 | 521.6 ms |
+| 0.5 | Curl wrapper | 56.4 ms | 0 | 0.0 ms |
+
+At the lease's stated 0.5-CPU quota, the curl candidate used 83% less CPU over the window, with 0 additional throttled periods. The stricter 0.1-CPU run improved CPU time by 84% and recorded 5 additional throttled periods. It did **not** meet the issue's expectation of a flat throttling counter at that limit. These are short observations of the whole container, including application work, the shell wrapper, curl and Docker execution overhead; they do not establish a two-millisecond per-process cost or predict provider alert clearance.
+
+Publication and an existing-lease update remain separate actions requiring explicit authorization under [AGENTS.md](../AGENTS.md). After an authorized update, verify read-only health and provider CPU/throttling metrics, then check the alert over its evaluation window. The related monitoring-rule change in ENG-1043 is outside this repository change.
 
 ## Local validation snapshot — 2026-09-18
 

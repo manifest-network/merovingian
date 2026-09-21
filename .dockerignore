@@ -5,3 +5,8 @@
 !tsconfig.build.json
 !src
 !src/**
+# Reopen tools only to admit the wrapper; keep the descendant exclusion before
+# the single-file exception so the keyring signer and other tools stay out.
+!tools
+tools/**
+!tools/healthcheck.sh

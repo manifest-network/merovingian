@@ -1,0 +1,476 @@
+{
+  "issue": "ENG-1044",
+  "version": "0.4.5",
+  "scope": "Local curl-wrapper candidate only. Both comparison images have identical layers and configuration except their healthcheck commands. No publication, deployment, live visits or paid operations.",
+  "imageId": "sha256:8e32caa5326f67863fe1fb70153cfc8998fd2cee43119f14d29876e256933d24",
+  "configurationDigest": "sha256:cd1f002fa8b473c63d6df6fd4b1fc5231c949a0cf78631dfedb4dbe247e46b26",
+  "wrapperSourceSha256": "7bb301ab5e056e3a01b79d53a77e36aa0edec70e097c6be9e0e2631585c7ff58",
+  "clientPackages": {
+    "curl": "8.22.0-r0",
+    "libcurl": "8.22.0-r0"
+  },
+  "baselineImageId": "sha256:b8ec69a1719777ac4197950ca082352cf9aca46f2f88cde7c8a0465846ed4fc2",
+  "identicalBaselineRootFsAndOtherConfiguration": true,
+  "healthchecks": {
+    "node": {
+      "Interval": 30000000000,
+      "Retries": 3,
+      "StartPeriod": 15000000000,
+      "Test": [
+        "CMD",
+        "node",
+        "-e",
+        "fetch('http://127.0.0.1:'+(process.env.PORT||'8080')+'/healthz',{signal:AbortSignal.timeout(4000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      ],
+      "Timeout": 5000000000
+    },
+    "curl": {
+      "Interval": 30000000000,
+      "Retries": 3,
+      "StartPeriod": 15000000000,
+      "Test": [
+        "CMD",
+        "/usr/local/bin/merovingian-healthcheck"
+      ],
+      "Timeout": 5000000000
+    }
+  },
+  "supersedesCandidate": "sha256:b14340149f00542417f7ebeac69591326d04dc717f9ee9d4940326d928e497c2",
+  "checks": {
+    "repositoryCheckPassed": true,
+    "testsPassed": 204,
+    "runtimePassed": true,
+    "runtimeCheckedAt": "2026-09-21T16:51:14.504Z",
+    "runtimeCompletedChecks": [
+      "image-metadata",
+      "image-inventory",
+      "writable-root-permissions",
+      "healthcheck-behavior",
+      "application-pass-1",
+      "application-pass-2",
+      "application-custom-port"
+    ],
+    "healthcheck": {
+      "default-port": {
+        "code": 0,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 44
+      },
+      "empty-port": {
+        "code": 0,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 4
+      },
+      "custom-port": {
+        "code": 0,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 32
+      },
+      "leading-zero-port": {
+        "code": 0,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 4
+      },
+      "proxy-bypass": {
+        "code": 0,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 5
+      },
+      "http-no-content": {
+        "code": 0,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 4
+      },
+      "http-redirect": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 4,
+        "redirectRequests": 0
+      },
+      "http-not-found": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 4
+      },
+      "http-unavailable": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 4
+      },
+      "connection-error": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 4
+      },
+      "invalid-port": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 1
+      },
+      "malformed-port": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 1
+      },
+      "zero-port": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 1
+      },
+      "negative-port": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 1
+      },
+      "signed-port": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 1
+      },
+      "leading-space-port": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 1
+      },
+      "trailing-space-port": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 1
+      },
+      "newline-port": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 1
+      },
+      "decimal-port": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 1
+      },
+      "exponent-port": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 1
+      },
+      "hex-port": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 2
+      },
+      "unicode-space-port": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 1
+      },
+      "huge-port": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 1
+      },
+      "http10": {
+        "code": 0,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 5
+      },
+      "malformed-status": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 5
+      },
+      "truncated-status": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 4
+      },
+      "truncated-body": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 4
+      },
+      "split-body": {
+        "code": 0,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 104
+      },
+      "oversized-body": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 106
+      },
+      "hung-body": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 4009
+      },
+      "timeout": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 4009
+      },
+      "total-deadline": {
+        "code": 1,
+        "signal": null,
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "elapsedMilliseconds": 4006
+      }
+    },
+    "runtimeCleanupFailures": []
+  },
+  "scan": {
+    "checkedAt": "2026-09-21T15:37:51.870Z",
+    "scannerVersion": "0.74.0",
+    "databaseUpdatedAt": "2026-09-21T07:13:21.413091201Z",
+    "passed": true,
+    "blocked": [],
+    "accepted": [],
+    "reported": [
+      {
+        "advisory": "CVE-2025-14505",
+        "package": "elliptic",
+        "version": "6.6.1",
+        "target": "Node.js",
+        "path": "app/node_modules/elliptic/package.json",
+        "severity": "LOW",
+        "fixedVersion": ""
+      }
+    ]
+  },
+  "cpuComparisons": [
+    {
+      "checkedAt": "2026-09-21T15:44:29.274014+00:00",
+      "cpuLimit": 0.1,
+      "memoryBytes": 536870912,
+      "probeIntervalSeconds": 30,
+      "windowSeconds": 65,
+      "sampling": "Host reads of each container cgroup cpu.stat before/after an idle window, after healthy startup and a 10-second settling period; no docker exec or other measurement processes inside the sampled cgroups. Docker health logs identify scheduled probes.",
+      "cases": {
+        "node": {
+          "health": "healthy",
+          "scheduledProbes": 2,
+          "probeExitCodes": [
+            0,
+            0
+          ],
+          "probeWallMilliseconds": [
+            1596.163,
+            1606.972
+          ],
+          "cpuStatBefore": {
+            "usage_usec": 1448844,
+            "nr_periods": 147,
+            "nr_throttled": 145,
+            "throttled_usec": 23812221
+          },
+          "cpuStatAfter": {
+            "usage_usec": 1790540,
+            "nr_periods": 190,
+            "nr_throttled": 178,
+            "throttled_usec": 27618371
+          },
+          "cpuStatDelta": {
+            "usage_usec": 341696,
+            "nr_periods": 43,
+            "nr_throttled": 33,
+            "throttled_usec": 3806150
+          }
+        },
+        "curl": {
+          "health": "healthy",
+          "scheduledProbes": 2,
+          "probeExitCodes": [
+            0,
+            0
+          ],
+          "probeWallMilliseconds": [
+            202.926,
+            197.311
+          ],
+          "cpuStatBefore": {
+            "usage_usec": 1227668,
+            "nr_periods": 128,
+            "nr_throttled": 124,
+            "throttled_usec": 20078962
+          },
+          "cpuStatAfter": {
+            "usage_usec": 1283659,
+            "nr_periods": 139,
+            "nr_throttled": 129,
+            "throttled_usec": 20405467
+          },
+          "cpuStatDelta": {
+            "usage_usec": 55991,
+            "nr_periods": 11,
+            "nr_throttled": 5,
+            "throttled_usec": 326505
+          }
+        }
+      }
+    },
+    {
+      "checkedAt": "2026-09-21T15:40:35.052151+00:00",
+      "cpuLimit": 0.5,
+      "memoryBytes": 536870912,
+      "probeIntervalSeconds": 30,
+      "windowSeconds": 65,
+      "sampling": "Host reads of each container cgroup cpu.stat before/after an idle window, after healthy startup and a 10-second settling period; no docker exec or other measurement processes inside the sampled cgroups. Docker health logs identify scheduled probes.",
+      "cases": {
+        "node": {
+          "health": "healthy",
+          "scheduledProbes": 2,
+          "probeExitCodes": [
+            0,
+            0
+          ],
+          "probeWallMilliseconds": [
+            353.088,
+            302.583
+          ],
+          "cpuStatBefore": {
+            "usage_usec": 1735688,
+            "nr_periods": 38,
+            "nr_throttled": 31,
+            "throttled_usec": 2945136
+          },
+          "cpuStatAfter": {
+            "usage_usec": 2073106,
+            "nr_periods": 51,
+            "nr_throttled": 37,
+            "throttled_usec": 3466778
+          },
+          "cpuStatDelta": {
+            "usage_usec": 337418,
+            "nr_periods": 13,
+            "nr_throttled": 6,
+            "throttled_usec": 521642
+          }
+        },
+        "curl": {
+          "health": "healthy",
+          "scheduledProbes": 2,
+          "probeExitCodes": [
+            0,
+            0
+          ],
+          "probeWallMilliseconds": [
+            45.058,
+            38.272
+          ],
+          "cpuStatBefore": {
+            "usage_usec": 1466298,
+            "nr_periods": 32,
+            "nr_throttled": 27,
+            "throttled_usec": 3038012
+          },
+          "cpuStatAfter": {
+            "usage_usec": 1522714,
+            "nr_periods": 39,
+            "nr_throttled": 27,
+            "throttled_usec": 3038012
+          },
+          "cpuStatDelta": {
+            "usage_usec": 56416,
+            "nr_periods": 7,
+            "nr_throttled": 0,
+            "throttled_usec": 0
+          }
+        }
+      }
+    }
+  ],
+  "limitations": "Short idle-window observations on one local Docker host, including application, shell/curl and container-exec overhead; not per-process probe CPU time or a prediction of provider alert clearance. AppArmor policy must permit the wrapper shell, curl and their required library reads; enforcement was not verified.",
+  "cleanup": "All comparison containers and their anonymous volumes removed.",
+  "reviewValidation": {
+    "checkedAt": "2026-09-21T16:53:03.143Z",
+    "redirectFollowingMutation": {
+      "exitCode": 1,
+      "probeCheck": "healthcheck-http-redirect"
+    },
+    "buildContext": {
+      "scope": "Synthetic files only; Docker applies the repository ignore rules.",
+      "includedFiles": [
+        "package-lock.json",
+        "package.json",
+        "src/index.ts",
+        "src/nested/module.ts",
+        "tools/healthcheck.sh",
+        "tsconfig.build.json",
+        "tsconfig.json"
+      ],
+      "excludedFiles": [
+        "tools/keyring-signer/main.go",
+        "tools/keyring-signer/build/signer",
+        "tools/other.sh",
+        "scripts/operator.ts",
+        ".local/fixture.txt",
+        ".env",
+        "docs/fixture.md"
+      ],
+      "descendantExclusionMutationRejected": true
+    },
+    "runtimeCheckerSha256": "94315eec61c9b6259f946ba180b088a37749ebac8879482673c46ba4c7dec7d3",
+    "dockerignoreSha256": "c65614747b14ebfa71e8dccc0db7b2695b58b7c5a0261e46855a9dc935ea72e5"
+  }
+}

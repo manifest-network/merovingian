@@ -13,6 +13,10 @@ also lists `0.4.4` as the latest version. See the
 [publication and acceptance evidence](docs/evidence/release-0.4.4.json), including
 the remaining provider/AppArmor acceptance work.
 
+Release **0.4.5 is prepared locally, not deployed or published**. Its
+[release notes](docs/RELEASE-0.4.5.md) describe the curl healthcheck and exact
+candidate evidence. It is a separate image from the live `0.4.4` release.
+
 **MCP compatibility:** `0.4.3` changed the runtime/server-card name from
 `network.manifest.merovingian/merovingian` to
 `io.github.manifest-network/merovingian`, with no compatibility alias. This may

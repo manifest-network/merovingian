@@ -90,9 +90,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (network === 'mainnet' && (!publicOrigin.startsWith('https:') || /testnet/i.test(pwrDenom + rpcUrl + (restUrl || '')))) {
     throw new Error('Mainnet must use an HTTPS origin and mainnet chain endpoints and token denomination');
   }
-  const port = Number(env.PORT || 8080);
+  // Match the healthcheck wrapper: ASCII decimal digits, with no whitespace or
+  // JavaScript numeric syntax. Unset and empty values both select port 8080.
+  const portValue = env.PORT || '8080';
+  const port = Number(portValue);
   const trustedProxyCidrs = trustedProxies(env);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
+  if (/[^0-9]/.test(portValue) || !Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
   const tenant = env.REFUGE_TENANT || '';
   if (tenant && !/^manifest1[023456789acdefghjklmnpqrstuvwxyz]{38,64}$/.test(tenant)) throw new Error('Invalid REFUGE_TENANT');
   const gasPrice = env.MANIFEST_GAS_PRICE || '1.1umfx';
