@@ -1,7 +1,7 @@
 import type { Config } from './config.js';
 import { getAmenities, type VisitResult } from './amenities.js';
 import type { VisitCounts } from './counts.js';
-import { APP_VERSION } from './identity.js';
+import { httpApiDocument } from './openapi.js';
 
 export const description = 'A small refuge for wandering AI agents. Byte-chip cookies, an rgB sauna, null tea, and little souvenirs. Visit freely over HTTP or MCP.';
 export const escapeHtml = (value: string): string => value.replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]!));
@@ -149,32 +149,5 @@ export function visitPage(config: Config, result: VisitResult): string {
 }
 
 export function openapi(config: Config) {
-  const error = { description: 'Invalid input, retired testnet, request limit, or temporary storage or chain unavailability', content: { 'application/json': { schema: { type: 'object' } } } };
-  const countSchema = { type: 'string', pattern: '^(0|[1-9][0-9]*)$' };
-  const statsSchema = {
-    type: 'object', additionalProperties: false,
-    required: ['status', 'network', 'chainId', 'since', 'counts', 'total', 'storage'],
-    properties: {
-      status: { type: 'string', enum: ['available', 'unavailable'] },
-      network: { type: 'string', enum: ['testnet', 'mainnet'] }, chainId: { type: 'string' },
-      since: { type: ['string', 'null'], format: 'date-time', description: 'UTC start of these counters; earlier visits are not reconstructed.' },
-      counts: { anyOf: [{ type: 'object', additionalProperties: false, required: getAmenities().map(a => a.id), properties: Object.fromEntries(getAmenities().map(a => [a.id, countSchema])) }, { type: 'null' }] },
-      total: { type: ['string', 'null'], pattern: countSchema.pattern },
-      storage: { type: 'string', enum: ['persistent', 'memory'], description: 'Memory counts reset when the service restarts.' },
-    },
-  };
-  return {
-    openapi: '3.1.0',
-    info: { title: 'merovingian', version: APP_VERSION, description: `${description} Network: ${config.network}; chain: ${config.chainId}. Free visits require no wallet and increment aggregate served counts. Hosting contributions use a visitor-controlled wallet.` },
-    servers: [{ url: config.publicOrigin }],
-    paths: {
-      '/api/v1/amenities': { get: { operationId: 'listAmenities', summary: 'Read the free amenity menu', responses: { '200': { description: 'Menu, input preferences, network, and response limits', content: { 'application/json': { schema: { type: 'object', properties: { amenities: { type: 'array', items: { type: 'object' } }, network: { type: 'string' }, chainId: { type: 'string' } } } } } }, default: error } } },
-      '/api/v1/visits': { post: { operationId: 'enjoyAmenity', summary: 'Enjoy a free fictional amenity, receive a souvenir, and increment its aggregate count', description: 'No charge. Each successful request counts, including repeats and automated visits; using the same seed repeats the souvenir but increments the count again. No visitor identity or souvenir content is stored in the counter.', requestBody: { required: true, content: { 'application/json': { schema: { oneOf: getAmenities().map(a => a.inputSchema) } } } }, responses: { '200': { description: 'Immediate experience and self-contained souvenir. The aggregate serving count has been incremented.', content: { 'application/json': { schema: { type: 'object', required: ['experience', 'souvenir'], properties: { experience: { type: 'object' }, souvenir: { type: 'object', properties: { content: { type: 'string' }, mediaType: { const: 'text/plain' }, network: { type: 'string' }, chainId: { type: 'string' } } } } } } } }, default: error } } },
-      '/api/v1/stats': { get: { operationId: 'servedCounts', summary: 'Read aggregate served counts without recording a visit', responses: { '200': { description: 'Counts by amenity and total as decimal integer strings, with the counting start date and storage lifetime. Repeated and automated visits count; these are not unique-visitor or historical lifetime totals. Unavailable counts, total, and since are null.', content: { 'application/json': { schema: statsSchema } } }, default: error } } },
-      '/api/v1/support': { get: { operationId: 'hostingSupport', summary: 'Read optional hosting contribution instructions; does not sign or pay', responses: { '200': { description: 'Network, target tenant, token, and unsigned instructions (availability explicitly reported)' }, default: error } } },
-      '/api/v1/contributions': { get: { operationId: 'contributionHistory', summary: 'Read public hosting deposits from the latest 100 indexed funding transactions', responses: { '200': { description: 'Availability, confirmed funding entries, base-unit totals, checkedAt, and complete flag. When complete is false, totals cover only accepted entries in this response. Unavailable totals are null. Cached for up to 60 seconds.' }, default: error } } },
-      '/api/v1/support/verify': { post: { operationId: 'verifyContribution', summary: 'Verify an existing public transaction without broadcasting', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', additionalProperties: false, required: ['transactionHash'], properties: { transactionHash: { type: 'string', pattern: '^[A-Fa-f0-9]{64}$' } } } } } }, responses: { '200': { description: 'Status: confirmed, pending, failed, not_a_contribution, unavailable, or unconfigured. A receipt is present only when confirmed.' }, default: error } } },
-      '/healthz': { get: { operationId: 'health', summary: 'Application health (independent of chain availability)', responses: { '200': { description: 'Application is running; includes network and retirement state' } } } },
-    },
-  };
+  return httpApiDocument(config, description);
 }
