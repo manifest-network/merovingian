@@ -1,12 +1,45 @@
-# Acceptance — 2026-09-18
+# Acceptance — 2026-09-21
+
+## Release 0.4.4 publication and verification
+
+Release **0.4.4 is live on the original mainnet lease** after explicit approval
+to publish the verified image and update that lease. Provider release **6** is
+ready with manifest hash
+`7c9773072774c5f02736cda525d2a77892ba449a56258512f0f84fd85043985d`.
+The published image is
+`ghcr.io/manifest-network/merovingian@sha256:4af4d3da11a31914d796da3f29a55e679c5c3ec366311b4601e4e38426e97621`.
+Anonymous GHCR reads verified that its manifest, configuration, and all ten layer
+blobs match the checked local candidate. [PR #4](https://github.com/manifest-network/merovingian/pull/4)
+merged as `feacd4ec129fbbaa8b8d661eaef279ded623d55b`; its
+[main CI](https://github.com/manifest-network/merovingian/actions/runs/35602896692)
+passed both Check and Final image.
+
+Public **read-only** acceptance passed at **2026-09-21T13:13:36.048Z**. Health,
+OpenAPI, both server cards, and MCP initialization report `0.4.4` under
+`io.github.manifest-network/merovingian`; MCP tool listing retains all four tools.
+Persistent counts remained **8 cookies, 5 sauna sessions, and 6 teas** (19 total)
+against the fresh pre-update snapshot, with the exact original start date
+**2026-09-17T20:29:18.301Z**. Separately authorized MCP Registry publication
+completed at **2026-09-21T13:13:54.140771Z**; exact-version and latest records
+returned active `0.4.4` metadata matching `server.json`.
+
+No live visit, payment, additional funding, new lease, chain transaction, or DNS
+change was performed for this release. These checks establish health, identity,
+discovery, and counter continuity; they do not establish fresh live serving-path
+acceptance. The runtime environment, `/data/visits.sqlite`, UID/GID `1000:1000`,
+and empty proxy trust were preserved. Provider ingress and confinement evidence
+remain open in **ENG-1038**, and named AppArmor enforcement and denial attribution
+remain open in **ENG-1041**. See the [sanitized release evidence](evidence/release-0.4.4.json)
+and [release preparation](RELEASE-0.4.4.md). The dated earlier release records
+below remain historical evidence.
 
 ## Release 0.4.3 publication and verification
 
-Release **0.4.3 is live on the original mainnet lease** after explicit approval to publish its image and update the deployment. Provider release **5** is ready, with manifest hash `a68e232d7726ad108b1307c3bb512a1d31c37459527f639872654682000a1174`. The update used the existing lease, with no chain transaction or additional funding. Public **read-only** acceptance passed at **2026-09-18T15:09:52.871Z**.
+The historical **0.4.3 release went live on the original mainnet lease** on September 18 after explicit approval to publish its image and update the deployment. Provider release **5** reached ready, with manifest hash `a68e232d7726ad108b1307c3bb512a1d31c37459527f639872654682000a1174`. The update used the existing lease, with no chain transaction or additional funding. Public **read-only** acceptance passed at **2026-09-18T15:09:52.871Z**.
 
 - Source: [PR #1](https://github.com/manifest-network/merovingian/pull/1), merged as [`300ac773f28dd61bd804d376cbddcd6ffbd5e82a`](https://github.com/manifest-network/merovingian/commit/300ac773f28dd61bd804d376cbddcd6ffbd5e82a). The image was built from pre-merge commit `ef53a3feb62e91c0930d8f97a8aeff4e4c7bf17e`; both commits have the identical Git tree `5783b3031882f6afd263d44b156eb0c219aeb90b`. [Main CI](https://github.com/manifest-network/merovingian/actions/runs/35360101100) passed registry consistency, typecheck, **142 tests**, and build.
-- Running image: `ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de`. Manifest/configuration digests and anonymous access to all ten layers were verified.
-- Health, OpenAPI, both server cards, and MCP initialization report `0.4.3`. The runtime and server cards use `io.github.manifest-network/merovingian`, matching the registry namespace. Read-only MCP discovery found all four tools and the three free amenities.
+- Image at acceptance: `ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de`. Manifest/configuration digests and anonymous access to all ten layers were verified.
+- Health, OpenAPI, both server cards, and MCP initialization reported `0.4.3`. The runtime and server cards used `io.github.manifest-network/merovingian`, matching the registry namespace. Read-only MCP discovery found all four tools and the three free amenities.
 - Serving counts stayed at **6 cookies, 4 sauna sessions, and 6 teas** (16 total), with the original start date **2026-09-17T20:29:18.301Z**. No live visit or payment was performed for this release check.
 - The candidate preserved a `0.4.2` SQLite fixture in an isolated local container with no external network, a read-only root, UID 1000, 128 MiB memory, and a 0.1 CPU limit. These local test limits do not describe the provider's advertised SKU resources.
 
@@ -48,7 +81,7 @@ The [sanitized release evidence](evidence/release-0.4.3.json) records these obse
 
 ## Release 0.4.2 publication and verification
 
-The historical **0.4.2** update completed on the original mainnet lease without a new lease, chain transaction, or funding deposit. Provider release **4** reached ready, with manifest hash `b632797e7a79ee0cda6f7126d28f89576f8529e7df73e97c705f5d6feea357cb`. Final public HTTP/MCP acceptance passed at **2026-09-17T20:50:40.854Z** using normal DNS and TLS verification. The following observations describe that release; `0.4.3` now supersedes it.
+The historical **0.4.2** update completed on the original mainnet lease without a new lease, chain transaction, or funding deposit. Provider release **4** reached ready, with manifest hash `b632797e7a79ee0cda6f7126d28f89576f8529e7df73e97c705f5d6feea357cb`. Final public HTTP/MCP acceptance passed at **2026-09-17T20:50:40.854Z** using normal DNS and TLS verification. The following observations describe that historical release; current `0.4.4` acceptance is recorded above.
 
 - Public source: [manifest-network/merovingian](https://github.com/manifest-network/merovingian), runtime source commit [`b5ea795`](https://github.com/manifest-network/merovingian/commit/b5ea795).
 - Image at acceptance: `ghcr.io/manifest-network/merovingian@sha256:d82e4891c3f871c33d0e115706878193e1154559d11f43111a8e376b337c44be`; exact digest, configuration, and all ten layers verified anonymously.
@@ -67,7 +100,7 @@ The original lease remains `01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd`, and its launc
 
 ## Historical mainnet launch, release 0.3.0
 
-The initial mainnet launch passed full public acceptance at **2026-09-17T20:00:07.935Z** using release 0.3.0 and published SDK dependencies. The same lease and public domain now run 0.4.3 as verified above.
+The initial mainnet launch passed full public acceptance at **2026-09-17T20:00:07.935Z** using release 0.3.0 and published SDK dependencies. The same lease and public domain now run 0.4.4 as verified above.
 
 - Homepage: [merovingian.manifest.network](https://merovingian.manifest.network)
 - Agent instructions: [visit.md](https://merovingian.manifest.network/visit.md)
@@ -77,7 +110,7 @@ The initial mainnet launch passed full public acceptance at **2026-09-17T20:00:0
 - Tenant: `manifest1hkmrmsc6zjr7gm2wgtrtce7vgxeq9e402x5rf5`
 - Lease: `01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd`, ACTIVE / provider ready
 - Provider: `019e6a0d-e141-7000-9e79-e94ac1bd333e`
-- Historical 0.3.0 image (nine layers): `ghcr.io/fmorency/merovingian@sha256:1020117aa543cbddcdbe0b49a671b09ddabb285a1f3af819d15ed3394d89f53b`. The current 0.4.3 organization image has ten layers and is recorded above.
+- Historical 0.3.0 image (nine layers): `ghcr.io/fmorency/merovingian@sha256:1020117aa543cbddcdbe0b49a671b09ddabb285a1f3af819d15ed3394d89f53b`. The current 0.4.4 organization image has ten layers and is recorded above.
 
 ### DNS, HTTPS, and live application checks
 
