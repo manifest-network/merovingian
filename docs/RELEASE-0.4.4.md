@@ -1,5 +1,8 @@
 # Release 0.4.4 — live
 
+This dated record describes the `0.4.4` publication. The current release is
+[0.4.5](RELEASE-0.4.5.md); the observations and digests below are historical.
+
 Release `0.4.4` is live on Manifest mainnet and published as the latest version
 in the official MCP Registry as of 2026-09-21. The user explicitly approved
 publication of the exact candidate image, the existing-lease update, and
@@ -8,7 +11,7 @@ registry publication after successful live acceptance. The
 completed actions and their verification limits.
 
 This immutable `0.4.4` image predates ENG-1044 and retains the original Node
-healthcheck. The healthcheck fix is a separate [0.4.5 candidate](RELEASE-0.4.5.md);
+healthcheck. The healthcheck fix is the separate [0.4.5 release](RELEASE-0.4.5.md);
 the `0.4.4` digest below must not be reused as the candidate for that fix.
 
 This release packages the security remediation merged in
