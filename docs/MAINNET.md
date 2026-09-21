@@ -20,8 +20,8 @@ counts stayed at **8 cookies, 5 sauna sessions, and 6 teas** (19 total), with th
 original start date **2026-09-17T20:29:18.301Z**. The runtime environment, counter
 path, UID/GID, and empty proxy trust were preserved. The image replaces per-probe
 Node startup with Alpine curl and a small shell wrapper. MCP Registry publication
-awaits fresh operator authentication; `0.4.4` remained active and latest at the
-registry check.
+completed at **2026-09-21T18:03:55.231121Z**; exact-version and latest records
+confirmed active `0.4.5` metadata matching the committed `server.json`.
 
 No live visits, payments, new lease, additional funding, chain transaction, or
 DNS change were part of this update. **ENG-1038** provider ingress/confinement

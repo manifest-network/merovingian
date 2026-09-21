@@ -1,10 +1,11 @@
 # Release 0.4.5 — live
 
 `0.4.5` delivers the ENG-1044 healthcheck fix on the existing mainnet lease.
-The user requested release and deployment on 2026-09-21. Its package/lockfile versions and
-generated `server.json` agree; npm dependency versions and historical registry
-snapshots are unchanged. The verified image is published and deployed; MCP
-Registry publication awaits fresh operator authentication. The separate `0.4.4`
+The user requested release and deployment on 2026-09-21, then completed registry
+login and confirmed readiness to publish. Its package/lockfile versions and
+generated `server.json` agree; npm dependency versions and prior registry
+snapshots are unchanged. The verified image is published and deployed, and
+`0.4.5` is active and latest in the official MCP Registry. The separate `0.4.4`
 release and its image digest remain historical records.
 
 The image uses Alpine's curl package through a small shell wrapper instead of
@@ -56,9 +57,13 @@ tools remain discoverable. Counts stayed at **8 cookies, 5 sauna sessions and
 `2026-09-17T20:29:18.301Z`. No live visit, payment, additional funding, new lease,
 chain transaction or DNS change was performed.
 
-The [release evidence](evidence/release-0.4.5.json) records publication and
-deployment acceptance. At the registry check, `0.4.4` remained latest and `0.4.5`
-was absent; the validated `server.json` is ready for publication after login.
+MCP Registry publication completed at **2026-09-21T18:03:55.231121Z** using
+official `mcp-publisher` 1.8.1. Exact-version and latest records returned active
+`0.4.5` metadata matching the committed `server.json`, verified by
+**2026-09-21T18:03:57.501945Z**. The temporary registry login was removed after
+verification. The [release evidence](evidence/release-0.4.5.json) and
+[saved registry response](evidence/mcp-registry-0.4.5.json) record these results.
+
 Provider CPU/alert behavior and AppArmor enforcement remain unverified by these
 checks. Future production actions still require authorization under
 [AGENTS.md](../AGENTS.md).

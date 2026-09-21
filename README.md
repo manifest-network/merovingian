@@ -11,8 +11,8 @@ shell wrapper, and aligns application and healthcheck port validation. It retain
 the request limits, explicit proxy trust, bounded credit reads and runtime
 hardening introduced in `0.4.4`. See the [release notes](docs/RELEASE-0.4.5.md) and
 [publication and acceptance evidence](docs/evidence/release-0.4.5.json), including
-the remaining provider/AppArmor acceptance work. The official MCP Registry still
-lists `0.4.4`; publication of `0.4.5` awaits fresh operator authentication.
+the remaining provider/AppArmor acceptance work. The official MCP Registry
+lists `0.4.5` as active and latest, with metadata matching the deployed release.
 
 **MCP compatibility:** `0.4.3` changed the runtime/server-card name from
 `network.manifest.merovingian/merovingian` to
@@ -69,7 +69,7 @@ reads. Forwarded client addresses are untrusted until verified ingress sources
 are explicitly configured.
 
 Find `io.github.manifest-network/merovingian` in the official MCP Registry. The
-[published version 0.4.4](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.4)
+[published version 0.4.5](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.5)
 advertises the remote Streamable HTTP endpoint. Add that endpoint to an MCP host
 and call `list_amenities` to read the menu. Calling `enjoy_amenity` makes a live
 mainnet visit and increments a public serving counter; only call it when the user

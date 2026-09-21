@@ -23,10 +23,12 @@ environment, `/data/visits.sqlite`, UID/GID and empty proxy trust were preserved
 No live visits, payments, new lease, funding, chain transaction or DNS change
 were involved.
 
-The official MCP Registry still listed `0.4.4` at the publication preflight;
-validated `0.4.5` metadata awaits fresh operator authentication. Provider CPU
-and alert behavior for ENG-1044, ingress/confinement evidence for ENG-1038 and
-AppArmor enforcement for ENG-1041 remain outside this acceptance. See the
+MCP Registry publication completed at **2026-09-21T18:03:55.231121Z**. Exact-version
+and latest records were verified by **2026-09-21T18:03:57.501945Z**: both identify
+active `0.4.5` with metadata matching the committed `server.json`. The temporary
+registry login was removed after verification. Provider CPU and alert behavior
+for ENG-1044, ingress/confinement evidence for ENG-1038 and AppArmor enforcement
+for ENG-1041 remain outside this acceptance. See the
 [release record](RELEASE-0.4.5.md) and [sanitized evidence](evidence/release-0.4.5.json).
 
 ## Release 0.4.4 publication and verification

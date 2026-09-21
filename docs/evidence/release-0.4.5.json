@@ -142,18 +142,25 @@
     "scope": "Read-only production health, identities, discovery, MCP initialize/tool listing, and persistent counters. No serving or chain-tool calls."
   },
   "registryPublication": {
-    "checkedAt": "2026-09-21T17:44:02.422378+00:00",
+    "checkedAt": "2026-09-21T18:03:57.501945+00:00",
     "registry": "https://registry.modelcontextprotocol.io",
     "name": "io.github.manifest-network/merovingian",
     "version": "0.4.5",
-    "status": "pending-authentication",
     "metadataSha256": "cbd907571d98a42e142f875544fccb1f39ea13527b46a4176f108102e84fc054",
+    "exactRecordUrl": "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.5",
+    "latestRecordUrl": "https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/latest",
+    "publishedAt": "2026-09-21T18:03:55.231121Z",
+    "active": true,
+    "isLatest": true,
+    "exactMetadataMatch": true,
+    "registryCredentialRemoved": true,
     "metadataValidationPassed": true,
-    "publicationAttempted": false,
-    "exactVersionHttpStatus": 404,
-    "observedLatestVersion": "0.4.4"
+    "publisherVersion": "1.8.1",
+    "hashedFile": "server.json",
+    "hashedFileCommit": "0f571a3a1b5191ff587a0caf3109298e1babd931",
+    "metadataComparison": "Parsed server objects in both exact-version and latest records equal the committed server.json. The SHA-256 covers the exact committed file bytes, including whitespace and trailing newline."
   },
-  "scope": "User requested release and deployment. The exact tested image was published and the existing lease updated. Live acceptance used read-only health, metadata, discovery and counters; no serving or payment calls.",
+  "scope": "User requested release and deployment, then completed registry login and confirmed readiness to publish. The exact tested image was published, the existing lease updated, and the accepted metadata published to the MCP Registry. Live acceptance used read-only health, metadata, discovery and counters; no serving or payment calls.",
   "remainingProviderAcceptance": [
     "ENG-1038 ingress topology and effective runtime attestation",
     "ENG-1041 named AppArmor profile enforcement and denial attribution",
