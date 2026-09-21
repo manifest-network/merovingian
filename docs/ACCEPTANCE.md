@@ -1,5 +1,81 @@
 # Acceptance — 2026-09-21
 
+## Repeatable smoke checks (ENG-1032)
+
+`npm run smoke -- ORIGIN [CONTRIBUTION_HASH] [--mainnet] [--serve] [--timeout-ms N]`
+defaults to **read-only** checks. `--mainnet` selects the expected network; it
+does not enable serving. Use an HTTPS origin without a trailing slash, path,
+credentials, query, or fragment. HTTP is accepted only for loopback fixtures
+(`localhost`, `127.0.0.1`, or `[::1]`). The target must match the repository's
+application version.
+
+```sh
+# Read-only public acceptance: no visit endpoints or enjoy_amenity calls.
+npm run smoke -- https://merovingian.manifest.network --mainnet
+
+# Serving checks against a configured, disposable local fixture only.
+npm run smoke -- http://127.0.0.1:8080 --serve
+
+# Self-contained fixtures: no running service, chain access, or wallet needed.
+node --import tsx --test tests/smoke.test.ts
+```
+
+Default checks read health, both MCP server cards, OpenAPI, homepage indexing
+controls, operator HTML, contribution history, sitemap, amenities, the visit
+guide, hosting support, and two serving-count snapshots. MCP initializes,
+lists tools and resources, calls only `list_amenities`, and reads the visit-guide
+resource. The HTTP and MCP menus and guides must agree. Support and history must
+be available; a chain outage or unconfigured ledger fails the check before any
+serving request. Isolated tests supply a local support fixture.
+
+| Mode | Normal maximum HTTP requests, including MCP transport | Hard request cap, including one MCP cancellation | Serving requests | Expected count increase from this run |
+| --- | ---: | ---: | ---: | --- |
+| Default read-only | 20 | 21 | 0 | 0 |
+| Explicit `--serve` | 27 | 28 | 7 | 2 cookies, 2 sauna sessions, 3 teas |
+| Either mode with an existing contribution hash | Add 3 | Add 3 | No additional servings | No additional servings |
+
+The default budget is 13 HTTP GETs, six MCP POSTs, and at most one SDK GET stream
+probe. Discovery is one page; unexpected pagination fails without following it.
+`--serve` adds one browser-form tea visit, then one HTTP and one MCP visit for
+each of the three fixed amenities. The script enforces both request and serving
+caps. Supplying an existing contribution hash also checks its history entry,
+checks that an unknown hash is pending, and compares its confirmed HTTP and MCP
+receipts. These verification calls are read-only and never send a payment.
+
+Every HTTP request, including MCP initialization, notifications, and response
+bodies, has a fresh deadline: **15 seconds** by default; `--timeout-ms N` accepts
+integers from 1 through 60,000. MCP requests also have a total response deadline
+that progress notifications cannot extend. Redirects and MCP reconnects are
+disabled. There are no automatic retries, including after HTTP 429 or 503. The
+first failure stops the run and closes the owned MCP transport, including when
+initialization fails. A timed-out or failed serving response may already have
+incremented a counter; the failure summary records attempts, not confirmed
+servings. Reconcile an uncertain result before seeking authorization for another
+run. Rerunning `--serve` starts another seven-serving budget.
+
+Successful reports go to `.local/smoke-read-only.json` or
+`.local/smoke-serving.json`, under `.local/mainnet/` when `--mainnet` is set.
+They use private file permissions, record mode, budgets, attempted requests, and
+before/after counters, and do not overwrite historical `live-acceptance.json`.
+Read-only reports mark serving checks `not-run` and serving HTTP/MCP equivalence
+`null`. Both modes verify counter identity and continuity. Concurrent public
+visitors can increase totals during a read-only check: `countsUnchanged: false`
+reports that observation without attributing those visits to the check. Isolated
+tests assert exact unchanged counters in read-only mode and exactly seven
+additional servings in serving mode. A failed run exits nonzero and does not
+write a success report; check the report timestamp before using an older file.
+
+**Production authorization:** preparing or testing these changes, approving a
+plan, selecting `--mainnet`, and supplying `--serve` do not grant production
+authorization. Every deployment, update, DNS change, monitoring installation,
+and rollback requires explicit authorization for that concrete action. Live
+serving checks require a separately authorized target and seven-serving scope,
+including the request budget above; release approval alone does not authorize
+visits. Paid operations need their own authorization and are outside this
+script. Keep reports and operational state in ignored local storage. ENG-1032
+validation uses isolated local fixtures only; the release records below remain
+historical evidence, not new production checks.
+
 ## Release 0.4.4 publication and verification
 
 Release **0.4.4 is live on the original mainnet lease** after explicit approval
@@ -127,6 +203,10 @@ The historical 0.3.0 mainnet smoke verified:
 - The existing **15 PWR hosting deposit** returning matching confirmed HTTP and MCP receipts; no new acceptance payment was sent.
 
 The acceptance evidence is `.local/mainnet/live-acceptance.json` and `.local/mainnet/dns-acceptance.json`. `indexingVerified` in the smoke report means the application's canonical/indexing controls passed; it does not claim that a search engine has indexed the site or that a public MCP registry submission has been made.
+
+This historical command used the former serving-by-default script. With the
+current script it runs read-only; fresh serving acceptance requires separately
+authorized use of `--serve` as described above.
 
 ```sh
 node --import tsx scripts/smoke.ts \
