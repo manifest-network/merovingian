@@ -14,7 +14,7 @@ also lists `0.4.4` as the latest version. See the
 the remaining provider/AppArmor acceptance work.
 
 Release **0.4.5 is prepared locally, not deployed or published**. Its
-[release notes](docs/RELEASE-0.4.5.md) describe the native healthcheck and exact
+[release notes](docs/RELEASE-0.4.5.md) describe the curl healthcheck and exact
 candidate evidence. It is a separate image from the live `0.4.4` release.
 
 **MCP compatibility:** `0.4.3` changed the runtime/server-card name from

@@ -5,6 +5,12 @@ official MCP Registry. The generated `server.json` uses the registry identity
 `io.github.manifest-network/merovingian` and Streamable HTTP at
 `https://merovingian.manifest.network/mcp`.
 
+The working `server.json` now identifies the prepared **0.4.5** candidate. It has
+not been published or deployed and is not the published `0.4.4` record. Publish
+that metadata only after the exact `0.4.5` image has been separately authorized,
+deployed, and accepted, followed by explicit authorization for registry
+publication. See the [candidate release record](RELEASE-0.4.5.md).
+
 Version `0.4.4` was published after successful live acceptance and explicit
 approval at **2026-09-21T13:13:54.140771Z** using official `mcp-publisher` 1.8.1.
 The [exact-version record](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.4)

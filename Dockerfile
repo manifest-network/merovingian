@@ -9,13 +9,6 @@ RUN npm run build \
     && npm cache clean --force \
     && chmod -R a-w /app/node_modules /app/dist /app/package.json
 
-FROM node:24.21.0-alpine3.24@sha256:be80f76cf40ec8e42b9bec49f60a55e0660f30af58d3e5a25530785b30ea67e2 AS healthcheck-build
-RUN apk add --no-cache gcc musl-dev
-COPY tools/healthcheck.c /healthcheck.c
-RUN cc -std=c11 -Os -Wall -Wextra -Werror -fPIE -pie -fstack-protector-strong \
-    -D_FORTIFY_SOURCE=2 -Wl,-z,relro,-z,now -s /healthcheck.c -o /healthcheck \
-    && chmod 555 /healthcheck
-
 FROM node:24.21.0-alpine3.24@sha256:be80f76cf40ec8e42b9bec49f60a55e0660f30af58d3e5a25530785b30ea67e2
 ENV NODE_ENV=production PORT=8080 VISIT_COUNTS_PATH=/data/visits.sqlite
 LABEL org.opencontainers.image.source="https://github.com/manifest-network/merovingian" \
@@ -23,7 +16,7 @@ LABEL org.opencontainers.image.source="https://github.com/manifest-network/merov
 WORKDIR /app
 # Keep CA data explicitly when removing apk and its otherwise unused libraries.
 # The package database remains available for complete OS package scanning.
-RUN apk add --no-cache ca-certificates-bundle \
+RUN apk add --no-cache ca-certificates-bundle curl \
     && apk upgrade --no-cache \
     && apk del --no-network apk-tools scanelf musl-utils \
     && rm -rf /usr/local/lib/node_modules /opt/yarn-* /usr/local/include/node \
@@ -39,15 +32,15 @@ RUN apk add --no-cache ca-certificates-bundle \
 COPY --from=build --chown=0:0 /app/node_modules ./node_modules
 COPY --from=build --chown=0:0 /app/dist ./dist
 COPY --from=build --chown=0:0 /app/package.json ./package.json
-COPY --from=healthcheck-build --chown=0:0 /healthcheck /usr/local/bin/merovingian-healthcheck
+COPY --chown=0:0 tools/healthcheck.sh /usr/local/bin/merovingian-healthcheck
 # COPY creates its destination directories with default modes. Tighten only
 # those directories, then strip privilege bits from every final file input.
-RUN chmod 555 /app/node_modules /app/dist \
+RUN chmod 555 /app/node_modules /app/dist /usr/local/bin/merovingian-healthcheck \
     && find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -exec chmod a-s {} +
 USER 1000:1000
 VOLUME ["/data"]
 EXPOSE 8080
-# The native probe reads PORT and bounds the whole request without a shell or VM.
+# The wrapper supplies PORT; curl handles HTTP and the four-second total timeout.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 CMD ["/usr/local/bin/merovingian-healthcheck"]
 ENTRYPOINT ["/usr/local/bin/node"]
 CMD ["dist/index.js"]

@@ -46,24 +46,29 @@ The main application runs with no network, all capabilities dropped,
 no-new-privileges, read-only root, and explicit memory/CPU/PID limits. Process
 UID/GID, capabilities and seccomp are checked, as are the exec healthcheck,
 single MCP operation, batch rejection, serving totals and graceful shutdown.
-A separate loopback HTTP fixture verifies the exact native healthcheck command:
-unset, empty and custom `PORT`, fixed request path and Host, quiet output, ignored
-HTTP proxy settings, 2xx success, and failures on redirects, HTTP errors,
-connection refusal, invalid ports and malformed or oversized status lines.
-Hung connections and slowly arriving status lines exercise the single total
-deadline. These cases must exit normally with failure after at least three and
-less than ten seconds, allowing scheduler delay around the four-second alarm.
-A separate 15-second watchdog reports `healthcheck-watchdog` if the test hangs;
+A separate loopback HTTP fixture verifies the packaged curl wrapper:
+unset, empty and custom `PORT`, matching app/probe rejection of invalid numeric
+formats, fixed request path and Host, quiet output, proxy bypass, 2xx success,
+and failures on redirects, HTTP errors, connection refusal and invalid responses.
+A delayed response body must be consumed successfully; oversized bodies fail.
+Hung responses, slowly arriving status lines and stalled bodies exercise curl's
+four-second transfer deadline. These cases must exit normally with failure after
+at least three seconds and before 4.9 seconds. That ceiling derives from the
+verified five-second Docker timeout and rejects an eight-second timeout regression.
+A separate 15-second watchdog kills the wrapper and curl process group and
+reports `healthcheck-watchdog` if the test hangs;
 it does not race Docker's unchanged five-second healthcheck timeout. Fixture
 setup and runtime server errors have their own diagnostic identifiers.
 
 Both SQLite persistence passes use the default port. A third, independent
 application container verifies a custom port using only `/healthz`; a custom-port
 failure retains the completed persistence evidence. The image metadata pins the
-direct native executable and all cadence/timeout/startup/retry settings. Inventory
-checks require a root-owned, nonwritable ELF executable, and the writable-root
-permission check also verifies that UID 1000 cannot modify it. The C compiler is
-confined to a build stage and is absent from the final runtime image.
+wrapper command and all cadence/timeout/startup/retry settings, with negative
+tests for each. Inventory and writable-root checks require root ownership and
+deny UID 1000 writes to both the wrapper and curl. The final image has no build
+toolchain; leaks use a distinct diagnostic. Startup retries only unhealthy exit
+1, preserving Docker failures and abnormal executable exits. Health evidence
+records observed exit codes, durations and output byte counts.
 Docker resource settings are inspected; the fixture is not a stress test.
 Ordinary writable-root execution also checks temporary-file creation and sticky
 1777 modes on `/tmp` and `/var/tmp`. The read-only fixture mounts only `/tmp` as a

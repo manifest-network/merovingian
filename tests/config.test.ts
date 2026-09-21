@@ -11,6 +11,15 @@ const mainnetEnv: NodeJS.ProcessEnv = {
   REFUGE_TENANT: 'manifest1z5ep5m3ka5v2fn5wyv93elqh5nqlfqww2u82f4',
 };
 
+test('PORT accepts only decimal digits in range, matching the healthcheck wrapper', () => {
+  for (const [value, expected] of [[undefined, 8080], ['', 8080], ['1', 1], ['65535', 65535], ['0008080', 8080]] as const) {
+    assert.equal(loadConfig({PORT:value}).port, expected);
+  }
+  for (const value of ['0', '65536', '-1', '+8080', ' 8080', '8080 ', '8080\n', '\t8080', '\u00a08080', '8080.0', '8e3', '0x1F90', '8080/healthz', '9'.repeat(100)]) {
+    assert.throws(() => loadConfig({PORT:value}), /Invalid PORT/);
+  }
+});
+
 test('proxy trust defaults closed and accepts only explicit bounded IP/CIDR configuration', () => {
   assert.deepEqual(loadConfig({}).trustedProxyCidrs, []);
   assert.deepEqual(loadConfig({ TRUST_PROXY_HOPS: '0' }).trustedProxyCidrs, []);

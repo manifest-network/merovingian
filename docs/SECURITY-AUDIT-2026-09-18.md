@@ -104,14 +104,15 @@ After confirming support, prepare a named Merovingian-specific profile in this r
 
 [ENG-1041](https://linear.app/liftedinit/issue/ENG-1041) will require an AppArmor-capable isolated runner for positive application tests and negative confinement tests. Attribute expected denials to the named AppArmor profile using sanitized audit evidence; a failure caused only by file ownership, a read-only mount or seccomp does not prove AppArmor worked. Verify profile attachment and enforce mode across restart/recreation. An unsupported runner must report that verification is unavailable, not pass it silently. Production policy loading or attachment remains a separately authorized provider action; no host policy was loaded or changed during this follow-up.
 
-**2026-09-21 source follow-up (ENG-1044):** the prepared `0.4.5` image uses a
-direct native `/usr/local/bin/merovingian-healthcheck` command. Together with the
-explicit Node entrypoint, this removes shell execution from startup and health
-probes. A proposed profile must allow the native probe and its musl loader/library
-reads; no shell or child executable is required by the probe. Its command and
-immutable file permissions are checked locally. This is a compatibility
-prerequisite, not evidence of AppArmor enforcement; provider/profile acceptance
-remains open. See the [0.4.5 candidate record](RELEASE-0.4.5.md).
+**2026-09-21 source follow-up (ENG-1044):** the prepared `0.4.5` image uses Alpine's
+curl through `/usr/local/bin/merovingian-healthcheck`, a small shell wrapper.
+Application startup retains the explicit Node entrypoint, but health probes
+require the BusyBox shell, curl and their loader/library reads. A future profile
+must account for those executions; an unconditional shell denial would break
+this healthcheck. The custom C client was removed in favor of maintained software.
+The command and file permissions are checked locally. Provider/profile
+acceptance remains open; no AppArmor policy was loaded or verified here. See the
+[0.4.5 candidate record](RELEASE-0.4.5.md).
 
 ## Completion path
 

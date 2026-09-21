@@ -1,31 +1,38 @@
 # Release 0.4.5 — local candidate
 
 `0.4.5` prepares the ENG-1044 healthcheck fix. Its package/lockfile versions and
-generated `server.json` agree; dependency versions and historical registry
+generated `server.json` agree; npm dependency versions and historical registry
 snapshots are unchanged. This candidate has not been published, deployed, or
 registered. The separate `0.4.4` release and its image digest remain historical
 records and must not be relabeled as this fix.
 
-The image runs a small native HTTP probe directly, with no shell, Node startup,
-child processes, DNS or proxy use. It reads decimal `PORT`, defaults to 8080 when
-unset or empty, and requires a bounded HTTP/1.0 or HTTP/1.1 2xx status line and
-complete headers from `127.0.0.1` at `/healthz`. Redirects fail. One four-second
-alarm bounds port parsing, connection, request writes and response reads together; Docker retains
-its five-second timeout, 30-second interval, 15-second startup period and three
-failure threshold. Serving, persistence and public API contracts are unchanged.
+The image uses Alpine's curl package through a small shell wrapper instead of
+starting Node for each probe. Curl handles HTTP parsing, response reads and the
+four-second transfer timeout. The wrapper accepts only 2xx responses, discards
+the body with a 64 KiB limit, ignores curl configuration and proxy settings, and
+requests only `http://127.0.0.1:PORT/healthz` without following redirects.
+Docker retains its five-second timeout, 30-second interval, 15-second startup
+period and three-failure threshold. No custom C client or compiler stage remains.
+
+The application and wrapper now both require `PORT` to contain only ASCII decimal
+digits in the range 1–65535; unset or empty selects 8080. Values with whitespace,
+signs, hexadecimal, exponents or decimal points are rejected at startup. This
+tightens the application's previous JavaScript numeric coercion so a valid app
+configuration cannot disagree with its probe. Serving, persistence and public
+API contracts are unchanged.
 
 The exact **unpublished candidate** is intended for:
 
 ```text
-ghcr.io/manifest-network/merovingian@sha256:b14340149f00542417f7ebeac69591326d04dc717f9ee9d4940326d928e497c2
+ghcr.io/manifest-network/merovingian@sha256:8e32caa5326f67863fe1fb70153cfc8998fd2cee43119f14d29876e256933d24
 ```
 
-Its configuration digest is `sha256:77c23d7bd7c94d548f30a30a2ee3a0bebd7e35c0d962bc4fd3005382a4a4ad73`.
+Its configuration digest is `sha256:cd1f002fa8b473c63d6df6fd4b1fc5231c949a0cf78631dfedb4dbe247e46b26`.
 Successful checks and CPU comparisons are recorded in
 [candidate evidence](evidence/healthcheck-2026-09-21.json).
 The [runtime report](RUNTIME-IMAGE.md#eng-1044-local-validation--2026-09-21) explains
 the measurement scope and limitations. Rebuilding produces a new candidate that
-requires its own verification; the earlier shell/wget candidate is superseded.
+requires its own verification; the earlier wget and custom C candidates are superseded.
 
 Publication must name the exact tested candidate digest, preserve its bytes,
 and use the `0.4.5` tag. An authorized update must reuse the existing lease and

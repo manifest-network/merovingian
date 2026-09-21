@@ -12,31 +12,39 @@ const restrictions = ['--pull', 'never', '--network', 'none', '--cap-drop', 'ALL
   '--security-opt', 'no-new-privileges=true', '--pids-limit', '64', '--memory', '512m', '--cpus', '0.5'];
 const temporaryDirectory = ['--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777'];
 export const healthcheckCommand = ['CMD', '/usr/local/bin/merovingian-healthcheck'];
+const healthcheckTimeoutMilliseconds = 5000;
 export const healthcheckCases = [
   {name:'default-port', code:0},
   {name:'empty-port', port:'', code:0},
   {name:'custom-port', port:'18080', code:0},
+  {name:'leading-zero-port', port:'0008080', code:0},
   {name:'proxy-bypass', port:'18080', proxy:true, code:0},
   {name:'http-no-content', status:204, code:0},
   {name:'http-redirect', status:302, code:1},
   {name:'http-not-found', status:404, code:1},
   {name:'http-unavailable', status:503, code:1},
   {name:'connection-error', port:'18081', code:1},
-  {name:'invalid-port', port:'65536', code:1},
-  {name:'malformed-port', port:'8080/healthz', code:1},
+  ...[
+    ['invalid-port', '65536'], ['malformed-port', '8080/healthz'], ['zero-port', '0'],
+    ['negative-port', '-1'], ['signed-port', '+8080'], ['leading-space-port', ' 8080'],
+    ['trailing-space-port', '8080 '], ['newline-port', '8080\n'], ['decimal-port', '8080.0'],
+    ['exponent-port', '8e3'], ['hex-port', '0x1F90'], ['unicode-space-port', '\u00a08080'],
+    ['huge-port', '9'.repeat(100)],
+  ].map(([name, port]) => ({name, port, invalidPort:true, code:1})),
   {name:'http10', port:'18082', raw:'HTTP/1.0 200 OK\r\n\r\n', code:0},
-  {name:'malformed-status', port:'18082', raw:'HTTP/1.1 200oops\r\n\r\n', code:1},
+  {name:'malformed-status', port:'18082', raw:'HTTP/1.1 invalid\r\n\r\n', code:1},
   {name:'truncated-status', port:'18082', raw:'HTTP/1.1 20', code:1},
-  {name:'truncated-headers', port:'18082', raw:'HTTP/1.1 200 OK\r\nContent-Type: text/plain', code:1},
-  {name:'oversized-headers', port:'18082', raw:'HTTP/1.1 200 OK\r\nX-Fill: ' + 'x'.repeat(8192) + '\r\n\r\n', code:1},
-  {name:'overlong-status', port:'18082', raw:'HTTP/1.1 200 ' + 'x'.repeat(300) + '\r\n\r\n', code:1},
-  {name:'timeout', status:0, code:1, deadline:true},
+  {name:'truncated-body', port:'18082', raw:'HTTP/1.1 200 OK\r\nContent-Length: 16\r\n\r\nshort', code:1},
+  {name:'split-body', port:'18082', raw:'HTTP/1.1 200 OK\r\n\r\n', bodyBytes:16384, code:0},
+  {name:'oversized-body', port:'18082', raw:'HTTP/1.1 200 OK\r\n\r\n', bodyBytes:65537, code:1},
+  {name:'hung-body', port:'18082', raw:'HTTP/1.1 200 OK\r\nContent-Length: 16\r\n\r\n', hangBody:true, code:1, deadline:true},
+  {name:'timeout', hang:true, code:1, deadline:true},
   {name:'total-deadline', port:'18082', drip:true, code:1, deadline:true},
 ];
 const probeChecks = new Set(['application-layout', 'distribution-inventory', 'home-contents', 'code-ownership',
-  'privilege-bits', 'package-managers', 'data-permissions', 'code-write-denied', 'temporary-files',
+  'privilege-bits', 'package-managers', 'build-toolchain', 'data-permissions', 'code-write-denied', 'temporary-files',
   'health-menu', 'mcp-menu', 'batch-rejection', 'local-serving', 'process-identity', 'process-confinement',
-  'readonly-root', 'sqlite-journal', 'healthcheck-binary', 'healthcheck-setup', 'healthcheck-server', 'healthcheck-watchdog',
+  'readonly-root', 'sqlite-journal', 'healthcheck-files', 'healthcheck-setup', 'healthcheck-server', 'healthcheck-watchdog',
   ...healthcheckCases.map(({name}) => `healthcheck-${name}`)]);
 
 export function expectedDistribution(root = fileURLToPath(new URL('../', import.meta.url))) {
@@ -94,20 +102,26 @@ assert.deepEqual(fs.readdirSync('/root'), [], 'unexpected root home contents');
 assert.deepEqual(fs.readdirSync('/home'), ['node'], 'unexpected home contents');
 assert.deepEqual(fs.readdirSync('/home/node'), [], 'unexpected runtime home contents');
 section = 'code-ownership'; walk('/app', true);
-section = 'healthcheck-binary';
+section = 'healthcheck-files';
 const healthcheck = fs.lstatSync('/usr/local/bin/merovingian-healthcheck');
 assert(healthcheck.isFile()); assert.equal(healthcheck.uid, 0); assert.equal(healthcheck.gid, 0);
 assert.equal(healthcheck.mode & 0o777, 0o555);
-assert.deepEqual([...fs.readFileSync('/usr/local/bin/merovingian-healthcheck').subarray(0, 4)], [127,69,76,70]);
+assert(fs.readFileSync('/usr/local/bin/merovingian-healthcheck', 'utf8').startsWith('#!/bin/sh\\n'));
+const curl = fs.statSync('/usr/bin/curl');
+assert(curl.isFile()); assert.equal(curl.uid, 0); assert.equal(curl.gid, 0);
+assert.equal(curl.mode & 0o022, 0); assert(curl.mode & 0o111);
 section = 'privilege-bits';
 for (const path of ['/bin','/sbin','/usr','/opt']) walk(path);
 section = 'package-managers';
 for (const path of ['/usr/local/lib/node_modules/npm','/opt/yarn','/sbin/apk','/usr/bin/apt','/usr/bin/apt-get',
-  '/usr/local/bin/npm','/usr/local/bin/npx','/usr/local/bin/yarn','/usr/local/bin/yarnpkg','/usr/local/bin/corepack',
-  '/usr/bin/cc','/usr/bin/gcc','/usr/bin/ld','/healthcheck.c']) {
+  '/usr/local/bin/npm','/usr/local/bin/npx','/usr/local/bin/yarn','/usr/local/bin/yarnpkg','/usr/local/bin/corepack']) {
   assert(!fs.existsSync(path), 'unnecessary package manager');
 }
 assert(!fs.readdirSync('/opt').some(name => name.startsWith('yarn')), 'Yarn remains');
+section = 'build-toolchain';
+for (const path of ['/usr/bin/cc','/usr/bin/gcc','/usr/bin/ld','/healthcheck.c']) {
+  assert(!fs.existsSync(path), 'unexpected build toolchain or source');
+}
 section = 'data-permissions';
 assert.equal(fs.statSync('/data').uid, 1000); assert.equal(fs.statSync('/data').mode & 0o777, 0o700);
 console.log(JSON.stringify({applicationFilesChecked: filesChecked, rootOwnedCode: true, packageManagersAbsent: true, privilegedFilesAbsent: true}));
@@ -122,7 +136,7 @@ const permissionsProbe = probe(`
 const fs = require('node:fs'); const assert = require('node:assert/strict');
 section = 'code-write-denied';
 assert.equal(process.getuid(), 1000);
-for (const path of ['/app/package.json','/app/dist/index.js','/usr/local/bin/merovingian-healthcheck']) {
+for (const path of ['/app/package.json','/app/dist/index.js','/usr/local/bin/merovingian-healthcheck','/usr/bin/curl']) {
   assert.throws(() => fs.openSync(path, 'r+'), {code: 'EACCES'});
 }
 assert.throws(() => fs.writeFileSync('/app/dist/.write-probe', 'fixture', {flag:'wx'}), {code:'EACCES'});
@@ -130,13 +144,26 @@ ${temporaryProbe}
 for (const path of ['/tmp', '/var/tmp']) assert.equal(fs.statSync(path).mode & 0o7777, 0o1777);
 console.log(JSON.stringify({codeWriteDeniedOnWritableRoot: true, writableRootTemporaryFiles: true}));
 `);
+function assertHealthcheckObservation(item, result) {
+  assert.equal(result.signal, null); assert.equal(result.code, item.code);
+  assert.equal(result.stdoutBytes, 0); assert.equal(result.stderrBytes, 0);
+  assert(Number.isSafeInteger(result.elapsedMilliseconds) && result.elapsedMilliseconds >= 0);
+  // Leave 100 ms before the verified Docker timeout; a slow client
+  // timeout must fail acceptance even when the separate watchdog has not fired.
+  if (item.deadline) assert(result.elapsedMilliseconds >= 3000
+    && result.elapsedMilliseconds < healthcheckTimeoutMilliseconds - 100, 'total deadline before Docker timeout');
+}
+
 export const healthcheckProbe = command => probe(`
 const assert = require('node:assert/strict');
 const {createServer} = require('node:http');
 const {createServer:createTcpServer} = require('node:net');
 const {spawn} = require('node:child_process');
+const {loadConfig} = require('/app/dist/config.js');
 const command = ${JSON.stringify(command)};
 const cases = ${JSON.stringify(healthcheckCases)};
+const healthcheckTimeoutMilliseconds = ${healthcheckTimeoutMilliseconds};
+const assertHealthcheckObservation = ${assertHealthcheckObservation.toString()};
 let current = {};
 const servers = [];
 const sockets = new Set();
@@ -144,7 +171,10 @@ const listen = server => new Promise((resolve, reject) => {
   const failed = error => { server.off('listening', ready); reject(error); };
   const ready = () => {
     server.off('error', failed);
-    server.on('error', () => process.stderr.write('MEROVINGIAN_PROBE_FAILURE:healthcheck-server\\n', () => process.exit(1)));
+    server.on('error', () => {
+      require('node:fs').writeSync(2, 'MEROVINGIAN_PROBE_FAILURE:healthcheck-server\\n');
+      process.exit(1);
+    });
     resolve();
   };
   server.once('error', failed); server.once('listening', ready);
@@ -156,29 +186,48 @@ const check = item => new Promise((resolve, reject) => {
   const started = performance.now();
   // The watchdog detects a stuck test. It is deliberately separate from the
   // probe's four-second budget and Docker's five-second outer timeout.
-  const child = spawn(command[0], command.slice(1), {env, stdio:['ignore','pipe','pipe'], timeout:15000, killSignal:'SIGKILL'});
-  let quiet = true;
-  child.stdout.on('data', () => { quiet = false; }); child.stderr.on('data', () => { quiet = false; });
-  child.on('error', reject);
-  child.on('close', (code, signal) => resolve({code, signal, quiet, elapsed:performance.now() - started}));
+  const child = spawn(command[0], command.slice(1), {env, stdio:['ignore','pipe','pipe'], detached:true});
+  // Kill the whole group: killing only the wrapper can leave curl holding the
+  // output pipes open, preventing the child's close event and its diagnostic.
+  const watchdog = setTimeout(() => {
+    try { process.kill(-child.pid, 'SIGKILL'); }
+    catch (error) { if (error.code !== 'ESRCH') reject(error); }
+  }, 15000);
+  let stdoutBytes = 0, stderrBytes = 0;
+  child.stdout.on('data', bytes => { stdoutBytes += bytes.length; });
+  child.stderr.on('data', bytes => { stderrBytes += bytes.length; });
+  child.on('error', error => { clearTimeout(watchdog); reject(error); });
+  child.on('close', (code, signal) => {
+    clearTimeout(watchdog);
+    resolve({code, signal, stdoutBytes, stderrBytes, elapsedMilliseconds:Math.round(performance.now() - started)});
+  });
 });
 try {
   for (const port of [8080, 18080]) {
     const server = createServer((req, res) => {
-      if (current.status === 0) return;
       const valid = req.method === 'GET' && req.url === '/healthz' && req.headers.host === '127.0.0.1:' + port;
+      if (valid && current.hang) return;
       res.writeHead(valid ? (current.status ?? 200) : 400); res.end();
     });
     servers.push(server);
     const listening = listen(server); server.listen(port, '127.0.0.1'); await listening;
   }
-  const rawServer = createTcpServer(socket => {
-    sockets.add(socket); socket.on('error', () => {}); socket.resume();
-    if (current.drip) {
+  const rawServer = createTcpServer({allowHalfOpen:true}, socket => {
+    const item = current;
+    item.socketErrors = 0;
+    sockets.add(socket); socket.on('error', () => { item.socketErrors++; }); socket.resume();
+    if (item.drip) {
       const bytes = 'HTTP/1.1 200 OK\\r\\n\\r\\n'; let offset = 0;
       const timer = setInterval(() => { if (offset < bytes.length) socket.write(bytes[offset++]); }, 750);
       socket.on('close', () => clearInterval(timer));
-    } else socket.end(current.raw);
+    } else if (item.bodyBytes) {
+      socket.write(item.raw);
+      const timer = setTimeout(() => {
+        socket.end(Buffer.alloc(item.bodyBytes, 'x'), () => { item.bodyFinished = true; });
+      }, 100);
+      socket.on('close', () => clearTimeout(timer));
+    } else if (item.hangBody) socket.write(item.raw);
+    else socket.end(item.raw);
     socket.on('close', () => sockets.delete(socket));
   });
   servers.push(rawServer);
@@ -186,11 +235,15 @@ try {
   const results = {};
   for (const item of cases) {
     section = 'healthcheck-' + item.name; current = item;
+    if (item.invalidPort) assert.throws(() => loadConfig({PORT:item.port}), /Invalid PORT/);
+    else assert.equal(loadConfig({PORT:item.port}).port, Number(item.port || 8080));
     const result = await check(item);
     if (result.signal === 'SIGKILL') section = 'healthcheck-watchdog';
-    assert.equal(result.signal, null); assert.equal(result.code, item.code); assert(result.quiet);
-    if (item.deadline) assert(result.elapsed >= 3000 && result.elapsed < 10000, 'total deadline with scheduler tolerance');
-    results[item.name] = true;
+    assertHealthcheckObservation(item, result);
+    if (item.bodyBytes && item.code === 0) {
+      assert.equal(item.bodyFinished, true); assert.equal(item.socketErrors, 0);
+    }
+    results[item.name] = result;
   }
   console.log(JSON.stringify(results));
 } finally {
@@ -201,7 +254,7 @@ try {
 const requestProbe = probe(`
 const fs = require('node:fs'); const assert = require('node:assert/strict');
   const read = async (path, body) => {
-    const response = await fetch('http://127.0.0.1:' + (process.env.PORT || '8080') + path, {
+    const response = await fetch('http://127.0.0.1:8080' + path, {
       method: body ? 'POST' : 'GET', signal: AbortSignal.timeout(4000),
       headers: {'content-type':'application/json',accept:'application/json, text/event-stream','mcp-protocol-version':'2025-03-26'},
       ...(body ? {body: JSON.stringify(body)} : {}),
@@ -304,9 +357,9 @@ export async function runRuntimeImageCheck(image, output, options = {}) {
     stage = 'image-command';
     assert.deepEqual(config.Cmd, ['dist/index.js']);
     stage = 'image-healthcheck';
-    assert.deepEqual(config.Healthcheck.Test, healthcheckCommand, 'direct native healthcheck required');
+    assert.deepEqual(config.Healthcheck.Test, healthcheckCommand, 'packaged curl healthcheck required');
     assert.equal(config.Healthcheck.Interval, 30_000_000_000);
-    assert.equal(config.Healthcheck.Timeout, 5_000_000_000);
+    assert.equal(config.Healthcheck.Timeout, healthcheckTimeoutMilliseconds * 1_000_000);
     assert.equal(config.Healthcheck.StartPeriod, 15_000_000_000);
     assert.equal(config.Healthcheck.Retries, 3);
     stage = 'image-environment';
@@ -335,8 +388,12 @@ export async function runRuntimeImageCheck(image, output, options = {}) {
       '--no-healthcheck', '--entrypoint', 'node', image, '-e', healthcheckProbe(config.Healthcheck.Test.slice(1))));
     containers.delete(healthcheckName);
     assert.deepEqual(Object.keys(healthcheck).sort(), healthcheckCases.map(({name}) => name).sort());
-    for (const {name} of healthcheckCases) assert.equal(healthcheck[name], true);
-    report.healthcheck = healthcheck;
+    report.healthcheck = Object.fromEntries(healthcheckCases.map(item => {
+      const result = healthcheck[item.name];
+      assertHealthcheckObservation(item, result);
+      const {code, signal, stdoutBytes, stderrBytes, elapsedMilliseconds} = result;
+      return [item.name, {code, signal, stdoutBytes, stderrBytes, elapsedMilliseconds}];
+    }));
     report.completedChecks.push('healthcheck-behavior');
     stage = 'create-volume';
     volumeCreated = true; docker('volume', 'create', volume);
@@ -353,7 +410,10 @@ export async function runRuntimeImageCheck(image, output, options = {}) {
       for (let attempt = 0; attempt < 30; attempt++) {
         try {
           docker('exec', name, ...config.Healthcheck.Test.slice(1)); ready = true; break;
-        } catch { await (options.pause ?? (() => new Promise(resolve => setTimeout(resolve, 250))))(); }
+        } catch (error) {
+          if (error.failure?.category !== 'docker_command_failed' || error.failure.exitCode !== 1) throw error;
+          await (options.pause ?? (() => new Promise(resolve => setTimeout(resolve, 250))))();
+        }
       }
       assert(ready, 'container did not become healthy');
     };
@@ -393,7 +453,7 @@ export async function runRuntimeImageCheck(image, output, options = {}) {
     stage = 'custom-port-stop';
     docker('stop', '--time', '15', customPortName); assert.equal(inspect(customPortName).State.ExitCode, 0);
     docker('rm', '--volumes', customPortName); containers.delete(customPortName);
-    report.customPort = true; report.completedChecks.push('application-custom-port');
+    report.completedChecks.push('application-custom-port');
   } catch (error) { report.error = safeFailure(error, stage); }
   finally {
     for (const name of containers) {

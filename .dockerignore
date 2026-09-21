@@ -7,4 +7,4 @@
 !src/**
 !tools
 tools/**
-!tools/healthcheck.c
+!tools/healthcheck.sh
