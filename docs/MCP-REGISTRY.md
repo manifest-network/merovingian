@@ -1,15 +1,15 @@
 # MCP Registry publication and discovery
 
-Version `0.4.4` is deployed on mainnet and published as the latest version in the
-official MCP Registry. The generated `server.json` uses the registry identity
+Version `0.4.5` is deployed on mainnet; `0.4.4` remains the latest published
+version in the official MCP Registry at the release preflight. The generated
+`server.json` uses the registry identity
 `io.github.manifest-network/merovingian` and Streamable HTTP at
 `https://merovingian.manifest.network/mcp`.
 
-The working `server.json` now identifies the prepared **0.4.5** candidate. It has
-not been published or deployed and is not the published `0.4.4` record. Publish
-that metadata only after the exact `0.4.5` image has been separately authorized,
-deployed, and accepted, followed by explicit authorization for registry
-publication. See the [candidate release record](RELEASE-0.4.5.md).
+The working `server.json` identifies **0.4.5** and passed official registry
+validation. Its exact image was published, deployed and accepted following the
+user's release request. Registry publication awaits fresh operator authentication;
+no `0.4.5` publication was attempted. See the [release record](RELEASE-0.4.5.md).
 
 Version `0.4.4` was published after successful live acceptance and explicit
 approval at **2026-09-21T13:13:54.140771Z** using official `mcp-publisher` 1.8.1.
@@ -41,7 +41,7 @@ both returned the approved metadata with status `active` and `isLatest: true` at
 the publication check.
 Publication used the official `mcp-publisher` 1.8.1 release after explicit user
 approval. Those publication checks describe the historical `0.4.2` release;
-the live application has since advanced through `0.4.3` to `0.4.4`.
+the live application has since advanced through `0.4.3` and `0.4.4` to `0.4.5`.
 The [saved `0.4.2` registry response](evidence/mcp-registry-0.4.2.json) preserves
 the exact published metadata; do not regenerate or overwrite that historical record.
 

@@ -1,10 +1,11 @@
-# Release 0.4.5 — local candidate
+# Release 0.4.5 — live
 
-`0.4.5` prepares the ENG-1044 healthcheck fix. Its package/lockfile versions and
+`0.4.5` delivers the ENG-1044 healthcheck fix on the existing mainnet lease.
+The user requested release and deployment on 2026-09-21. Its package/lockfile versions and
 generated `server.json` agree; npm dependency versions and historical registry
-snapshots are unchanged. This candidate has not been published, deployed, or
-registered. The separate `0.4.4` release and its image digest remain historical
-records and must not be relabeled as this fix.
+snapshots are unchanged. The verified image is published and deployed; MCP
+Registry publication awaits fresh operator authentication. The separate `0.4.4`
+release and its image digest remain historical records.
 
 The image uses Alpine's curl package through a small shell wrapper instead of
 starting Node for each probe. Curl handles HTTP parsing, response reads and the
@@ -21,7 +22,7 @@ tightens the application's previous JavaScript numeric coercion so a valid app
 configuration cannot disagree with its probe. Serving, persistence and public
 API contracts are unchanged.
 
-The exact **unpublished candidate** is intended for:
+The exact tested image was published with tag `0.4.5`:
 
 ```text
 ghcr.io/manifest-network/merovingian@sha256:8e32caa5326f67863fe1fb70153cfc8998fd2cee43119f14d29876e256933d24
@@ -34,14 +35,30 @@ The [runtime report](RUNTIME-IMAGE.md#eng-1044-local-validation--2026-09-21) exp
 the measurement scope and limitations. Rebuilding produces a new candidate that
 requires its own verification; the earlier wget and custom C candidates are superseded.
 
-Publication must name the exact tested candidate digest, preserve its bytes,
-and use the `0.4.5` tag. An authorized update must reuse the existing lease and
-preserve `/data/visits.sqlite`, UID/GID 1000, public configuration and proxy trust.
-Use read-only health, metadata and aggregate-count checks for live acceptance
-unless a separate serving scope is authorized. Registry publication is a separate
-action after an authorized deployment and acceptance. Provider CPU/alert and
-AppArmor acceptance remain unverified locally.
+Anonymous GHCR downloads verified the manifest, configuration and all eleven
+layers against the retained candidate. The image's compiled application files,
+package metadata and healthcheck also match the checked workspace build. The
+merged source is [PR #6](https://github.com/manifest-network/merovingian/pull/6),
+commit `0f571a3a1b5191ff587a0caf3109298e1babd931`; its
+[main CI](https://github.com/manifest-network/merovingian/actions/runs/35632247019)
+passed both Check and Final image.
 
-No publication, deployment, registry update or live visit is authorized by this
-record. Each production action requires explicit authorization under
+Provider release **7** reached ready on lease
+`01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd`, with manifest hash
+`c4cc3855835d3740b983644c1c4bfed740fe7f41bc2ed3bb19f0fba5466cf344`.
+The image was the only manifest change: `/data/visits.sqlite`, UID/GID 1000,
+public configuration and empty proxy trust were preserved.
+
+Read-only live acceptance passed at **2026-09-21T17:43:16.792Z**. Health,
+OpenAPI, both server cards and MCP initialization report `0.4.5`; all four MCP
+tools remain discoverable. Counts stayed at **8 cookies, 5 sauna sessions and
+6 teas**, totaling 19, with the original start date
+`2026-09-17T20:29:18.301Z`. No live visit, payment, additional funding, new lease,
+chain transaction or DNS change was performed.
+
+The [release evidence](evidence/release-0.4.5.json) records publication and
+deployment acceptance. At the registry check, `0.4.4` remained latest and `0.4.5`
+was absent; the validated `server.json` is ready for publication after login.
+Provider CPU/alert behavior and AppArmor enforcement remain unverified by these
+checks. Future production actions still require authorization under
 [AGENTS.md](../AGENTS.md).

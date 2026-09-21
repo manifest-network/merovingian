@@ -2,31 +2,33 @@
 
 Mainnet supersedes the proof of concept. It is the permanent public refuge and the only environment that will handle real-value contributions or sales. These are follow-on requirements, not claims that the testnet prototype already implements a commercial payment system.
 
-## Current release — 0.4.4 (2026-09-21)
+## Current release — 0.4.5 (2026-09-21)
 
-Merovingian **0.4.4 is live at [merovingian.manifest.network](https://merovingian.manifest.network)**
+Merovingian **0.4.5 is live at [merovingian.manifest.network](https://merovingian.manifest.network)**
 on the original lease `01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd`. Following explicit
-publication and update approval, provider release **6** is ready with manifest
-hash `7c9773072774c5f02736cda525d2a77892ba449a56258512f0f84fd85043985d` and the
+publication and update approval, provider release **7** is ready with manifest
+hash `c4cc3855835d3740b983644c1c4bfed740fe7f41bc2ed3bb19f0fba5466cf344` and the
 verified public image:
 
 ```text
-ghcr.io/manifest-network/merovingian@sha256:4af4d3da11a31914d796da3f29a55e679c5c3ec366311b4601e4e38426e97621
+ghcr.io/manifest-network/merovingian@sha256:8e32caa5326f67863fe1fb70153cfc8998fd2cee43119f14d29876e256933d24
 ```
 
-Public read-only acceptance passed at **2026-09-21T13:13:36.048Z**: health,
-OpenAPI, both server cards, and MCP initialization report `0.4.4`. Persistent
+Public read-only acceptance passed at **2026-09-21T17:43:16.792Z**: health,
+OpenAPI, both server cards, and MCP initialization report `0.4.5`. Persistent
 counts stayed at **8 cookies, 5 sauna sessions, and 6 teas** (19 total), with the
 original start date **2026-09-17T20:29:18.301Z**. The runtime environment, counter
-path, UID/GID, and empty proxy trust were preserved. Separately authorized MCP
-Registry publication completed at **2026-09-21T13:13:54.140771Z**; `0.4.4` is
-active and latest under `io.github.manifest-network/merovingian`.
+path, UID/GID, and empty proxy trust were preserved. The image replaces per-probe
+Node startup with Alpine curl and a small shell wrapper. MCP Registry publication
+awaits fresh operator authentication; `0.4.4` remained active and latest at the
+registry check.
 
 No live visits, payments, new lease, additional funding, chain transaction, or
 DNS change were part of this update. **ENG-1038** provider ingress/confinement
-evidence and **ENG-1041** named AppArmor verification remain open. See
-[release acceptance](ACCEPTANCE.md#release-044-publication-and-verification) and
-[sanitized evidence](evidence/release-0.4.4.json). The dated records below describe
+evidence and **ENG-1041** named AppArmor verification remain open. Production
+CPU/alert behavior for **ENG-1044** was not measured by these checks. See
+[release acceptance](ACCEPTANCE.md#release-045-publication-and-verification) and
+[sanitized evidence](evidence/release-0.4.5.json). The dated records below describe
 earlier releases and retain their original observations.
 
 ## Live mainnet acceptance — 2026-09-18
@@ -35,7 +37,7 @@ At the September 18 acceptance, Merovingian **0.4.3 was live at [merovingian.man
 
 The launch CLI's persisted phase remains `awaiting-dns`, its final provider-upload phase. It does not track subsequent public acceptance; `.local/mainnet/dns-acceptance.json` and `.local/mainnet/live-acceptance.json` record those completed checks.
 
-Release **0.4.3** replaced the image on the existing lease with one provider update POST, no new lease, and no chain transaction. Provider release **5** reached ready. The original launch receipts and image/hash below remain historical evidence; the current 0.4.4 image and manifest are recorded above, and the update procedure is documented below.
+Release **0.4.3** replaced the image on the existing lease with one provider update POST, no new lease, and no chain transaction. Provider release **5** reached ready. The original launch receipts and image/hash below remain historical evidence; the current 0.4.5 image and manifest are recorded above, and the update procedure is documented below.
 
 Published SDK 0.22.0 checks and the completed launch confirmed:
 
@@ -177,7 +179,7 @@ The SDK's `restoreApp` has different semantics: it restores a **closed lease's r
 
 ### Release 0.4.3
 
-This section records the historical September 18 release; 0.4.4 is current.
+This section records the historical September 18 release; 0.4.5 is current.
 
 The user explicitly approved image publication, the existing-lease update, and MCP Registry publication. [PR #1](https://github.com/manifest-network/merovingian/pull/1) merged as [`300ac773f28dd61bd804d376cbddcd6ffbd5e82a`](https://github.com/manifest-network/merovingian/commit/300ac773f28dd61bd804d376cbddcd6ffbd5e82a); [main CI](https://github.com/manifest-network/merovingian/actions/runs/35360101100) passed registry consistency, typecheck, 142 tests, and build. The image was built from pre-merge commit `ef53a3feb62e91c0930d8f97a8aeff4e4c7bf17e`. That commit and the public squash merge have the identical Git tree `5783b3031882f6afd263d44b156eb0c219aeb90b`, so the built source matches the merged source. The public image is:
 
@@ -213,11 +215,11 @@ For recovery, retain the historical 0.4.0 journal as **prepared, never attempted
 
 ### Existing-lease update workflow
 
-The update tool checks the exact existing active lease, domain, locked rate, current provider release, reviewed public environment, and pinned image. It uses SDK provider authentication and the update endpoint; it creates no lease and sends no chain transaction. Inspect the current `0.4.4` update with:
+The update tool checks the exact existing active lease, domain, locked rate, current provider release, reviewed public environment, and pinned image. It uses SDK provider authentication and the update endpoint; it creates no lease and sends no chain transaction. Inspect the current `0.4.5` update with:
 
 ```sh
 node --import tsx scripts/mainnet-update.ts status \
-  --image ghcr.io/manifest-network/merovingian@sha256:4af4d3da11a31914d796da3f29a55e679c5c3ec366311b4601e4e38426e97621 \
+  --image ghcr.io/manifest-network/merovingian@sha256:8e32caa5326f67863fe1fb70153cfc8998fd2cee43119f14d29876e256933d24 \
   --helper "$PWD/.local/mainnet/bin/keyring-signer" \
   --home "$HOME/.manifest" \
   --key-name merovingian

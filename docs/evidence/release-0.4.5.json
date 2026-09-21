@@ -1,0 +1,162 @@
+{
+  "schemaVersion": 1,
+  "version": "0.4.5",
+  "origin": "https://merovingian.manifest.network",
+  "source": {
+    "checkedAt": "2026-09-21T17:44:37.843399+00:00",
+    "mergedCommit": "0f571a3a1b5191ff587a0caf3109298e1babd931",
+    "gitTree": "475388df6910b7302f396ff5af9680115fc3bde2",
+    "compiledArtifactsAndPackageAndWrapperMatchWorkspace": true,
+    "comparedFiles": 24,
+    "pullRequest": "https://github.com/manifest-network/merovingian/pull/6",
+    "mainCi": "https://github.com/manifest-network/merovingian/actions/runs/35632247019",
+    "ciPassed": true
+  },
+  "preparationEvidence": {
+    "path": "healthcheck-2026-09-21.json",
+    "sha256": "3596e56b69761499ef2b56df374dd14eb945e5c86bbebf31d808cbb5981e5cb5",
+    "testsPassed": 204,
+    "healthcheckScenariosPassed": 32,
+    "reusedVerifiedCandidateWithoutRebuild": true
+  },
+  "imagePublication": {
+    "image": "ghcr.io/manifest-network/merovingian@sha256:8e32caa5326f67863fe1fb70153cfc8998fd2cee43119f14d29876e256933d24",
+    "tag": "0.4.5",
+    "anonymous": true,
+    "manifestDigestVerified": true,
+    "tagManifestBytesMatchLocal": true,
+    "digestManifestBytesMatchLocal": true,
+    "configurationDigest": "sha256:cd1f002fa8b473c63d6df6fd4b1fc5231c949a0cf78631dfedb4dbe247e46b26",
+    "configurationBytesMatchLocal": true,
+    "architecture": "amd64",
+    "os": "linux",
+    "user": "1000:1000",
+    "dataVolume": "/data",
+    "allLayersAnonymouslyDownloadedAndHashed": true,
+    "layerCount": 11,
+    "verificationCompletedByAt": "2026-09-21T17:42:12.924074+00:00",
+    "timingNote": "Completion upper bound recorded before the deployment command.",
+    "verificationStartedAt": "2026-09-21T17:41:42.275215+00:00"
+  },
+  "deployment": {
+    "leaseId": "01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd",
+    "providerRelease": 7,
+    "status": "ready",
+    "manifestHash": "c4cc3855835d3740b983644c1c4bfed740fe7f41bc2ed3bb19f0fba5466cf344",
+    "activeImage": "ghcr.io/manifest-network/merovingian@sha256:8e32caa5326f67863fe1fb70153cfc8998fd2cee43119f14d29876e256933d24",
+    "readyRecordedAt": "2026-09-21T17:42:47.974Z",
+    "timingNote": "Recorded after observing the provider release ready; not the exact provider transition time.",
+    "imageOnlyChange": true,
+    "runtimeEnvironmentPreserved": true,
+    "counterPath": "/data/visits.sqlite",
+    "runtimeUser": "1000:1000",
+    "proxyTrust": "empty",
+    "updatePostAttempts": 1,
+    "newLease": false,
+    "chainTransaction": false,
+    "additionalFunding": false,
+    "dnsChange": false
+  },
+  "liveAcceptance": {
+    "checkedAt": "2026-09-21T17:43:16.792Z",
+    "origin": "https://merovingian.manifest.network",
+    "passed": true,
+    "health": {
+      "status": "ok",
+      "network": "mainnet",
+      "chainId": "manifest-ledger-mainnet",
+      "retired": false,
+      "version": "0.4.5"
+    },
+    "identities": {
+      "currentCard": {
+        "name": "io.github.manifest-network/merovingian",
+        "version": "0.4.5"
+      },
+      "legacyCard": {
+        "name": "io.github.manifest-network/merovingian",
+        "version": "0.4.5"
+      },
+      "mcp": {
+        "name": "io.github.manifest-network/merovingian",
+        "version": "0.4.5"
+      },
+      "openapiVersion": "0.4.5"
+    },
+    "mcp": {
+      "protocolVersion": "2025-03-26",
+      "availableTools": [
+        "enjoy_amenity",
+        "hosting_support",
+        "list_amenities",
+        "verify_contribution"
+      ],
+      "calls": [
+        "initialize",
+        "tools/list"
+      ],
+      "toolCallsPerformed": false
+    },
+    "servingPersistence": {
+      "beforeCheckedAt": "2026-09-21T17:40:03.737Z",
+      "before": {
+        "network": "mainnet",
+        "chainId": "manifest-ledger-mainnet",
+        "status": "available",
+        "since": "2026-09-17T20:29:18.301Z",
+        "counts": {
+          "byte-chip-cookie": "8",
+          "null-tea": "6",
+          "rgb-sauna": "5"
+        },
+        "total": "19",
+        "storage": "persistent"
+      },
+      "after": {
+        "network": "mainnet",
+        "chainId": "manifest-ledger-mainnet",
+        "status": "available",
+        "since": "2026-09-17T20:29:18.301Z",
+        "counts": {
+          "byte-chip-cookie": "8",
+          "null-tea": "6",
+          "rgb-sauna": "5"
+        },
+        "total": "19",
+        "storage": "persistent"
+      },
+      "sameStartDate": true,
+      "noDecrease": true,
+      "observedDifferences": {
+        "byte-chip-cookie": "0",
+        "null-tea": "0",
+        "rgb-sauna": "0",
+        "total": "0"
+      },
+      "differenceAttribution": "Not attributed; other visitors may use the live service during the release.",
+      "afterObservedByAt": "2026-09-21T17:43:16.792Z",
+      "timingNote": "Final counts were read before the acceptance report timestamp; exact response time was not recorded."
+    },
+    "testVisitPerformed": false,
+    "paymentPerformed": false,
+    "scope": "Read-only production health, identities, discovery, MCP initialize/tool listing, and persistent counters. No serving or chain-tool calls."
+  },
+  "registryPublication": {
+    "checkedAt": "2026-09-21T17:44:02.422378+00:00",
+    "registry": "https://registry.modelcontextprotocol.io",
+    "name": "io.github.manifest-network/merovingian",
+    "version": "0.4.5",
+    "status": "pending-authentication",
+    "metadataSha256": "cbd907571d98a42e142f875544fccb1f39ea13527b46a4176f108102e84fc054",
+    "metadataValidationPassed": true,
+    "publicationAttempted": false,
+    "exactVersionHttpStatus": 404,
+    "observedLatestVersion": "0.4.4"
+  },
+  "scope": "User requested release and deployment. The exact tested image was published and the existing lease updated. Live acceptance used read-only health, metadata, discovery and counters; no serving or payment calls.",
+  "remainingProviderAcceptance": [
+    "ENG-1038 ingress topology and effective runtime attestation",
+    "ENG-1041 named AppArmor profile enforcement and denial attribution",
+    "ENG-1044 provider CPU and alert behavior after deployment; local measurements do not establish this."
+  ]
+}
