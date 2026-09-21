@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-09-21T12:54:16.335539+00:00",
+  "version": "0.4.4",
+  "scope": "Prepared release and local candidate verification; no image publication, production update, registry publication, or live servings.",
+  "sourceBaseCommit": "b77ca46d82006c3d577961874cd11aa1a805cdf9",
+  "metadata": {
+    "registryName": "io.github.manifest-network/merovingian",
+    "serverJsonSha256": "c2c33a0105b9f0af82cb6ae0ab5d774b5c9e4b5c480c10aecb5358dbe77c2f69",
+    "localConsistencyPassed": true,
+    "officialRegistryValidationPassed": true,
+    "historicalSnapshotsUnchanged": true
+  },
+  "image": {
+    "checkedAt": "2026-09-21T12:49:52.293517+00:00",
+    "version": "0.4.4",
+    "candidateRegistryReference": "ghcr.io/manifest-network/merovingian@sha256:4af4d3da11a31914d796da3f29a55e679c5c3ec366311b4601e4e38426e97621",
+    "publicationStatus": "not_published",
+    "manifestDigest": "sha256:4af4d3da11a31914d796da3f29a55e679c5c3ec366311b4601e4e38426e97621",
+    "configurationDigest": "sha256:24423d7d74c3a91fddb530a659e7c555154a21f0385dfbc0e36542ea6f47127d",
+    "platform": "linux/amd64",
+    "layers": 10,
+    "manifestConfigAndLayersVerified": true
+  },
+  "sourceBinding": {
+    "version": "0.4.4",
+    "imageId": "sha256:4af4d3da11a31914d796da3f29a55e679c5c3ec366311b4601e4e38426e97621",
+    "fileCount": 23,
+    "matches": true,
+    "aggregateSha256": "e494f178eb1e6dc82f961406de141cefb65a4dcfdbb32745c073d708d580a71d"
+  },
+  "repositoryChecks": {
+    "command": "npm run check",
+    "metadataPassed": true,
+    "typecheckPassed": true,
+    "testsPassed": 193,
+    "testsFailed": 0,
+    "buildPassed": true,
+    "dependencyGraphChanged": false
+  },
+  "runtime": {
+    "checkedAt": "2026-09-21T12:48:50.314Z",
+    "passed": true,
+    "imageId": "sha256:4af4d3da11a31914d796da3f29a55e679c5c3ec366311b4601e4e38426e97621",
+    "completedChecks": [
+      "image-metadata",
+      "image-inventory",
+      "writable-root-permissions",
+      "application-pass-1",
+      "application-pass-2"
+    ],
+    "applicationFilesChecked": 9136,
+    "rootOwnedCode": true,
+    "packageManagersAbsent": true,
+    "privilegedFilesAbsent": true,
+    "codeWriteDeniedOnWritableRoot": true,
+    "writableRootTemporaryFiles": true,
+    "persistenceAcrossReplacement": true,
+    "gracefulStop": true,
+    "appArmor": {
+      "status": "unavailable",
+      "reason": "Named profile enforcement/denial attribution requires a separately reviewed profile and isolated capable runner. This check does not load host policy."
+    },
+    "cleanup": {
+      "containersAttempted": 0,
+      "volumesAttempted": 1,
+      "failures": []
+    }
+  },
+  "tlsDns": {
+    "tls": {
+      "protocol": "TLSv1.3",
+      "certificateValidation": true,
+      "defaultTrustRejectedFixture": "DEPTH_ZERO_SELF_SIGNED_CERT",
+      "builtInRootCertificates": 121,
+      "systemCABundlePresent": true,
+      "localhostLookup": "passed"
+    },
+    "dns": {
+      "transport": "loopback UDP only",
+      "queries": 1,
+      "answers": [
+        "127.0.0.1"
+      ]
+    },
+    "runtime": {
+      "node": "24.21.0",
+      "openssl": "3.5.8"
+    },
+    "checkedAt": "2026-09-21T12:48:57.833708+00:00",
+    "testedLocalImageId": "sha256:4af4d3da11a31914d796da3f29a55e679c5c3ec366311b4601e4e38426e97621",
+    "scope": "Local container network=none; ephemeral certificate passed only over stdin; loopback HTTPS and UDP DNS fixtures; no external connections."
+  },
+  "upgrade": {
+    "checkedAt": "2026-09-21T12:48:40.912Z",
+    "passed": true,
+    "oldImage": "ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
+    "newImage": "sha256:4af4d3da11a31914d796da3f29a55e679c5c3ec366311b4601e4e38426e97621",
+    "scope": "Isolated 0.4.3-to-0.4.4 SQLite compatibility fixture; four intentional local servings, no live visits, external chain requests, wallets, host mounts or production changes.",
+    "countsAndSincePreserved": true,
+    "newServingDurablyCounted": true,
+    "sqliteIntegrityPassed": true,
+    "sqliteJournalMode": "delete",
+    "gracefulStops": true,
+    "cleanup": {
+      "containersRemoved": 2,
+      "volumeRemoved": true,
+      "failures": []
+    }
+  },
+  "scan": {
+    "checkedAt": "2026-09-21T12:49:07.063Z",
+    "configurationDigest": "sha256:24423d7d74c3a91fddb530a659e7c555154a21f0385dfbc0e36542ea6f47127d",
+    "scannerVersion": "0.74.0",
+    "databaseUpdatedAt": "2026-09-21T07:13:21.413091201Z",
+    "passed": true,
+    "osPackages": 10,
+    "languagePackages": 168,
+    "osFindings": 0,
+    "detectedSecrets": 0,
+    "blocked": [],
+    "exceptions": [],
+    "reported": [
+      {
+        "advisory": "CVE-2025-14505",
+        "package": "elliptic",
+        "version": "6.6.1",
+        "target": "Node.js",
+        "path": "app/node_modules/elliptic/package.json",
+        "severity": "LOW",
+        "fixedVersion": ""
+      }
+    ],
+    "artifactSha256": {
+      "vulnerabilities.json": "658ed9fa340bcaf885fe9ab7035bf9ec807e2ccb54fa86043e053a4679f8d2e7",
+      "sbom.cdx.json": "9c58d9928179dc8a78bc7aa898e9e89a781e1497efb1bd1d6c910902ee63779c",
+      "scanner.json": "e49a9ef7f05d285b7d96f7146d4c1fb6163e7fbf340e89b353c981addcd9416e"
+    }
+  },
+  "proposedUpdate": {
+    "leaseUuid": "01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd",
+    "candidateImage": "ghcr.io/manifest-network/merovingian@sha256:4af4d3da11a31914d796da3f29a55e679c5c3ec366311b4601e4e38426e97621",
+    "previousImage": "ghcr.io/manifest-network/merovingian@sha256:e4014881bfb19e8804785923646a52ee0f515917b6a99b5242dc1106b2d8a6de",
+    "previousManifestSha256": "a68e232d7726ad108b1307c3bb512a1d31c37459527f639872654682000a1174",
+    "preparedManifestSha256": "7c9773072774c5f02736cda525d2a77892ba449a56258512f0f84fd85043985d",
+    "imageOnlyChange": true,
+    "runtimeEnvironmentPreserved": true,
+    "counterPath": "/data/visits.sqlite",
+    "runtimeUser": "1000:1000",
+    "proxyTrust": "empty",
+    "newLeaseRequired": false,
+    "chainTransactionRequired": false,
+    "productionUpdatePerformed": false
+  },
+  "remainingProviderAcceptance": [
+    "ENG-1038 ingress topology and effective runtime attestation",
+    "ENG-1041 named AppArmor profile enforcement and denial attribution"
+  ]
+}
