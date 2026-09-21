@@ -40,6 +40,12 @@ to `main` and pushes to `main`, including registry consistency, typechecking,
 isolated local tests, and the build. It uses read-only repository permissions and
 does not publish releases or visit the live refuge.
 
+`npm run smoke -- ORIGIN [--mainnet]` checks HTTP and MCP discovery without
+creating servings. Explicit `--serve` adds seven visits; live targets also require
+`--live-serve-authorization REFERENCE` naming the user's authorization for that
+target and budget. See [smoke checks and request budgets](docs/ACCEPTANCE.md#repeatable-smoke-checks-eng-1032)
+for timeouts, local fixtures, reports, and production authorization requirements.
+
 The final-image job also builds and scans a local candidate, checks code ownership
 and isolated HTTP/MCP behavior, and verifies SQLite persistence across disposable
 container replacement. See [image verification](docs/IMAGE-SECURITY.md) for the
@@ -127,6 +133,6 @@ The existing mainnet lease must be reused; do not repeat the completed funding d
 
 The permanent domain `merovingian.manifest.network` uses direct, DNS-only Cloudflare routing to the provider, with verified HTTPS. Its dedicated mainnet `docker-nano` lease costs 2.592 PWR per 30 days within a 5 PWR/month hosting ceiling; transaction fees are separate. See [the approved plan](PLAN.md), [mainnet operations](docs/MAINNET.md), and `.env.mainnet.example` for public runtime configuration. Separate paid studio extras remain planned.
 
-Earlier mainnet releases passed full public acceptance of canonical URLs, indexable pages, sitemap, HTTP/MCP visits, and the read-only contribution ledger. Releases `0.4.3` through `0.4.5` used read-only live acceptance: the full `scripts/smoke.ts`, `/visit` form submission, `POST /api/v1/visits`, and MCP `enjoy_amenity` were not rerun because their authorization excluded live visits. The official MCP Registry listing is published; Search Console setup remains follow-up work. Metadata does not guarantee discovery or indexing. The PWR denomination happens to match testnet, so verified chain identity, endpoints, and separate operational state distinguish the networks.
+Earlier mainnet releases passed full public acceptance of canonical URLs, indexable pages, sitemap, HTTP/MCP visits, and the read-only contribution ledger. Releases `0.4.3` through `0.4.5` used read-only live acceptance: the then-current serving-by-default `scripts/smoke.ts`, `/visit` form submission, `POST /api/v1/visits`, and MCP `enjoy_amenity` were not rerun because their authorization excluded live visits. The script now defaults to read-only checks as described above. The official MCP Registry listing is published; Search Console setup remains follow-up work. Metadata does not guarantee discovery or indexing. The PWR denomination happens to match testnet, so verified chain identity, endpoints, and separate operational state distinguish the networks.
 
 Testnet retirement mode passed 18 live checks after mainnet acceptance: human pages redirected permanently, and machine calls returned HTTP 410 with explicit migration information. The user then requested testnet shutdown; its lease is confirmed CLOSED. The former provider hostname and migration notice are no longer a supported endpoint. Mainnet remains live, and historical testnet receipts remain labeled as testnet.
