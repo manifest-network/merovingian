@@ -16,6 +16,12 @@ export interface RuntimeImageReport {
   [key: string]: unknown;
 }
 export function expectedDistribution(root?: string): string[];
+export const healthcheckCommand: string[];
+export const healthcheckCases: {
+  name: string; code: number; port?: string; proxy?: boolean; status?: number;
+  raw?: string; drip?: boolean; deadline?: boolean;
+}[];
+export function healthcheckProbe(command: string[]): string;
 export function runRuntimeImageCheck(image: string, output: string, options?: {
   execute?: (args: string[]) => string;
   distribution?: string[];

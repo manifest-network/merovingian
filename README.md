@@ -10,9 +10,10 @@ Release **0.4.3** aligns the runtime and server-card identity with the registry 
 derives release metadata from one version source. The official MCP Registry also
 lists `0.4.3` as the latest version.
 
-Release **0.4.4 is prepared, not deployed or published**. Its
-[release notes](docs/RELEASE-0.4.4.md) describe the security changes, compatibility
-requirements, and remaining provider/AppArmor acceptance work.
+Release **0.4.5 is prepared locally, not deployed or published**. Its
+[release notes](docs/RELEASE-0.4.5.md) describe the native healthcheck, exact
+candidate evidence, and remaining provider/AppArmor acceptance work. The
+[0.4.4 preparation record](docs/RELEASE-0.4.4.md) is historical and predates this fix.
 
 **MCP compatibility:** `0.4.3` changes the runtime/server-card name from
 `network.manifest.merovingian/merovingian` to

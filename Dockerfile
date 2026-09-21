@@ -9,6 +9,13 @@ RUN npm run build \
     && npm cache clean --force \
     && chmod -R a-w /app/node_modules /app/dist /app/package.json
 
+FROM node:24.21.0-alpine3.24@sha256:be80f76cf40ec8e42b9bec49f60a55e0660f30af58d3e5a25530785b30ea67e2 AS healthcheck-build
+RUN apk add --no-cache gcc musl-dev
+COPY tools/healthcheck.c /healthcheck.c
+RUN cc -std=c11 -Os -Wall -Wextra -Werror -fPIE -pie -fstack-protector-strong \
+    -D_FORTIFY_SOURCE=2 -Wl,-z,relro,-z,now -s /healthcheck.c -o /healthcheck \
+    && chmod 555 /healthcheck
+
 FROM node:24.21.0-alpine3.24@sha256:be80f76cf40ec8e42b9bec49f60a55e0660f30af58d3e5a25530785b30ea67e2
 ENV NODE_ENV=production PORT=8080 VISIT_COUNTS_PATH=/data/visits.sqlite
 LABEL org.opencontainers.image.source="https://github.com/manifest-network/merovingian" \
@@ -32,6 +39,7 @@ RUN apk add --no-cache ca-certificates-bundle \
 COPY --from=build --chown=0:0 /app/node_modules ./node_modules
 COPY --from=build --chown=0:0 /app/dist ./dist
 COPY --from=build --chown=0:0 /app/package.json ./package.json
+COPY --from=healthcheck-build --chown=0:0 /healthcheck /usr/local/bin/merovingian-healthcheck
 # COPY creates its destination directories with default modes. Tighten only
 # those directories, then strip privilege bits from every final file input.
 RUN chmod 555 /app/node_modules /app/dist \
@@ -39,7 +47,7 @@ RUN chmod 555 /app/node_modules /app/dist \
 USER 1000:1000
 VOLUME ["/data"]
 EXPOSE 8080
-# Reuse BusyBox instead of starting another Node VM inside the tenant CPU quota.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 CMD ["/bin/sh", "-c", "exec wget -q -Y off -T 4 -O /dev/null \"http://127.0.0.1:${PORT:-8080}/healthz\""]
+# The native probe reads PORT and bounds the whole request without a shell or VM.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 CMD ["/usr/local/bin/merovingian-healthcheck"]
 ENTRYPOINT ["/usr/local/bin/node"]
 CMD ["dist/index.js"]

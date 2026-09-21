@@ -46,12 +46,24 @@ The main application runs with no network, all capabilities dropped,
 no-new-privileges, read-only root, and explicit memory/CPU/PID limits. Process
 UID/GID, capabilities and seccomp are checked, as are the exec healthcheck,
 single MCP operation, batch rejection, serving totals and graceful shutdown.
-A separate loopback HTTP fixture verifies healthcheck success with unset, empty
-and custom `PORT`, bypass of an unusable HTTP proxy, and failure on HTTP 404/503,
-connection refusal and a server that accepts but never answers. The latter must
-exit before a five-second test deadline. Application replacement also exercises
-a custom port while preserving the SQLite counts. Healthcheck cadence and
-Docker timeout/startup/retry settings are checked against the image metadata.
+A separate loopback HTTP fixture verifies the exact native healthcheck command:
+unset, empty and custom `PORT`, fixed request path and Host, quiet output, ignored
+HTTP proxy settings, 2xx success, and failures on redirects, HTTP errors,
+connection refusal, invalid ports and malformed or oversized status lines.
+Hung connections and slowly arriving status lines exercise the single total
+deadline. These cases must exit normally with failure after at least three and
+less than ten seconds, allowing scheduler delay around the four-second alarm.
+A separate 15-second watchdog reports `healthcheck-watchdog` if the test hangs;
+it does not race Docker's unchanged five-second healthcheck timeout. Fixture
+setup and runtime server errors have their own diagnostic identifiers.
+
+Both SQLite persistence passes use the default port. A third, independent
+application container verifies a custom port using only `/healthz`; a custom-port
+failure retains the completed persistence evidence. The image metadata pins the
+direct native executable and all cadence/timeout/startup/retry settings. Inventory
+checks require a root-owned, nonwritable ELF executable, and the writable-root
+permission check also verifies that UID 1000 cannot modify it. The C compiler is
+confined to a build stage and is absent from the final runtime image.
 Docker resource settings are inspected; the fixture is not a stress test.
 Ordinary writable-root execution also checks temporary-file creation and sticky
 1777 modes on `/tmp` and `/var/tmp`. The read-only fixture mounts only `/tmp` as a

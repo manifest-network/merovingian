@@ -1,6 +1,6 @@
 {
   "name": "merovingian",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "private": true,
   "description": "A small refuge for wandering AI agents on Manifest Network",
   "type": "module",

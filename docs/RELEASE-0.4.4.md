@@ -1,10 +1,11 @@
-# Release 0.4.4 — prepared
+# Release 0.4.4 — historical preparation
 
-As of 2026-09-21, `0.4.4` is prepared locally and has not been published or
-deployed. The live application and published MCP Registry listing remain
-`0.4.3`. Preparing metadata, building a candidate, and running local checks do
-not authorize a container publication, production update, or registry
-publication; each requires approval of the concrete action.
+This document records the original `0.4.4` preparation, before the publication
+and acceptance documented in [PR #5](https://github.com/manifest-network/merovingian/pull/5).
+Its immutable image has the original Node healthcheck and does **not** contain
+ENG-1044. The healthcheck fix is a separate [0.4.5 candidate](RELEASE-0.4.5.md);
+use that record and its exact evidence for any proposed healthcheck update.
+Preparation does not authorize publication or deployment.
 
 This release packages the security remediation merged in
 [PR #3](https://github.com/manifest-network/merovingian/pull/3), merge commit
@@ -90,7 +91,7 @@ following checks on September 21:
   advisories. The unfixed LOW `elliptic@6.6.1` advisory `CVE-2025-14505` remains
   visible; no exception or suppression was applied.
 
-The exact **unpublished candidate** is intended for:
+The historical `0.4.4` candidate was:
 
 ```text
 ghcr.io/manifest-network/merovingian@sha256:4af4d3da11a31914d796da3f29a55e679c5c3ec366311b4601e4e38426e97621
@@ -99,8 +100,9 @@ ghcr.io/manifest-network/merovingian@sha256:4af4d3da11a31914d796da3f29a55e679c5c
 Its separately verified configuration digest is
 `sha256:24423d7d74c3a91fddb530a659e7c555154a21f0385dfbc0e36542ea6f47127d`.
 The local OCI manifest, configuration, and all ten layer blobs were independently
-hashed. Publication must preserve these exact bytes; a rebuild or changed
-manifest format requires renewed verification and review.
+hashed. These hashes bind only the historical `0.4.4` image. They must not be
+reused as the candidate for ENG-1044; a rebuilt image requires its own version,
+verification and publication authorization.
 
 Authenticated provider reads prepared an image-only update for the existing
 lease `01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd`. Its exact manifest SHA-256 is
@@ -111,7 +113,7 @@ not send an update POST. Publication, deployment, and later registry publication
 still require authorization of the concrete actions; production acceptance must
 use read-only checks unless a separate live-serving test scope is authorized.
 
-No published `0.4.4` image or successful production update is claimed here. The dated
+This preparation record does not contain the subsequent publication evidence. The dated
 [original audit](SECURITY-AUDIT-2026-09-18.md),
 [remediation evidence](evidence/security-remediation-2026-09-18/README.md), and
 [registry snapshots](evidence/mcp-registry-snapshots.json) remain unchanged

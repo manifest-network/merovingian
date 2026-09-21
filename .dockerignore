@@ -5,3 +5,6 @@
 !tsconfig.build.json
 !src
 !src/**
+!tools
+tools/**
+!tools/healthcheck.c
