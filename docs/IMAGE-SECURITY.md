@@ -46,6 +46,12 @@ The main application runs with no network, all capabilities dropped,
 no-new-privileges, read-only root, and explicit memory/CPU/PID limits. Process
 UID/GID, capabilities and seccomp are checked, as are the exec healthcheck,
 single MCP operation, batch rejection, serving totals and graceful shutdown.
+A separate loopback HTTP fixture verifies healthcheck success with unset, empty
+and custom `PORT`, bypass of an unusable HTTP proxy, and failure on HTTP 404/503,
+connection refusal and a server that accepts but never answers. The latter must
+exit before a five-second test deadline. Application replacement also exercises
+a custom port while preserving the SQLite counts. Healthcheck cadence and
+Docker timeout/startup/retry settings are checked against the image metadata.
 Docker resource settings are inspected; the fixture is not a stress test.
 Ordinary writable-root execution also checks temporary-file creation and sticky
 1777 modes on `/tmp` and `/var/tmp`. The read-only fixture mounts only `/tmp` as a

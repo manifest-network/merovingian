@@ -1,6 +1,6 @@
 # Runtime image hardening
 
-The [Dockerfile](../Dockerfile) prepares the local ENG-1037 candidate. It does not publish or deploy an image. The dated [original audit](SECURITY-AUDIT-2026-09-18.md) remains a record of release 0.4.3's original Debian image.
+The [Dockerfile](../Dockerfile) builds the runtime image. Building it does not publish or deploy an image. The dated [original audit](SECURITY-AUDIT-2026-09-18.md) remains a record of release 0.4.3's original Debian image.
 
 ## Runtime selection
 
@@ -10,11 +10,32 @@ This replaces the Debian runtime instead of carrying its unused package-manageme
 
 The runtime stage applies current signed Alpine package updates, explicitly retains the CA bundle, then removes apk, scanelf, musl utilities and unused dependency libraries. npm, npx, Yarn, corepack, Node headers and the inherited shell entrypoint are removed. The APK installed-package database stays present so scanners can inventory the remaining operating-system packages. BusyBox and its shell remain; none of the image's regular files retain SUID/SGID bits. Existing SGID directories only control group inheritance and do not grant executable privileges.
 
-`/app` and its contents are owned by root and have all write bits removed. Application artifact modes are set in the build stage and preserved by `COPY`; the final stage strips SUID/SGID bits after all application copies, including dependency files. This avoids a recursive final-stage chmod that would duplicate application file payloads in another image layer. UID/GID `1000:1000` owns the persistent application data directory, with mode `0700`; its former home is not writable. Node runs directly as the entrypoint, and the exec-form healthcheck uses the configured port and a four-second request deadline.
+`/app` and its contents are owned by root and have all write bits removed. Application artifact modes are set in the build stage and preserved by `COPY`; the final stage strips SUID/SGID bits after all application copies, including dependency files. This avoids a recursive final-stage chmod that would duplicate application file payloads in another image layer. UID/GID `1000:1000` owns the persistent application data directory, with mode `0700`; its former home is not writable. Node runs directly as the entrypoint.
+
+The exec-form healthcheck uses BusyBox `wget`, avoiding a fresh Node VM inside the tenant's CPU quota every 30 seconds (ENG-1044). Its shell expands `PORT`, defaulting to 8080 when unset or empty, then replaces itself with `wget`. The loopback `/healthz` request bypasses HTTP proxies, discards the response body, and fails on HTTP or connection errors. The network timeout is four seconds; Docker retains its five-second outer timeout, 15-second startup period and three-failure threshold. Local image checks exercise these behaviors with an isolated HTTP fixture and the application on both default and custom ports.
 
 The image retains conventional sticky mode `1777` on `/tmp` and `/var/tmp`, allowing temporary-file APIs during ordinary writable-root execution. A read-only runtime must provide a bounded writable `/tmp` tmpfs with `noexec,nosuid,nodev` and mode `1777`; the local fixture allocates 16 MiB and tests Node temporary-directory creation, writing and cleanup. `/var/tmp` need not be separately writable in that configuration. Temporary files are disposable, while durable SQLite data belongs under `/data`. These image properties complement the read-only root, dropped capabilities, no-new-privileges and resource limits required from the runtime provider.
 
 Base digests and the npm lockfile are pinned. Alpine update repositories still move over time, so rebuilding need not produce identical package versions or bytes. Record and scan each resulting immutable candidate; never substitute a tag for the tested digest.
+
+## ENG-1044 local validation — 2026-09-21
+
+The [healthcheck fix](https://linear.app/liftedinit/issue/ENG-1044) follows three steps: replace the per-probe Node startup while retaining readiness behavior, exercise the actual image command against successful and failing HTTP fixtures, and compare scheduled probes under CPU limits. All three local steps are complete. The [sanitized evidence](evidence/healthcheck-2026-09-21.json) identifies the exact candidate and records the checks and CPU counters.
+
+`npm run check` passed all 193 tests, metadata consistency, typechecking and build. The final-image runtime check passed, including default/custom application ports, healthcheck failure handling and SQLite persistence. The image scan passed the existing advisory policy with the previously reported low, unfixed `elliptic` advisory still visible and no exceptions.
+
+Each CPU comparison used two disposable containers of the same candidate, restoring the previous Node health command in one container. Both used the unchanged 30-second probe interval, 512 MiB memory, read-only root, no external network, dropped capabilities and no-new-privileges. After healthy startup and ten seconds of settling, host reads of the container cgroup counters bracketed a 65-second idle window. No measuring processes ran inside those cgroups. Each window contained two successful scheduled probes and no visits.
+
+| CPU limit | Probe | Window CPU time | Added throttled periods | Added throttled time |
+| --- | --- | ---: | ---: | ---: |
+| 0.1 | Node baseline | 514.0 ms | 49 | 5,309.3 ms |
+| 0.1 | BusyBox wget | 134.6 ms | 11 | 717.4 ms |
+| 0.5 | Node baseline | 387.0 ms | 6 | 429.8 ms |
+| 0.5 | BusyBox wget | 53.4 ms | 0 | 0 ms |
+
+At the lease's stated 0.5-CPU quota, the local candidate used 86% less CPU over the window and its throttling counter stayed flat. The stricter 0.1-CPU run improved CPU time by 74% and throttled time by 87%, but did **not** meet the issue's expectation of a flat throttling counter at that limit. These are short observations of the whole container, including application work and Docker execution overhead; they do not establish a two-millisecond per-process cost or predict provider alert clearance.
+
+Publication and an existing-lease update remain separate actions requiring explicit authorization under [AGENTS.md](../AGENTS.md). After an authorized update, verify read-only health and provider CPU/throttling metrics, then check the alert over its evaluation window. The related monitoring-rule change in ENG-1043 is outside this repository change.
 
 ## Local validation snapshot — 2026-09-18
 

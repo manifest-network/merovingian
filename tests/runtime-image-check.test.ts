@@ -20,8 +20,11 @@ function dockerFixture(fault: (args: string[]) => void = () => {}) {
     calls.push(args); fault(args);
     if (args[0] === 'image') return JSON.stringify([{Id:`sha256:${'a'.repeat(64)}`, Config:{
       User:'1000:1000', Entrypoint:['/usr/local/bin/node'], Cmd:['dist/index.js'], Env:['NODE_ENV=production'],
-      Healthcheck:{Test:['CMD', '/usr/local/bin/node', '-e', 'process.exit(0)']},
+      Healthcheck:{Test:['CMD', '/bin/sh', '-c', 'exec wget'], Interval:30_000_000_000,
+        Timeout:5_000_000_000, StartPeriod:15_000_000_000, Retries:3},
     }}]);
+    if (args[0] === 'run' && args.includes('--no-healthcheck')) return JSON.stringify({defaultPort:true, emptyPort:true,
+      customPort:true, proxyBypassed:true, httpErrorsRejected:true, connectionErrorsRejected:true, timeoutEnforced:true});
     if (args[0] === 'run') return JSON.stringify(args.includes('--read-only')
       ? {applicationFilesChecked:12, rootOwnedCode:true, packageManagersAbsent:true, privilegedFilesAbsent:true}
       : {codeWriteDeniedOnWritableRoot:true, writableRootTemporaryFiles:true});
@@ -62,7 +65,7 @@ test('runtime probe diagnostics preserve the failed check and cleanup attempts t
   const raw = readFileSync(output, 'utf8'), report = JSON.parse(raw);
   assert.equal(report.error.probeCheck, 'sqlite-journal');
   assert.equal(report.error.exitCode, 1, 'cleanup cannot replace the original failure');
-  assert.deepEqual(report.completedChecks, ['image-metadata','image-inventory','writable-root-permissions']);
+  assert.deepEqual(report.completedChecks, ['image-metadata','image-inventory','writable-root-permissions','healthcheck-behavior']);
   assert.equal(report.cleanup.containersAttempted, 1);
   assert.equal(report.cleanup.volumesAttempted, 1);
   // The helper embeds JavaScript in Docker arguments; checking only the outer
@@ -96,6 +99,7 @@ test('runtime success reports both passes and temporary files; cleanup failure s
   assert.equal(report.writableRootTemporaryFiles, true);
   assert.equal(report.cleanup.volumesAttempted, 1);
   assert.ok(docker.calls.filter(args => args[0] === 'create').every(args => args.includes('/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777')));
+  assert.ok(docker.calls.filter(args => args[0] === 'create')[1]?.includes('PORT=18080'));
   const failing = dockerFixture(args => { if (args[0] === 'volume' && args[1] === 'rm') throw new Error('private cleanup failure'); });
   await assert.rejects(runRuntimeImageCheck('fixture', output, {execute:failing.execute, distribution:['index.js']}), /cleanup_failed/);
   assert.equal(JSON.parse(readFileSync(output, 'utf8')).passed, false);

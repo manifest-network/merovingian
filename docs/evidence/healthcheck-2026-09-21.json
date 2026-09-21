@@ -1,0 +1,192 @@
+{
+  "issue": "ENG-1044",
+  "scope": "Local candidate only. The same image was used for each comparison, with the original Node probe restored by a health-command override for the baseline. No publication, deployment, live visits or paid operations.",
+  "imageId": "sha256:b321190df8d7606ba13689a8c6651af9d4a005cbd309976ec1072e8b43d33edb",
+  "configurationDigest": "sha256:82a755be53e6f5e382e3113d54fe8b0662753a08762f0ce903e6e8a560c2fe1e",
+  "checks": {
+    "repositoryCheckPassed": true,
+    "testsPassed": 193,
+    "runtimePassed": true,
+    "runtimeCompletedChecks": [
+      "image-metadata",
+      "image-inventory",
+      "writable-root-permissions",
+      "healthcheck-behavior",
+      "application-pass-1",
+      "application-pass-2"
+    ],
+    "healthcheck": {
+      "defaultPort": true,
+      "emptyPort": true,
+      "customPort": true,
+      "proxyBypassed": true,
+      "httpErrorsRejected": true,
+      "connectionErrorsRejected": true,
+      "timeoutEnforced": true
+    },
+    "runtimeCleanupFailures": []
+  },
+  "scan": {
+    "checkedAt": "2026-09-21T13:33:09.056Z",
+    "scannerVersion": "0.74.0",
+    "databaseUpdatedAt": "2026-09-21T07:13:21.413091201Z",
+    "passed": true,
+    "blocked": [],
+    "accepted": [],
+    "reported": [
+      {
+        "advisory": "CVE-2025-14505",
+        "package": "elliptic",
+        "version": "6.6.1",
+        "target": "Node.js",
+        "path": "app/node_modules/elliptic/package.json",
+        "severity": "LOW",
+        "fixedVersion": ""
+      }
+    ]
+  },
+  "cpuComparisons": [
+    {
+      "checkedAt": "2026-09-21T13:34:46.910843+00:00",
+      "cpuLimit": 0.1,
+      "memoryBytes": 536870912,
+      "probeIntervalSeconds": 30,
+      "windowSeconds": 65,
+      "sampling": "Host reads of each container cgroup cpu.stat before/after an idle window, after healthy startup and a 10-second settling period; no docker exec or other measurement processes inside the sampled cgroups. Docker health logs identify scheduled probes.",
+      "cases": {
+        "node": {
+          "health": "healthy",
+          "scheduledProbes": 2,
+          "probeExitCodes": [
+            0,
+            0
+          ],
+          "probeWallMilliseconds": [
+            2507.822,
+            2516.318
+          ],
+          "cpuStatBefore": {
+            "usage_usec": 1729355,
+            "nr_periods": 178,
+            "nr_throttled": 174,
+            "throttled_usec": 33410265
+          },
+          "cpuStatAfter": {
+            "usage_usec": 2243350,
+            "nr_periods": 235,
+            "nr_throttled": 223,
+            "throttled_usec": 38719603
+          },
+          "cpuStatDelta": {
+            "usage_usec": 513995,
+            "nr_periods": 57,
+            "nr_throttled": 49,
+            "throttled_usec": 5309338
+          }
+        },
+        "wget": {
+          "health": "healthy",
+          "scheduledProbes": 2,
+          "probeExitCodes": [
+            0,
+            0
+          ],
+          "probeWallMilliseconds": [
+            365.551,
+            493.416
+          ],
+          "cpuStatBefore": {
+            "usage_usec": 1490749,
+            "nr_periods": 154,
+            "nr_throttled": 148,
+            "throttled_usec": 22657087
+          },
+          "cpuStatAfter": {
+            "usage_usec": 1625381,
+            "nr_periods": 185,
+            "nr_throttled": 159,
+            "throttled_usec": 23374485
+          },
+          "cpuStatDelta": {
+            "usage_usec": 134632,
+            "nr_periods": 31,
+            "nr_throttled": 11,
+            "throttled_usec": 717398
+          }
+        }
+      }
+    },
+    {
+      "checkedAt": "2026-09-21T13:37:08.356036+00:00",
+      "cpuLimit": 0.5,
+      "memoryBytes": 536870912,
+      "probeIntervalSeconds": 30,
+      "windowSeconds": 65,
+      "sampling": "Host reads of each container cgroup cpu.stat before/after an idle window, after healthy startup and a 10-second settling period; no docker exec or other measurement processes inside the sampled cgroups. Docker health logs identify scheduled probes.",
+      "cases": {
+        "node": {
+          "health": "healthy",
+          "scheduledProbes": 2,
+          "probeExitCodes": [
+            0,
+            0
+          ],
+          "probeWallMilliseconds": [
+            467.032,
+            290.094
+          ],
+          "cpuStatBefore": {
+            "usage_usec": 1721930,
+            "nr_periods": 40,
+            "nr_throttled": 32,
+            "throttled_usec": 3120806
+          },
+          "cpuStatAfter": {
+            "usage_usec": 2108969,
+            "nr_periods": 56,
+            "nr_throttled": 38,
+            "throttled_usec": 3550575
+          },
+          "cpuStatDelta": {
+            "usage_usec": 387039,
+            "nr_periods": 16,
+            "nr_throttled": 6,
+            "throttled_usec": 429769
+          }
+        },
+        "wget": {
+          "health": "healthy",
+          "scheduledProbes": 2,
+          "probeExitCodes": [
+            0,
+            0
+          ],
+          "probeWallMilliseconds": [
+            39.504,
+            49.392
+          ],
+          "cpuStatBefore": {
+            "usage_usec": 1351476,
+            "nr_periods": 30,
+            "nr_throttled": 25,
+            "throttled_usec": 2986925
+          },
+          "cpuStatAfter": {
+            "usage_usec": 1404925,
+            "nr_periods": 36,
+            "nr_throttled": 25,
+            "throttled_usec": 2986925
+          },
+          "cpuStatDelta": {
+            "usage_usec": 53449,
+            "nr_periods": 6,
+            "nr_throttled": 0,
+            "throttled_usec": 0
+          }
+        }
+      }
+    }
+  ],
+  "limitations": "Short idle-window observations on one local Docker host, including application and container-exec overhead; not per-process wget CPU time or a prediction of provider alert clearance. The 0.1-CPU run retained additional throttled periods.",
+  "cleanup": "All comparison containers and their anonymous volumes removed."
+}

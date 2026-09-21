@@ -14,7 +14,8 @@ const temporaryDirectory = ['--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=16m,mod
 const probeChecks = new Set(['application-layout', 'distribution-inventory', 'home-contents', 'code-ownership',
   'privilege-bits', 'package-managers', 'data-permissions', 'code-write-denied', 'temporary-files',
   'health-menu', 'mcp-menu', 'batch-rejection', 'local-serving', 'process-identity', 'process-confinement',
-  'readonly-root', 'sqlite-journal']);
+  'readonly-root', 'sqlite-journal', 'healthcheck-default-port', 'healthcheck-empty-port',
+  'healthcheck-custom-port', 'healthcheck-http-error', 'healthcheck-connection-error', 'healthcheck-timeout']);
 
 export function expectedDistribution(root = fileURLToPath(new URL('../', import.meta.url))) {
   const diagnostics = [];
@@ -101,10 +102,48 @@ ${temporaryProbe}
 for (const path of ['/tmp', '/var/tmp']) assert.equal(fs.statSync(path).mode & 0o7777, 0o1777);
 console.log(JSON.stringify({codeWriteDeniedOnWritableRoot: true, writableRootTemporaryFiles: true}));
 `);
+const healthcheckProbe = command => probe(`
+const assert = require('node:assert/strict');
+const {createServer} = require('node:http');
+const {spawn} = require('node:child_process');
+const command = ${JSON.stringify(command)};
+let status = 200;
+const servers = [];
+const check = port => new Promise((resolve, reject) => {
+  // A loopback health request must succeed even with an unusable HTTP proxy.
+  const env = {...process.env, http_proxy:'http://127.0.0.1:1', HTTP_PROXY:'http://127.0.0.1:1', no_proxy:'', NO_PROXY:''};
+  if (port === undefined) delete env.PORT; else env.PORT = port;
+  const child = spawn(command[0], command.slice(1), {env, stdio:'ignore', timeout:5000, killSignal:'SIGKILL'});
+  child.on('error', reject);
+  child.on('close', (code, signal) => resolve({code, signal}));
+});
+const expectCode = async (port, code) => assert.deepEqual(await check(port), {code, signal:null});
+try {
+  for (const port of [8080, 18080]) {
+    const server = createServer((req, res) => {
+      if (status === 0) return; // Accept the connection without answering.
+      res.writeHead(req.url === '/healthz' ? status : 404); res.end();
+    });
+    servers.push(server);
+    await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
+  }
+  section = 'healthcheck-default-port'; await expectCode(undefined, 0);
+  section = 'healthcheck-empty-port'; await expectCode('', 0);
+  section = 'healthcheck-custom-port'; await expectCode('18080', 0);
+  section = 'healthcheck-http-error';
+  for (const failure of [404, 503]) { status = failure; await expectCode('18080', 1); }
+  section = 'healthcheck-connection-error'; await expectCode('18081', 1);
+  section = 'healthcheck-timeout'; status = 0; await expectCode('18080', 1);
+  console.log(JSON.stringify({defaultPort:true, emptyPort:true, customPort:true, proxyBypassed:true,
+    httpErrorsRejected:true, connectionErrorsRejected:true, timeoutEnforced:true}));
+} finally {
+  for (const server of servers) { server.closeAllConnections(); server.close(); }
+}
+`);
 const requestProbe = probe(`
 const fs = require('node:fs'); const assert = require('node:assert/strict');
   const read = async (path, body) => {
-    const response = await fetch('http://127.0.0.1:8080' + path, {
+    const response = await fetch('http://127.0.0.1:' + (process.env.PORT || '8080') + path, {
       method: body ? 'POST' : 'GET', signal: AbortSignal.timeout(4000),
       headers: {'content-type':'application/json',accept:'application/json, text/event-stream','mcp-protocol-version':'2025-03-26'},
       ...(body ? {body: JSON.stringify(body)} : {}),
@@ -208,6 +247,10 @@ export async function runRuntimeImageCheck(image, output, options = {}) {
     assert.deepEqual(config.Cmd, ['dist/index.js']);
     stage = 'image-healthcheck';
     assert.equal(config.Healthcheck.Test[0], 'CMD', 'exec-form healthcheck required');
+    assert.equal(config.Healthcheck.Interval, 30_000_000_000);
+    assert.equal(config.Healthcheck.Timeout, 5_000_000_000);
+    assert.equal(config.Healthcheck.StartPeriod, 15_000_000_000);
+    assert.equal(config.Healthcheck.Retries, 3);
     stage = 'image-environment';
     const allowedEnvironment = new Set(['PATH','NODE_VERSION','YARN_VERSION','NODE_ENV','PORT','VISIT_COUNTS_PATH']);
     assert(config.Env.every(value => allowedEnvironment.has(value.split('=')[0])), 'unexpected image environment');
@@ -228,6 +271,17 @@ export async function runRuntimeImageCheck(image, output, options = {}) {
     assert(permissions.codeWriteDeniedOnWritableRoot === true && permissions.writableRootTemporaryFiles === true);
     Object.assign(report, {codeWriteDeniedOnWritableRoot:true, writableRootTemporaryFiles:true});
     report.completedChecks.push('writable-root-permissions');
+    stage = 'healthcheck-behavior';
+    const healthcheckName = `${prefix}-healthcheck`; containers.add(healthcheckName);
+    const healthcheck = JSON.parse(docker('run', '--rm', '--name', healthcheckName, ...restrictions, '--read-only',
+      '--no-healthcheck', '--entrypoint', 'node', image, '-e', healthcheckProbe(config.Healthcheck.Test.slice(1))));
+    containers.delete(healthcheckName);
+    const healthcheckResults = {};
+    for (const key of ['defaultPort','emptyPort','customPort','proxyBypassed','httpErrorsRejected','connectionErrorsRejected','timeoutEnforced']) {
+      assert.equal(healthcheck[key], true); healthcheckResults[key] = true;
+    }
+    report.healthcheck = healthcheckResults;
+    report.completedChecks.push('healthcheck-behavior');
     stage = 'create-volume';
     volumeCreated = true; docker('volume', 'create', volume);
     for (let pass = 0; pass < 2; pass++) {
@@ -235,7 +289,7 @@ export async function runRuntimeImageCheck(image, output, options = {}) {
       stage = 'create-container';
       containers.add(name);
       docker('create', '--name', name, ...restrictions, '--read-only', ...temporaryDirectory,
-        '--mount', `type=volume,source=${volume},target=/data`, image);
+        '--mount', `type=volume,source=${volume},target=/data`, ...(pass === 1 ? ['--env', 'PORT=18080'] : []), image);
       stage = 'start-container';
       docker('start', name);
       // Retry only startup health; never retry a serving operation.

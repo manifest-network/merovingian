@@ -39,6 +39,7 @@ RUN chmod 555 /app/node_modules /app/dist \
 USER 1000:1000
 VOLUME ["/data"]
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||'8080')+'/healthz',{signal:AbortSignal.timeout(4000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+# Reuse BusyBox instead of starting another Node VM inside the tenant CPU quota.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 CMD ["/bin/sh", "-c", "exec wget -q -Y off -T 4 -O /dev/null \"http://127.0.0.1:${PORT:-8080}/healthz\""]
 ENTRYPOINT ["/usr/local/bin/node"]
 CMD ["dist/index.js"]
