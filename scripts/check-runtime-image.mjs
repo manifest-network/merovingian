@@ -20,7 +20,7 @@ export const healthcheckCases = [
   {name:'leading-zero-port', port:'0008080', code:0},
   {name:'proxy-bypass', port:'18080', proxy:true, code:0},
   {name:'http-no-content', status:204, code:0},
-  {name:'http-redirect', status:302, code:1},
+  {name:'http-redirect', status:302, redirectPort:18080, code:1},
   {name:'http-not-found', status:404, code:1},
   {name:'http-unavailable', status:503, code:1},
   {name:'connection-error', port:'18081', code:1},
@@ -148,6 +148,7 @@ function assertHealthcheckObservation(item, result) {
   assert.equal(result.signal, null); assert.equal(result.code, item.code);
   assert.equal(result.stdoutBytes, 0); assert.equal(result.stderrBytes, 0);
   assert(Number.isSafeInteger(result.elapsedMilliseconds) && result.elapsedMilliseconds >= 0);
+  if (item.redirectPort) assert.equal(result.redirectRequests, 0, 'redirect target must not be contacted');
   // Leave 100 ms before the verified Docker timeout; a slow client
   // timeout must fail acceptance even when the separate watchdog has not fired.
   if (item.deadline) assert(result.elapsedMilliseconds >= 3000
@@ -165,6 +166,7 @@ const cases = ${JSON.stringify(healthcheckCases)};
 const healthcheckTimeoutMilliseconds = ${healthcheckTimeoutMilliseconds};
 const assertHealthcheckObservation = ${assertHealthcheckObservation.toString()};
 let current = {};
+let redirectRequests = 0;
 const servers = [];
 const sockets = new Set();
 const listen = server => new Promise((resolve, reject) => {
@@ -207,7 +209,11 @@ try {
     const server = createServer((req, res) => {
       const valid = req.method === 'GET' && req.url === '/healthz' && req.headers.host === '127.0.0.1:' + port;
       if (valid && current.hang) return;
-      res.writeHead(valid ? (current.status ?? 200) : 400); res.end();
+      const target = port === current.redirectPort;
+      if (target) redirectRequests++;
+      const headers = valid && current.redirectPort && !target
+        ? {Location:'http://127.0.0.1:' + current.redirectPort + '/healthz'} : {};
+      res.writeHead(valid ? (target ? 200 : current.status ?? 200) : 400, headers); res.end();
     });
     servers.push(server);
     const listening = listen(server); server.listen(port, '127.0.0.1'); await listening;
@@ -235,9 +241,11 @@ try {
   const results = {};
   for (const item of cases) {
     section = 'healthcheck-' + item.name; current = item;
+    redirectRequests = 0;
     if (item.invalidPort) assert.throws(() => loadConfig({PORT:item.port}), /Invalid PORT/);
     else assert.equal(loadConfig({PORT:item.port}).port, Number(item.port || 8080));
     const result = await check(item);
+    if (item.redirectPort) result.redirectRequests = redirectRequests;
     if (result.signal === 'SIGKILL') section = 'healthcheck-watchdog';
     assertHealthcheckObservation(item, result);
     if (item.bodyBytes && item.code === 0) {
@@ -392,7 +400,8 @@ export async function runRuntimeImageCheck(image, output, options = {}) {
       const result = healthcheck[item.name];
       assertHealthcheckObservation(item, result);
       const {code, signal, stdoutBytes, stderrBytes, elapsedMilliseconds} = result;
-      return [item.name, {code, signal, stdoutBytes, stderrBytes, elapsedMilliseconds}];
+      return [item.name, {code, signal, stdoutBytes, stderrBytes, elapsedMilliseconds,
+        ...(item.redirectPort ? {redirectRequests:result.redirectRequests} : {})}];
     }));
     report.completedChecks.push('healthcheck-behavior');
     stage = 'create-volume';
@@ -412,6 +421,14 @@ export async function runRuntimeImageCheck(image, output, options = {}) {
           docker('exec', name, ...config.Healthcheck.Test.slice(1)); ready = true; break;
         } catch (error) {
           if (error.failure?.category !== 'docker_command_failed' || error.failure.exitCode !== 1) throw error;
+          // Docker also returns 1 when exec cannot run in an exited container.
+          // Preserve that failure before cleanup, without copying daemon logs.
+          const state = inspect(name).State;
+          assert.equal(typeof state.Running, 'boolean');
+          if (!state.Running) throw new RuntimeCheckFailure({
+            ...error.failure, category:'container_not_running',
+            ...(Number.isInteger(state.ExitCode) ? {containerExitCode:state.ExitCode} : {}),
+          });
           await (options.pause ?? (() => new Promise(resolve => setTimeout(resolve, 250))))();
         }
       }

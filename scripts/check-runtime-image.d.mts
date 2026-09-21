@@ -3,6 +3,7 @@ export interface RuntimeFailure {
   stage: string;
   operation?: string;
   exitCode?: number;
+  containerExitCode?: number;
   probeCheck?: string;
 }
 export interface RuntimeImageReport {
@@ -20,7 +21,7 @@ export const healthcheckCommand: string[];
 export const healthcheckCases: {
   name: string; code: number; port?: string; proxy?: boolean; status?: number;
   raw?: string; drip?: boolean; deadline?: boolean; invalidPort?: boolean;
-  bodyBytes?: number; hangBody?: boolean; hang?: boolean;
+  bodyBytes?: number; hangBody?: boolean; hang?: boolean; redirectPort?: number;
 }[];
 export function healthcheckProbe(command: string[]): string;
 export function runRuntimeImageCheck(image: string, output: string, options?: {

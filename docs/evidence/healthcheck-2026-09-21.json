@@ -38,9 +38,9 @@
   "supersedesCandidate": "sha256:b14340149f00542417f7ebeac69591326d04dc717f9ee9d4940326d928e497c2",
   "checks": {
     "repositoryCheckPassed": true,
-    "testsPassed": 202,
+    "testsPassed": 204,
     "runtimePassed": true,
-    "runtimeCheckedAt": "2026-09-21T15:42:50.976Z",
+    "runtimeCheckedAt": "2026-09-21T16:51:14.504Z",
     "runtimeCompletedChecks": [
       "image-metadata",
       "image-inventory",
@@ -56,21 +56,21 @@
         "signal": null,
         "stdoutBytes": 0,
         "stderrBytes": 0,
-        "elapsedMilliseconds": 82
+        "elapsedMilliseconds": 44
       },
       "empty-port": {
         "code": 0,
         "signal": null,
         "stdoutBytes": 0,
         "stderrBytes": 0,
-        "elapsedMilliseconds": 5
+        "elapsedMilliseconds": 4
       },
       "custom-port": {
         "code": 0,
         "signal": null,
         "stdoutBytes": 0,
         "stderrBytes": 0,
-        "elapsedMilliseconds": 5
+        "elapsedMilliseconds": 32
       },
       "leading-zero-port": {
         "code": 0,
@@ -91,28 +91,29 @@
         "signal": null,
         "stdoutBytes": 0,
         "stderrBytes": 0,
-        "elapsedMilliseconds": 55
+        "elapsedMilliseconds": 4
       },
       "http-redirect": {
         "code": 1,
         "signal": null,
         "stdoutBytes": 0,
         "stderrBytes": 0,
-        "elapsedMilliseconds": 7
+        "elapsedMilliseconds": 4,
+        "redirectRequests": 0
       },
       "http-not-found": {
         "code": 1,
         "signal": null,
         "stdoutBytes": 0,
         "stderrBytes": 0,
-        "elapsedMilliseconds": 6
+        "elapsedMilliseconds": 4
       },
       "http-unavailable": {
         "code": 1,
         "signal": null,
         "stdoutBytes": 0,
         "stderrBytes": 0,
-        "elapsedMilliseconds": 6
+        "elapsedMilliseconds": 4
       },
       "connection-error": {
         "code": 1,
@@ -196,14 +197,14 @@
         "signal": null,
         "stdoutBytes": 0,
         "stderrBytes": 0,
-        "elapsedMilliseconds": 1
+        "elapsedMilliseconds": 2
       },
       "unicode-space-port": {
         "code": 1,
         "signal": null,
         "stdoutBytes": 0,
         "stderrBytes": 0,
-        "elapsedMilliseconds": 57
+        "elapsedMilliseconds": 1
       },
       "huge-port": {
         "code": 1,
@@ -217,21 +218,21 @@
         "signal": null,
         "stdoutBytes": 0,
         "stderrBytes": 0,
-        "elapsedMilliseconds": 4
+        "elapsedMilliseconds": 5
       },
       "malformed-status": {
         "code": 1,
         "signal": null,
         "stdoutBytes": 0,
         "stderrBytes": 0,
-        "elapsedMilliseconds": 7
+        "elapsedMilliseconds": 5
       },
       "truncated-status": {
         "code": 1,
         "signal": null,
         "stdoutBytes": 0,
         "stderrBytes": 0,
-        "elapsedMilliseconds": 6
+        "elapsedMilliseconds": 4
       },
       "truncated-body": {
         "code": 1,
@@ -245,35 +246,35 @@
         "signal": null,
         "stdoutBytes": 0,
         "stderrBytes": 0,
-        "elapsedMilliseconds": 106
+        "elapsedMilliseconds": 104
       },
       "oversized-body": {
         "code": 1,
         "signal": null,
         "stdoutBytes": 0,
         "stderrBytes": 0,
-        "elapsedMilliseconds": 108
+        "elapsedMilliseconds": 106
       },
       "hung-body": {
         "code": 1,
         "signal": null,
         "stdoutBytes": 0,
         "stderrBytes": 0,
-        "elapsedMilliseconds": 4014
+        "elapsedMilliseconds": 4009
       },
       "timeout": {
         "code": 1,
         "signal": null,
         "stdoutBytes": 0,
         "stderrBytes": 0,
-        "elapsedMilliseconds": 4015
+        "elapsedMilliseconds": 4009
       },
       "total-deadline": {
         "code": 1,
         "signal": null,
         "stdoutBytes": 0,
         "stderrBytes": 0,
-        "elapsedMilliseconds": 4005
+        "elapsedMilliseconds": 4006
       }
     },
     "runtimeCleanupFailures": []
@@ -440,5 +441,36 @@
     }
   ],
   "limitations": "Short idle-window observations on one local Docker host, including application, shell/curl and container-exec overhead; not per-process probe CPU time or a prediction of provider alert clearance. AppArmor policy must permit the wrapper shell, curl and their required library reads; enforcement was not verified.",
-  "cleanup": "All comparison containers and their anonymous volumes removed."
+  "cleanup": "All comparison containers and their anonymous volumes removed.",
+  "reviewValidation": {
+    "checkedAt": "2026-09-21T16:53:03.143Z",
+    "redirectFollowingMutation": {
+      "exitCode": 1,
+      "probeCheck": "healthcheck-http-redirect"
+    },
+    "buildContext": {
+      "scope": "Synthetic files only; Docker applies the repository ignore rules.",
+      "includedFiles": [
+        "package-lock.json",
+        "package.json",
+        "src/index.ts",
+        "src/nested/module.ts",
+        "tools/healthcheck.sh",
+        "tsconfig.build.json",
+        "tsconfig.json"
+      ],
+      "excludedFiles": [
+        "tools/keyring-signer/main.go",
+        "tools/keyring-signer/build/signer",
+        "tools/other.sh",
+        "scripts/operator.ts",
+        ".local/fixture.txt",
+        ".env",
+        "docs/fixture.md"
+      ],
+      "descendantExclusionMutationRejected": true
+    },
+    "runtimeCheckerSha256": "94315eec61c9b6259f946ba180b088a37749ebac8879482673c46ba4c7dec7d3",
+    "dockerignoreSha256": "c65614747b14ebfa71e8dccc0db7b2695b58b7c5a0261e46855a9dc935ea72e5"
+  }
 }

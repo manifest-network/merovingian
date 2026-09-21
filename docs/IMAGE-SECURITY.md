@@ -50,6 +50,8 @@ A separate loopback HTTP fixture verifies the packaged curl wrapper:
 unset, empty and custom `PORT`, matching app/probe rejection of invalid numeric
 formats, fixed request path and Host, quiet output, proxy bypass, 2xx success,
 and failures on redirects, HTTP errors, connection refusal and invalid responses.
+The redirect carries a `Location` pointing to a second loopback server that
+returns 200; acceptance requires zero requests to that target.
 A delayed response body must be consumed successfully; oversized bodies fail.
 Hung responses, slowly arriving status lines and stalled bodies exercise curl's
 four-second transfer deadline. These cases must exit normally with failure after
@@ -66,8 +68,11 @@ failure retains the completed persistence evidence. The image metadata pins the
 wrapper command and all cadence/timeout/startup/retry settings, with negative
 tests for each. Inventory and writable-root checks require root ownership and
 deny UID 1000 writes to both the wrapper and curl. The final image has no build
-toolchain; leaks use a distinct diagnostic. Startup retries only unhealthy exit
-1, preserving Docker failures and abnormal executable exits. Health evidence
+toolchain; leaks use a distinct diagnostic. After an unhealthy exit 1, startup
+checks that the application container is still running before retrying. An exited
+container fails immediately with `container_not_running`, retaining the Docker
+operation/status and numeric container exit code without copying logs. Other
+Docker failures and abnormal executable exits also stop immediately. Health evidence
 records observed exit codes, durations and output byte counts.
 Docker resource settings are inspected; the fixture is not a stress test.
 Ordinary writable-root execution also checks temporary-file creation and sticky

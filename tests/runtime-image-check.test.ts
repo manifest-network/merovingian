@@ -16,8 +16,9 @@ function fixture(t: TestContext) {
 }
 
 function healthObservations() {
-  return Object.fromEntries(healthcheckCases.map(({name, code, deadline}) => [name,
-    {code, signal:null, stdoutBytes:0, stderrBytes:0, elapsedMilliseconds:deadline ? 4000 : 25}]));
+  return Object.fromEntries(healthcheckCases.map(({name, code, deadline, redirectPort}) => [name,
+    {code, signal:null, stdoutBytes:0, stderrBytes:0, elapsedMilliseconds:deadline ? 4000 : 25,
+      ...(redirectPort ? {redirectRequests:0} : {})}]));
 }
 
 function dockerFixture(fault: (args: string[]) => void = () => {}, healthcheck: Record<string, unknown> = {}, observations = healthObservations()) {
@@ -35,7 +36,7 @@ function dockerFixture(fault: (args: string[]) => void = () => {}, healthcheck: 
       ? {applicationFilesChecked:12, rootOwnedCode:true, packageManagersAbsent:true, privilegedFilesAbsent:true}
       : {codeWriteDeniedOnWritableRoot:true, writableRootTemporaryFiles:true});
     if (args[0] === 'create') { pass++; return 'fixture-container'; }
-    if (args[0] === 'inspect') return JSON.stringify([{State:{ExitCode:0}, HostConfig:{
+    if (args[0] === 'inspect') return JSON.stringify([{State:{Running:true, ExitCode:0}, HostConfig:{
       ReadonlyRootfs:true, Privileged:false, Binds:null, NetworkMode:'none', PidsLimit:64,
       Memory:536870912, NanoCpus:500000000, Tmpfs:{'/tmp':'rw,noexec,nosuid,nodev,size=16m,mode=1777'},
     }}]);
@@ -230,6 +231,52 @@ test('the fixture watchdog kills the wrapper process group and preserves its dia
   assert.equal(context.process.exitCode, 1);
 });
 
+test('the redirect fixture rejects a client that follows Location to a successful target', async () => {
+  type Handler = (request: unknown, response: {writeHead:(status: number, headers: Record<string, string>) => void; end:() => void}) => void;
+  const handlers = new Map<number, Handler>(), errors: string[] = [];
+  let nextCase = 0, location: string | undefined, targetStatus: number | undefined;
+  class Server extends EventEmitter {
+    constructor(private handler?: Handler) { super(); }
+    listen(port: number) { if (this.handler) handlers.set(port, this.handler); this.emit('listening'); }
+    close() {}
+  }
+  const request = (port: number) => {
+    let status = 0, headers: Record<string, string> = {};
+    handlers.get(port)!({method:'GET', url:'/healthz', headers:{host:'127.0.0.1:' + port}}, {
+      writeHead:(value, fields) => { status = value; headers = fields; }, end:() => {},
+    });
+    return {status, headers};
+  };
+  const context = {require:(name: string) => {
+    if (name === 'node:assert/strict') return assert;
+    if (name === '/app/dist/config.js') return {loadConfig};
+    if (name === 'node:http') return {createServer:(handler: Handler) => new Server(handler)};
+    if (name === 'node:net') return {createServer:() => new Server()};
+    if (name === 'node:child_process') return {spawn:() => {
+      const item = healthcheckCases[nextCase++]!;
+      const child = Object.assign(new EventEmitter(), {stdout:new EventEmitter(), stderr:new EventEmitter()});
+      queueMicrotask(() => {
+        if (item.redirectPort) {
+          const response = request(8080);
+          location = response.headers.Location;
+          if (location) targetStatus = request(Number(new URL(location).port)).status;
+          const status = targetStatus ?? response.status;
+          child.emit('close', status >= 200 && status < 300 ? 0 : 1, null);
+        } else if (item.code === 0) child.emit('close', 0, null);
+        else child.emit('error', new Error('redirect regression escaped its case'));
+      });
+      return child;
+    }};
+    throw new Error('unexpected module');
+  }, performance:{now:() => 0}, setTimeout:() => 1, clearTimeout:() => {},
+  console:{error:(message: string) => errors.push(message)}, process:{env:{}, exitCode:0}};
+  await new Script(healthcheckProbe(healthcheckCommand.slice(1))).runInNewContext(context);
+  assert.equal(location, 'http://127.0.0.1:18080/healthz');
+  assert.equal(targetStatus, 200);
+  assert.deepEqual(errors, ['MEROVINGIAN_PROBE_FAILURE:healthcheck-http-redirect']);
+  assert.equal(context.process.exitCode, 1);
+});
+
 test('startup retries only unhealthy exit 1 and preserves Docker or executable failures', async t => {
   const {output} = fixture(t);
   for (const failure of [
@@ -254,6 +301,32 @@ test('startup retries only unhealthy exit 1 and preserves Docker or executable f
   });
   const report = await runRuntimeImageCheck('fixture', output, {execute:docker.execute, distribution:['index.js'], pause:async () => { pauses++; }});
   assert.equal(report.passed, true); assert.equal(attempts, 4); assert.equal(pauses, 1);
+});
+
+test('an exited application stops startup retries and preserves sanitized exit evidence before cleanup', async t => {
+  const {output} = fixture(t);
+  for (const containerExitCode of [0, 137]) {
+    let attempts = 0, pauses = 0;
+    const docker = dockerFixture(args => {
+      if (args[0] === 'exec' && args[2] === healthcheckCommand[1]) {
+        attempts++; throw Object.assign(new Error('private daemon diagnostic'), {
+          status:1, stderr:'Error response from daemon: container private-container is not running',
+        });
+      }
+    });
+    const execute = (args: string[]) => {
+      const result = docker.execute(args);
+      return args[0] === 'inspect' ? JSON.stringify([{State:{Running:false, ExitCode:containerExitCode,
+        Error:'private startup log'}}]) : result;
+    };
+    await assert.rejects(runRuntimeImageCheck('fixture', output, {execute, distribution:['index.js'], pause:async () => { pauses++; }}), /container_not_running.*startup-health/);
+    assert.equal(attempts, 1); assert.equal(pauses, 0);
+    const raw = readFileSync(output, 'utf8'), report = JSON.parse(raw);
+    assert.deepEqual(report.error, {category:'container_not_running', stage:'startup-health', operation:'exec', exitCode:1, containerExitCode});
+    assert.ok(docker.calls.findIndex(args => args[0] === 'inspect') < docker.calls.findIndex(args => args[0] === 'rm'));
+    assert.equal(report.cleanup.containersAttempted, 1); assert.equal(report.cleanup.volumesAttempted, 1);
+    assert.doesNotMatch(raw, /private-container|private startup log|private daemon diagnostic/);
+  }
 });
 
 test('a custom-port regression preserves completed persistence evidence', async t => {
