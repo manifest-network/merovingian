@@ -2,15 +2,15 @@ import { createHash } from 'node:crypto';
 import { parseAddress } from '@manifest-network/manifest-sdk';
 import { liftedinit } from '@manifest-network/manifestjs';
 import { TxBody, TxRaw } from 'cosmjs-types/cosmos/tx/v1beta1/tx.js';
+import { FUND_CREDIT_TYPE, FUNDING_PLACEHOLDERS, HISTORY_LIMIT, SUPPORT_MESSAGES } from './protocol.js';
 
-export const FUND_CREDIT_TYPE = '/liftedinit.billing.v1.MsgFundCredit';
+export { FUND_CREDIT_TYPE } from './protocol.js';
 const HASH = /^[0-9a-fA-F]{64}$/;
 const INTEGER = /^(0|[1-9][0-9]{0,77})$/;
 const MAX_TX_BYTES = 1_000_000;
 const MAX_CREDIT_RESPONSE_BYTES = 64 * 1024;
 const BODY_CLEANUP_GRACE_MS = 100;
 const UINT64_MAX = 18_446_744_073_709_551_615n;
-const HISTORY_LIMIT = 100;
 
 export interface SupportConfig {
   chainId: string;
@@ -500,7 +500,7 @@ export class SupportService {
       status: 'unconfigured', network: this.config.network, chainId: this.config.chainId,
       tenant: this.config.tenant, denom: this.config.pwrDenom, optional: true,
       testTokensOnly: this.config.network === 'testnet',
-      message: 'The contribution jar is not configured. All amenities remain free.',
+      message: SUPPORT_MESSAGES.unconfigured,
       instructions: null, hostingCredit: null, checkedAt: null,
     };
     if (!this.configured) return info;
@@ -508,20 +508,16 @@ export class SupportService {
       info.hostingCredit = await this.read((signal) => this.gateway.getCredit(this.config.tenant, signal));
       info.status = 'available';
       info.checkedAt = new Date(this.now()).toISOString();
-      info.message = this.config.network === 'testnet'
-        ? 'Keep the sauna warm with optional faucet-funded testnet PWR. These are test tokens only.'
-        : 'Keep the sauna warm with an optional PWR contribution. All amenities remain free.';
+      info.message = SUPPORT_MESSAGES.available(this.config.network);
       info.instructions = {
         typeUrl: FUND_CREDIT_TYPE,
-        value: { sender: '<your authorized Manifest wallet address>', tenant: this.config.tenant,
-          amount: { denom: this.config.pwrDenom, amount: '<positive integer in base units>' } },
-        notice: 'Only sign with explicit wallet authorization. Hosting-credit deposits cannot be withdrawn. '
-          + 'You also pay network gas. After confirmation, submit the transaction hash to /api/v1/support/verify. '
-          + 'The thank-you receipt is public, non-transferable, and proves no ownership or entitlement.',
+        value: { sender: FUNDING_PLACEHOLDERS.sender, tenant: this.config.tenant,
+          amount: { denom: this.config.pwrDenom, amount: FUNDING_PLACEHOLDERS.amount } },
+        notice: SUPPORT_MESSAGES.fundingNotice,
       };
     } catch {
       info.status = 'unavailable';
-      info.message = 'Contribution queries are temporarily unavailable. All amenities remain free.';
+      info.message = SUPPORT_MESSAGES.unavailable;
     }
     return info;
   }
@@ -545,7 +541,7 @@ export class SupportService {
       status: 'unconfigured', network: this.config.network, chainId: this.config.chainId,
       tenant: this.config.tenant, denom: this.config.pwrDenom, checkedAt: null,
       entries: [], totals: null, indexedTransactions: null, scannedTransactions: 0, complete: false,
-      message: 'Contribution history requires a configured refuge tenant and REST endpoint.',
+      message: SUPPORT_MESSAGES.historyUnconfigured,
     };
     if (!this.configured || !this.config.restUrl) return history;
     try {
@@ -557,11 +553,11 @@ export class SupportService {
       history.status = 'available';
       history.checkedAt = new Date(this.now()).toISOString();
       history.message = summary.complete
-        ? 'All indexed funding transactions were inspected. Totals include only successful PWR funding events for this tenant.'
-        : `Partial history: inspected ${summary.scannedTransactions} of ${summary.indexedTransactions} indexed funding transactions (latest ${HISTORY_LIMIT} maximum). Totals cover only the returned rows.`;
+        ? SUPPORT_MESSAGES.historyComplete
+        : SUPPORT_MESSAGES.historyPartial(summary.scannedTransactions, summary.indexedTransactions);
     } catch {
       history.status = 'unavailable';
-      history.message = 'Contribution history could not be verified or queried. Totals are unavailable; this does not mean no contributions were made.';
+      history.message = SUPPORT_MESSAGES.historyUnavailable;
     }
     return history;
   }
@@ -569,24 +565,24 @@ export class SupportService {
   async verify(input: { transactionHash: string; expectedSender?: string }): Promise<VerificationResult> {
     if (!input || typeof input.transactionHash !== 'string' || !HASH.test(input.transactionHash)
       || (input.expectedSender !== undefined && !addressIsValid(input.expectedSender))) {
-      return { status: 'invalid_request', message: 'Provide exactly 64 hexadecimal transaction-hash characters and, optionally, a valid Manifest sender.' };
+      return { status: 'invalid_request', message: SUPPORT_MESSAGES.invalidHash };
     }
-    if (!this.configured) return { status: 'unconfigured', message: 'The contribution jar is not configured.' };
+    if (!this.configured) return { status: 'unconfigured', message: SUPPORT_MESSAGES.verificationUnconfigured };
     const hash = input.transactionHash.toUpperCase();
     let tx: ChainTransaction | null;
     try {
       tx = await this.read((signal) => this.gateway.getTransaction(hash, signal));
     } catch {
-      return { status: 'unavailable', message: 'The configured chain could not be verified or queried. No contribution has been confirmed.' };
+      return { status: 'unavailable', message: SUPPORT_MESSAGES.verificationUnavailable };
     }
-    if (!tx) return { status: 'pending', message: 'This transaction has not been found in the configured chain index. It may be pending, unknown, or on another network; no contribution is confirmed.' };
+    if (!tx) return { status: 'pending', message: SUPPORT_MESSAGES.pending };
     if (!HASH.test(tx.hash) || tx.hash.toUpperCase() !== hash || !INTEGER.test(tx.height)
       || BigInt(tx.height) <= 0n || !Number.isSafeInteger(tx.code) || tx.code < 0
       || !(tx.bytes instanceof Uint8Array) || tx.bytes.length === 0 || tx.bytes.length > MAX_TX_BYTES
       || createHash('sha256').update(tx.bytes).digest('hex').toUpperCase() !== hash) {
-      return { status: 'unavailable', message: 'The chain returned incomplete or inconsistent confirmation data.' };
+      return { status: 'unavailable', message: SUPPORT_MESSAGES.inconsistentTransaction };
     }
-    if (tx.code !== 0) return { status: 'failed', message: 'This transaction failed on chain. It did not make a contribution.' };
+    if (tx.code !== 0) return { status: 'failed', message: SUPPORT_MESSAGES.failed };
     const amounts = new Map<string, bigint>();
     try {
       const raw = TxRaw.decode(tx.bytes);
@@ -600,10 +596,10 @@ export class SupportService {
         amounts.set(funding.sender, (amounts.get(funding.sender) ?? 0n) + BigInt(funding.amount.amount));
       }
     } catch {
-      return { status: 'not_a_contribution', message: 'A valid signed PWR hosting-credit contribution could not be decoded from this transaction.' };
+      return { status: 'not_a_contribution', message: SUPPORT_MESSAGES.undecodable };
     }
     if (amounts.size === 0 || (input.expectedSender !== undefined && !amounts.has(input.expectedSender))) {
-      return { status: 'not_a_contribution', message: 'This transaction contains no matching PWR credit contribution to this refuge tenant from the requested sender.' };
+      return { status: 'not_a_contribution', message: SUPPORT_MESSAGES.notAContribution };
     }
     const contributions = [...amounts].sort(([a], [b]) => a.localeCompare(b)).map(([sender, amount]) => ({ sender, amount: amount.toString() }));
     const total = [...amounts.values()].reduce((sum, amount) => sum + amount, 0n);
@@ -613,7 +609,7 @@ export class SupportService {
       network: this.config.network, chainId: this.config.chainId, transactionHash: hash,
       height: tx.height, tenant: this.config.tenant,
       amount: { denom: this.config.pwrDenom, amount: total.toString() }, contributions,
-      message: 'The sauna glows a little warmer. Thank you for contributing hosting credit. This public receipt is a souvenir; it proves no wallet ownership and grants no balance or entitlement.',
+      message: SUPPORT_MESSAGES.receipt,
       transferable: false, provesOwnership: false,
     } };
   }

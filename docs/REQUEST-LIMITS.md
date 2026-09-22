@@ -18,6 +18,14 @@ continue to accept one visit per request.
 JSON and URL-encoded input is capped at 8,192 bytes after decompression. MCP also
 requires the JSON parser's media type; a malformed MIME list cannot select the
 transport's fallback body parser. Form input permits at most five parameters.
+Malformed JSON or compressed bodies return 400, oversized parsed bodies return
+413, and unsupported content encodings or charsets return 415. Parser errors use
+fixed public messages without exposing the submitted body or parser diagnostics.
+
+Successful visit JSON results are also capped at 8,192 UTF-8 bytes before a
+serving is counted. An oversized result fails for HTTP, form, and MCP visits;
+HTML pages and MCP transport envelopes are outside this result-size limit. See
+[API response contracts](API-CONTRACTS.md) for response shapes and status codes.
 
 ## Request and concurrency budgets
 

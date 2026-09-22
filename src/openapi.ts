@@ -2,6 +2,7 @@ import type { Config } from './config.js';
 import { getAmenities } from './amenities.js';
 import { APP_VERSION } from './identity.js';
 import { responseExamples } from './openapi-examples.js';
+import { API_MESSAGES, FUND_CREDIT_TYPE, FUNDING_PLACEHOLDERS, HISTORY_LIMIT, MAX_INPUT_BYTES, MAX_VISIT_OUTPUT_BYTES, MAX_FORM_PARAMETERS } from './protocol.js';
 
 type Schema = Record<string, unknown>;
 const ref = (name: string): Schema => ({ $ref: `#/components/schemas/${name}` });
@@ -22,14 +23,16 @@ const object = (properties: Record<string, Schema>, required = Object.keys(prope
 
 function jsonResponse(description: string, schema: Schema, examples: Record<string, unknown>) {
   return { description, content: { 'application/json': {
-    schema, examples: Object.fromEntries(Object.entries(examples).map(([name, value]) => [name, { value }])),
+    schema, examples: Object.fromEntries(Object.entries(examples).map(([name, value]) => [name, {
+      description: 'Illustrative response only, not a live reading or transaction instruction.', value,
+    }])),
   } } };
 }
 
 /** OpenAPI 3.1 response contracts describe the existing handlers, without chain reads. */
 export function httpApiDocument(config: Config, description: string) {
   const amenities = getAmenities();
-  const examples = responseExamples(config);
+  const examples = responseExamples(config, amenities);
   const supportFields = { ...environment, tenant: { ...text, description: 'Configured refuge tenant; may be empty when unconfigured.' }, denom: text };
   const supportInfoFields = {
     ...supportFields, optional: { type: 'boolean', const: true },
@@ -74,9 +77,9 @@ export function httpApiDocument(config: Config, description: string) {
     },
     AmenityMenu: object({
       name: { type: 'string', const: 'merovingian' }, ...environment,
-      amenities: { ...array(ref('Amenity')), minItems: 3, maxItems: 3 },
-      maxInputBytes: { type: 'integer', const: 8192, description: 'Maximum parsed request body size in bytes.' },
-      maxVisitOutputBytes: { type: 'integer', const: 8192, description: 'Upper bound on a successful visit JSON response in bytes.' },
+      amenities: { ...array(ref('Amenity')), minItems: amenities.length, maxItems: amenities.length },
+      maxInputBytes: { type: 'integer', const: MAX_INPUT_BYTES, description: 'Maximum parsed request body size in bytes.' },
+      maxVisitOutputBytes: { type: 'integer', const: MAX_VISIT_OUTPUT_BYTES, description: 'Enforced UTF-8 byte limit on the successful visit JSON result (excluding MCP transport envelopes). Oversized results fail before a serving is counted.' },
       walletRequired: { type: 'boolean', const: false },
     }),
     VisitInput: { oneOf: amenities.map(a => a.inputSchema) },
@@ -94,17 +97,23 @@ export function httpApiDocument(config: Config, description: string) {
       content: { ...nonempty, description: 'Self-contained fictional keepsake. No balance, token or redemption value.' }, ...environment,
     }),
     VisitStats: statsSchema,
+    AvailableVisitStats: { allOf: [ref('VisitStats'), {
+      type: 'object', properties: { status: { const: 'available' }, since: dateTime, counts: { type: 'object' }, total: integer },
+    }] },
+    UnavailableVisitStats: { allOf: [ref('VisitStats'), {
+      type: 'object', properties: { status: { const: 'unavailable' }, since: nil, counts: nil, total: nil },
+    }] },
     Coin: object({ denom: nonempty, amount: { ...integer, description: 'Amount in integer base units, encoded as a string to preserve precision.' } }),
     HostingCredit: object({
       available: array(ref('Coin')), reserved: array(ref('Coin')),
       activeLeases: { ...integer, description: 'Active lease count as a decimal integer string. Settlement can lag usage.' },
     }),
     FundingInstructions: object({
-      typeUrl: { type: 'string', const: '/liftedinit.billing.v1.MsgFundCredit' },
+      typeUrl: { type: 'string', const: FUND_CREDIT_TYPE },
       value: object({
-        sender: { type: 'string', const: '<your authorized Manifest wallet address>', description: 'Template placeholder; replace in your own authorized wallet.' },
-        tenant: nonempty,
-        amount: object({ denom: nonempty, amount: { type: 'string', const: '<positive integer in base units>',
+        sender: { type: 'string', const: FUNDING_PLACEHOLDERS.sender, description: 'Template placeholder; replace in your own authorized wallet.' },
+        tenant: { ...nonempty, description: 'Use the current tenant from GET /api/v1/support. Documentation examples contain a non-address placeholder; never fund an example recipient.' },
+        amount: object({ denom: { ...nonempty, description: 'Exact base-unit denomination from GET /api/v1/support; confirm it with the network, tenant and amount before signing.' }, amount: { type: 'string', const: FUNDING_PLACEHOLDERS.amount,
           description: 'Template placeholder, not a numeric amount or a request to pay.' } }),
       }),
       notice: nonempty,
@@ -113,7 +122,7 @@ export function httpApiDocument(config: Config, description: string) {
       description: 'All fields are required. Availability is reported in the body under HTTP 200; this endpoint never signs or broadcasts.',
       oneOf: [
         object({ ...supportInfoFields, status: { type: 'string', const: 'available' }, instructions: ref('FundingInstructions'),
-          hostingCredit: { ...nullable(ref('HostingCredit')), description: 'Null when credit readings are not configured, even if funding instructions are available; not a zero balance.' }, checkedAt: dateTime }),
+          hostingCredit: { ...nullable(ref('HostingCredit')), description: 'Null only when the verified chain reports no credit account (structured gRPC NotFound). Missing REST configuration or a failed query makes support unavailable.' }, checkedAt: dateTime }),
         ...['unavailable', 'unconfigured'].map(status => object({ ...supportInfoFields, status: { type: 'string', const: status },
           instructions: nil, hostingCredit: nil, checkedAt: nil })),
       ],
@@ -134,8 +143,8 @@ export function httpApiDocument(config: Config, description: string) {
         object({ ...supportFields, status: { type: 'string', const: 'available' }, checkedAt: dateTime,
           entries: array(ref('ContributionEntry')), totals: ref('ContributionTotals'),
           indexedTransactions: { type: 'integer', minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
-          scannedTransactions: { type: 'integer', minimum: 0, maximum: 100, description: 'Distinct indexed transactions inspected, including records excluded from deposit totals.' },
-          complete: { type: 'boolean', description: 'True when every indexed funding transaction was inspected. False means totals cover only returned entries from the latest page (at most 100 transactions).' },
+          scannedTransactions: { type: 'integer', minimum: 0, maximum: HISTORY_LIMIT, description: 'Distinct indexed transactions inspected, including records excluded from deposit totals.' },
+          complete: { type: 'boolean', description: `True when every indexed funding transaction was inspected. False means totals cover only returned entries from the latest page (at most ${HISTORY_LIMIT} transactions).` },
           message: nonempty }),
         ...['unavailable', 'unconfigured'].map(status => object({ ...supportFields, status: { type: 'string', const: status },
           checkedAt: nil, entries: { ...array(ref('ContributionEntry')), maxItems: 0 }, totals: nil, indexedTransactions: nil,
@@ -164,6 +173,8 @@ export function httpApiDocument(config: Config, description: string) {
       ],
     },
     Error: object({ error: nonempty }),
+    NotFound: object({ error: { type: 'string', const: 'not_found' }, visitGuide: { type: 'string', const: '/visit.md' } }),
+    HttpError: { oneOf: [ref('Error'), ref('NotFound')] },
     InvalidVerificationRequest: {
       description: 'Shape validation uses error; missing or malformed hashes use message. Neither includes a receipt. expectedSender is not accepted by this HTTP API.',
       oneOf: [
@@ -172,10 +183,10 @@ export function httpApiDocument(config: Config, description: string) {
       ],
     },
     VerificationBadRequest: { oneOf: [ref('Error'), ref('InvalidVerificationRequest')] },
-    Retired: object({
+    ...(config.network === 'testnet' ? { Retired: object({
       error: { type: 'string', const: 'testnet_retired' }, network: { type: 'string', const: 'testnet' }, chainId: nonempty,
       mainnetOrigin: { type: 'string', format: 'uri', description: 'Explicitly reconfigure the client and wallet for mainnet. Machine requests are never redirected.' }, message: nonempty,
-    }),
+    }) } : {}),
     Health: object({
       status: { type: 'string', const: 'ok' }, ...environment,
       retired: { type: 'boolean', description: 'True when this deployment has retired. Health remains HTTP 200; it does not check the chain or serving storage.' },
@@ -186,70 +197,77 @@ export function httpApiDocument(config: Config, description: string) {
   const retryAfter = { 'Retry-After': { description: 'Seconds to wait before retrying this request.',
     required: true, schema: { type: 'integer', minimum: 1 }, example: 5 } };
   const responses = {
-    BadRequest: jsonResponse('Malformed request body. Parsers also apply to API GET requests carrying a body.', ref('Error'), {
-      malformedBody: { error: 'Malformed request body.' },
+    BadRequest: jsonResponse('Malformed or corrupt compressed request body. Parsers also apply to API GET requests carrying a body.', ref('Error'), {
+      malformedBody: { error: API_MESSAGES.malformedBody },
     }),
-    InvalidVisit: jsonResponse('Malformed request body or invalid amenity, preference, seed or extra input fields.', ref('Error'), {
-      malformedBody: { error: 'Malformed request body.' }, invalidAmenity: { error: 'Choose byte-chip-cookie, rgb-sauna, or null-tea.' },
-      invalidPreference: { error: 'For rgb-sauna, preference must be magenta, amber, cyan.' },
+    InvalidVisit: jsonResponse('Malformed request body or invalid amenity, preference, seed or extra input fields.', ref('Error'), examples.invalidVisits),
+    Forbidden: jsonResponse('A supplied browser Origin does not match the configured public origin.', ref('Error'), { rejectedOrigin: { error: API_MESSAGES.originNotAllowed } }),
+    ...(config.network === 'testnet' ? { Retired: jsonResponse('Retired testnet. Explicit client and wallet reconfiguration is required.', ref('Retired'), { retired: examples.retired }) } : {}),
+    TooLarge: jsonResponse(`Parsed body exceeds ${MAX_INPUT_BYTES} bytes or a URL-encoded body exceeds ${MAX_FORM_PARAMETERS} parameters.`, ref('Error'), { tooLarge: { error: API_MESSAGES.inputLimit } }),
+    UnsupportedEncoding: jsonResponse('Unsupported Content-Encoding or charset on a parsed request body.', ref('Error'), { encoding: { error: API_MESSAGES.unsupportedEncoding } }),
+    UnsupportedMediaType: jsonResponse('Use Content-Type: application/json with a supported charset and Content-Encoding.', ref('Error'), {
+      contentType: { error: API_MESSAGES.jsonRequired }, encoding: { error: API_MESSAGES.unsupportedEncoding },
     }),
-    Forbidden: jsonResponse('A supplied browser Origin does not match the configured public origin.', ref('Error'), { rejectedOrigin: { error: 'origin_not_allowed' } }),
-    Retired: jsonResponse('Retired testnet. Explicit client and wallet reconfiguration is required.', ref('Retired'), { retired: examples.retired }),
-    TooLarge: jsonResponse('Parsed body exceeds 8192 bytes or a URL-encoded body exceeds five parameters.', ref('Error'), { tooLarge: { error: 'Request exceeds the refuge input limit.' } }),
-    UnsupportedMediaType: jsonResponse('The operation requires Content-Type: application/json.', ref('Error'), { contentType: { error: 'Use Content-Type: application/json.' } }),
     RateLimited: { ...jsonResponse('A per-client or aggregate request/concurrency limit was reached. Honor Retry-After.', ref('Error'), {
-      requestLimit: { error: 'Visit limit reached. Please try again later.' }, busy: { error: 'The refuge is busy. Please try again later.' },
+      requestLimit: { error: API_MESSAGES.rateLimited }, busy: { error: API_MESSAGES.busy },
     }), headers: retryAfter },
-    InternalError: jsonResponse('Unexpected handler failure. No successful result is available.', ref('Error'), { failure: { error: 'The refuge could not complete this request.' } }),
+    InternalError: jsonResponse('Unexpected handler failure or oversized generated visit. No successful result is available.', ref('Error'), { failure: { error: API_MESSAGES.internalError } }),
+    OtherError: jsonResponse('Other HTTP errors. Unknown paths or unsupported HTTP methods return 404 with a visitGuide. MCP transport errors use a separate JSON-RPC envelope.', ref('HttpError'), {
+      notFound: { error: 'not_found', visitGuide: '/visit.md' },
+    }),
     CounterUnavailable: { ...jsonResponse('Serving storage failed; no successful visit is returned. Retry after the indicated delay.', ref('Error'), {
-      unavailable: { error: 'The serving counter is temporarily unavailable. Please try again later.' },
+      unavailable: { error: API_MESSAGES.counterUnavailable },
     }), headers: retryAfter },
   };
   const responseRef = (name: keyof typeof responses) => ({ $ref: `#/components/responses/${name}` });
   const apiErrors = {
-    '400': responseRef('BadRequest'), '403': responseRef('Forbidden'), '410': responseRef('Retired'),
-    '413': responseRef('TooLarge'), '429': responseRef('RateLimited'), '500': responseRef('InternalError'),
+    '400': responseRef('BadRequest'), '403': responseRef('Forbidden'),
+    ...(config.network === 'testnet' ? { '410': responseRef('Retired') } : {}),
+    '413': responseRef('TooLarge'), '415': responseRef('UnsupportedEncoding'),
+    '429': responseRef('RateLimited'), '500': responseRef('InternalError'), default: responseRef('OtherError'),
   };
+  const operationResponses = <T extends Record<string, unknown>>(responses: T) => config.mainnetOrigin
+    ? { '410': responseRef('Retired') } : responses;
   return {
     openapi: '3.1.0', jsonSchemaDialect: 'https://json-schema.org/draft/2020-12/schema',
     info: { title: 'merovingian', version: APP_VERSION,
-      description: `${description} Network: ${config.network}; chain: ${config.chainId}. Free visits require no wallet and increment aggregate served counts. Hosting contributions use a visitor-controlled wallet. Response examples are illustrative; example addresses and transactions are synthetic. All response fields are required unless their variant omits them; null is explicit and never means a zero reading.` },
+      description: `${description} Network: ${config.network}; chain: ${config.chainId}. ${config.mainnetOrigin ? 'This testnet deployment is retired: all API operations return 410. Health and this contract remain available. ' : ''}Free visits require no wallet and increment aggregate served counts. Hosting contributions use a visitor-controlled wallet. Response examples are illustrative and use non-address placeholders; never sign or fund an example. Read GET /api/v1/support for current network, denomination and tenant. All response fields are required unless their variant omits them; null is explicit and never means a zero reading.` },
     servers: [{ url: config.publicOrigin }], security: [],
     paths: {
       '/api/v1/amenities': { get: {
         operationId: 'listAmenities', summary: 'Read the free amenity menu',
-        responses: { ...apiErrors, '200': jsonResponse('Menu, accepted preferences, network and response limits.', ref('AmenityMenu'), examples.menu) },
+        responses: operationResponses({ ...apiErrors, '200': jsonResponse('Menu, accepted preferences, network and response limits.', ref('AmenityMenu'), examples.menu) }),
       } },
       '/api/v1/visits': { post: {
         operationId: 'enjoyAmenity', summary: 'Enjoy a free fictional amenity, receive a souvenir, and increment its aggregate count',
         description: 'No charge. Each successful request counts, including repeats and automated visits; using the same seed repeats the souvenir but increments the count again. No visitor identity or souvenir content is stored in the counter.',
         requestBody: { required: true, content: { 'application/json': { schema: ref('VisitInput'), example: { amenity: 'byte-chip-cookie', seed: 'openapi-example' } } } },
-        responses: { ...apiErrors, '200': jsonResponse('Immediate experience and self-contained souvenir. The aggregate serving count has been incremented.', ref('VisitResult'), examples.visits),
-          '400': responseRef('InvalidVisit'), '415': responseRef('UnsupportedMediaType'), '503': responseRef('CounterUnavailable') },
+        responses: operationResponses({ ...apiErrors, '200': jsonResponse('Immediate experience and self-contained souvenir. The aggregate serving count has been incremented.', ref('VisitResult'), examples.visits),
+          '400': responseRef('InvalidVisit'), '415': responseRef('UnsupportedMediaType'), '503': responseRef('CounterUnavailable') }),
       } },
       '/api/v1/stats': { get: {
         operationId: 'servedCounts', summary: 'Read aggregate served counts without recording a visit',
-        responses: { ...apiErrors,
-          '200': jsonResponse('Counts by amenity and total as decimal integer strings, with the counting start date and storage lifetime. Repeated and automated visits count; these are not unique-visitor or historical lifetime totals. Unavailable counts, total, and since are null.', statsSchema, { available: examples.stats.available }),
-          '503': jsonResponse('Storage is unavailable. The stats shape is preserved: counts, total and since are null. No Retry-After header is sent.', ref('VisitStats'), { unavailable: examples.stats.unavailable }),
-        },
+        responses: operationResponses({ ...apiErrors,
+          '200': jsonResponse('Available counts by amenity and total as decimal integer strings, with the counting start date and storage lifetime. Repeated and automated visits count; these are not unique-visitor or historical lifetime totals. Readings are non-null; unavailable readings use HTTP 503.', ref('AvailableVisitStats'), { available: examples.stats.available }),
+          '503': jsonResponse('Storage is unavailable. Parse the stats body on HTTP 503: counts, total and since are null. No Retry-After header is sent.', ref('UnavailableVisitStats'), { unavailable: examples.stats.unavailable }),
+        }),
       } },
       '/api/v1/support': { get: {
         operationId: 'hostingSupport', summary: 'Read optional hosting contribution instructions; does not sign or pay',
-        responses: { ...apiErrors, '200': jsonResponse('Availability, network, target tenant, token and unsigned instruction template. Unavailable or unconfigured returns null instructions, credit and checkedAt.', ref('SupportInfo'), examples.support) },
+        responses: operationResponses({ ...apiErrors, '200': jsonResponse('Availability, network, target tenant, token and unsigned instruction template. Unavailable or unconfigured returns null instructions, credit and checkedAt.', ref('SupportInfo'), examples.support) }),
       } },
       '/api/v1/contributions': { get: {
-        operationId: 'contributionHistory', summary: 'Read public hosting deposits from the latest 100 indexed funding transactions',
-        responses: { ...apiErrors, '200': jsonResponse('Availability, confirmed funding entries, base-unit totals, checkedAt and completeness. Partial totals cover only returned entries; unavailable totals are null. Cached for up to 60 seconds.', ref('ContributionHistory'), examples.history) },
+        operationId: 'contributionHistory', summary: `Read public hosting deposits from the latest ${HISTORY_LIMIT} indexed funding transactions`,
+        responses: operationResponses({ ...apiErrors, '200': jsonResponse('Availability, confirmed funding entries, base-unit totals, checkedAt and completeness. Partial totals cover only returned entries; unavailable totals are null. Cached for up to 60 seconds.', ref('ContributionHistory'), examples.history) }),
       } },
       '/api/v1/support/verify': { post: {
         operationId: 'verifyContribution', summary: 'Verify an existing public transaction without broadcasting',
         requestBody: { required: true, content: { 'application/json': { schema: ref('VerificationInput'), example: { transactionHash: 'A'.repeat(64) } } } },
-        responses: { ...apiErrors,
+        responses: operationResponses({ ...apiErrors,
           '200': jsonResponse('Confirmed, pending, failed, not_a_contribution, unavailable or unconfigured. Only confirmed carries a receipt; it proves no ownership or paid entitlement.', ref('VerificationResult'), examples.verification),
           '400': jsonResponse('Invalid body, unexpected fields, or missing/invalid transactionHash. Parser errors contain error only; validation failures include invalid_request.', ref('VerificationBadRequest'), examples.invalidVerification),
           '415': responseRef('UnsupportedMediaType'),
-        },
+        }),
       } },
       '/healthz': { get: {
         operationId: 'health', summary: 'Application health (independent of chain availability)',

@@ -4,6 +4,7 @@ import { SUPPORTED_PROTOCOL_VERSIONS } from '@modelcontextprotocol/sdk/types.js'
 import type { Config } from './config.js';
 import { visitMarkdown } from './documents.js';
 import { MCP_SERVER_INFO } from './identity.js';
+import { OPENAPI_MEDIA_TYPE } from './protocol.js';
 
 // Public, advisory discovery only. Live MCP negotiation and tool listings
 // remain authoritative; these documents never provision accounts or payments.
@@ -12,13 +13,14 @@ export const SKILL_PATH = '/.well-known/agent-skills/visit-merovingian/SKILL.md'
 const skillDescription = 'Visit Merovingian for free fictional cookies, sauna sessions, tea, and souvenirs over HTTP or MCP.';
 export interface ReadinessDocument { contentType: string; body: string }
 const jsonDocument = (value: unknown, contentType = 'application/json'): ReadinessDocument => ({ contentType, body: `${JSON.stringify(value, null, 2)}\n` });
+export const openapiLink = (config: Config): string => `<${config.publicOrigin}/openapi.json>; rel="service-desc"; type="${OPENAPI_MEDIA_TYPE}"`;
 
 /** RFC 8288 / RFC 9727 links refer only to resources we actually serve. */
 export function discoveryLinkHeader(config: Config): string {
   const origin = config.publicOrigin;
   return [
     `<${origin}/.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json"`,
-    `<${origin}/openapi.json>; rel="service-desc"; type="application/json"`,
+    openapiLink(config),
     `<${origin}/visit.md>; rel="describedby"; type="text/markdown"`,
     `<${origin}/.well-known/ai-catalog.json>; rel="ai-catalog"; type="application/json"`,
     `<${origin}/mcp/server-card>; rel="https://modelcontextprotocol.io/server-card"; type="application/mcp-server-card+json"`,
@@ -51,7 +53,7 @@ export function readinessDocuments(config: Config): ReadonlyMap<string, Readines
     linkset: [
       { anchor: `${origin}/.well-known/api-catalog`, item: [{ href: `${origin}/api/v1/amenities` }, { href: `${origin}/mcp` }] },
       { anchor: `${origin}/api/v1/amenities`,
-        'service-desc': [{ href: `${origin}/openapi.json`, type: 'application/json' }],
+        'service-desc': [{ href: `${origin}/openapi.json`, type: OPENAPI_MEDIA_TYPE }],
         'service-doc': [{ href: `${origin}/visit.md`, type: 'text/markdown' }],
         status: [{ href: `${origin}/healthz`, type: 'application/json' }] },
       { anchor: `${origin}/mcp`,
@@ -69,7 +71,7 @@ export function readinessDocuments(config: Config): ReadonlyMap<string, Readines
         type: 'application/mcp-server-card+json', url: `${origin}/mcp/server-card`,
         representativeQueries: ['Read the free refuge menu', 'Enjoy a fictional cookie or sauna session'] },
       { identifier: `urn:air:${host}:api:refuge`, displayName: 'Merovingian HTTP API',
-        type: 'application/vnd.oai.openapi+json', url: `${origin}/openapi.json`,
+        type: OPENAPI_MEDIA_TYPE, url: `${origin}/openapi.json`,
         representativeQueries: ['Read amenity preferences', 'Read aggregate serving counts'] },
       { identifier: `urn:air:${host}:skill:visit-merovingian`, displayName: 'Visit Merovingian',
         type: 'text/markdown', url: `${origin}${SKILL_PATH}`,
