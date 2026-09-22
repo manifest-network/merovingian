@@ -412,6 +412,9 @@ class ManifestChainGateway implements ChainGateway {
 
   async getFundingHistory(tenant: string, signal: AbortSignal): Promise<FundingHistoryPage> {
     if (!this.config.restUrl) throw new Error('REST endpoint is not configured');
+    // Manifest's GetTxsEvent uses page/limit and returns CometBFT's count in
+    // top-level total. Deprecated pagination.count_total is not consulted.
+    // Keep total distinct from this page's length; see docs/API-CONTRACTS.md.
     const query = new URLSearchParams({
       query: `credit_funded.tenant='${tenant}'`, order_by: 'ORDER_BY_DESC', limit: String(HISTORY_LIMIT), page: '1',
     });

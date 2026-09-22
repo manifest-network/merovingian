@@ -68,6 +68,19 @@ Receipt verification acknowledges a public transaction, proves no ownership and
 grants no entitlement. A pending or unavailable result is a reason to check the
 original transaction, never to blindly pay again.
 
+History queries use `GetTxsEvent` with `query`, `order_by`, `page` and `limit`.
+In Manifest's Cosmos SDK v0.50.14-liftedinit.1, the
+[transaction service](https://github.com/manifest-network/cosmos-sdk/blob/v0.50.14-liftedinit.1/x/auth/tx/service.go#L45-L75)
+always sets the response's top-level `total` from the
+[CometBFT transaction search count](https://github.com/manifest-network/cosmos-sdk/blob/v0.50.14-liftedinit.1/x/auth/tx/query.go#L25-L60).
+The [protocol definition](https://github.com/manifest-network/cosmos-sdk/blob/v0.50.14-liftedinit.1/proto/cosmos/tx/v1beta1/service.proto#L83-L133)
+deprecates request and response `pagination` in favor of `page`/`limit` and
+top-level `total`; this handler does not consult `pagination.count_total`.
+Accordingly, the gateway accepts a null or omitted deprecated `pagination` and
+uses top-level `total` for `indexedTransactions`. Substituting the page length
+would incorrectly label a truncated history complete. Missing or inconsistent
+top-level totals remain unavailable instead of publishing misleading totals.
+
 ## HTTP errors
 
 The six `/api/v1` operations publish shared responses for 400 (body parsing or
@@ -116,7 +129,8 @@ dependencies at the versions already locked through the MCP SDK.
 HTTP tests exercise real Express handlers, `SupportService` with synthetic chain
 fixtures, and memory and temporary persistent SQLite counters. A real gateway
 with intercepted transport verifies structured gRPC NotFound versus missing
-REST configuration. Tests cover both network identities, every amenity preference,
+REST configuration and top-level history totals with null, omitted or conflicting
+deprecated pagination fields. Tests cover both network identities, every amenity preference,
 all verification statuses, available/null credit, complete,
 partial and empty history, unavailable/unconfigured readings, malformed chain
 data (including inconsistent totals and missing attributes), input and encoding
