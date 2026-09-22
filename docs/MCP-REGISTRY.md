@@ -1,5 +1,9 @@
 # MCP Registry publication and discovery
 
+The workspace's `server.json` is prepared for **0.4.6**, pending publication
+after an authorized deployment and successful live acceptance. The existing
+`0.4.5` records below retain their historical metadata and publication evidence.
+
 Version `0.4.5` is deployed on mainnet and published as the latest version in the
 official MCP Registry. The generated `server.json` uses the registry identity
 `io.github.manifest-network/merovingian` and Streamable HTTP at

@@ -14,6 +14,11 @@ hardening introduced in `0.4.4`. See the [release notes](docs/RELEASE-0.4.5.md) 
 the remaining provider/AppArmor acceptance work. The official MCP Registry
 lists `0.4.5` as active and latest, with metadata matching the deployed release.
 
+Release **0.4.6 is prepared for review** with complete OpenAPI response contracts
+and smoke checks that default to read-only operation. See the
+[candidate release notes](docs/RELEASE-0.4.6.md). The live release and published
+registry record remain `0.4.5` until the production update is authorized and verified.
+
 **MCP compatibility:** `0.4.3` changed the runtime/server-card name from
 `network.manifest.merovingian/merovingian` to
 `io.github.manifest-network/merovingian`, with no compatibility alias. This may
