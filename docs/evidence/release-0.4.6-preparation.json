@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-09-22T13:48:29.838150+00:00",
+  "version": "0.4.6",
+  "scope": "Release preparation and local candidate verification; no image publication, provider update, registry publication or live servings.",
+  "sourceBaseCommit": "11b609fae90497733679e7dfbf5d4e706f66cf03",
+  "metadata": {
+    "registryName": "io.github.manifest-network/merovingian",
+    "serverJsonSha256": "eae1bf05864b13c6f5a88a674d2f7dd2306dac52f2ea18c4aaac6fe64d9dcf63",
+    "localConsistencyPassed": true,
+    "officialRegistryValidationPassed": true,
+    "historicalSnapshotsUnchanged": true
+  },
+  "image": {
+    "candidateRegistryReference": "ghcr.io/manifest-network/merovingian@sha256:5de7cb4be48c89b059e515d414d0a247721e5a72e017a0992b4138ac2c08edeb",
+    "publicationStatus": "not_published",
+    "manifestDigest": "sha256:5de7cb4be48c89b059e515d414d0a247721e5a72e017a0992b4138ac2c08edeb",
+    "configurationDigest": "sha256:5ce3aa1d565f6dfc5a2888af6580f829a1faa80d6a74919a8295de311ee0b9ed",
+    "platform": "linux/amd64"
+  },
+  "sourceBinding": {
+    "version": "0.4.6",
+    "imageId": "sha256:5de7cb4be48c89b059e515d414d0a247721e5a72e017a0992b4138ac2c08edeb",
+    "fileCount": 30,
+    "matches": true,
+    "aggregateSha256": "f47307513b12cf85f8170d255894a5e99697f3c2da6a63899a8bb49ae9c2c7fa"
+  },
+  "repositoryChecks": {
+    "command": "npm run check",
+    "metadataPassed": true,
+    "typecheckPassed": true,
+    "testsPassed": 300,
+    "testsFailed": 0,
+    "buildPassed": true,
+    "dependencyGraphChanged": false
+  },
+  "runtime": {
+    "checkedAt": "2026-09-22T13:42:34.461Z",
+    "passed": true,
+    "imageId": "sha256:5de7cb4be48c89b059e515d414d0a247721e5a72e017a0992b4138ac2c08edeb",
+    "completedChecks": [
+      "image-metadata",
+      "image-inventory",
+      "writable-root-permissions",
+      "healthcheck-behavior",
+      "application-pass-1",
+      "application-pass-2",
+      "application-custom-port"
+    ],
+    "applicationFilesChecked": 9142,
+    "rootOwnedCode": true,
+    "packageManagersAbsent": true,
+    "privilegedFilesAbsent": true,
+    "codeWriteDeniedOnWritableRoot": true,
+    "writableRootTemporaryFiles": true,
+    "persistenceAcrossReplacement": true,
+    "gracefulStop": true,
+    "appArmor": {
+      "status": "unavailable",
+      "reason": "Named profile enforcement/denial attribution requires a separately reviewed profile and isolated capable runner. This check does not load host policy."
+    },
+    "cleanup": {
+      "containersAttempted": 0,
+      "volumesAttempted": 1,
+      "failures": []
+    }
+  },
+  "scan": {
+    "checkedAt": "2026-09-22T13:42:48.499Z",
+    "configurationDigest": "sha256:5ce3aa1d565f6dfc5a2888af6580f829a1faa80d6a74919a8295de311ee0b9ed",
+    "scannerVersion": "0.74.0",
+    "databaseUpdatedAt": "2026-09-22T07:24:27.402429319Z",
+    "passed": true,
+    "blockedCount": 0,
+    "exceptionCount": 0,
+    "reported": [
+      {
+        "advisory": "CVE-2025-14505",
+        "package": "elliptic",
+        "version": "6.6.1",
+        "target": "Node.js",
+        "path": "app/node_modules/elliptic/package.json",
+        "severity": "LOW",
+        "fixedVersion": ""
+      }
+    ],
+    "filesSha256": {
+      "vulnerabilities.json": "775065d487c03eaee3b44bb02a2cc3e7762bf84b6925f986de105f7fc1852a90",
+      "sbom.cdx.json": "a117aff9f9085b03cb34e66d88d48666223a3177f95379031c98c0a4befaf114",
+      "scanner.json": "c79bbb82d671dc114f0887cc739ac66d0895f7947ffaae63cd50b1093ce7181a"
+    }
+  },
+  "proposedUpdate": {
+    "leaseUuid": "01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd",
+    "origin": "https://merovingian.manifest.network",
+    "beforeImage": "ghcr.io/manifest-network/merovingian@sha256:8e32caa5326f67863fe1fb70153cfc8998fd2cee43119f14d29876e256933d24",
+    "beforeManifestHash": "c4cc3855835d3740b983644c1c4bfed740fe7f41bc2ed3bb19f0fba5466cf344",
+    "candidateManifestHash": "65e5310485168fc90150a36a6ff6a6621c7a092db262261d1a24d7557c9756d2",
+    "imageOnlyChangeVerified": true,
+    "counterStoragePreserved": true,
+    "runtimeUserPreserved": true,
+    "publicConfigurationPreserved": true
+  },
+  "liveBaseline": {
+    "version": "0.4.5",
+    "mode": "read-only",
+    "passed": true,
+    "requestsAttempted": 20,
+    "servingRequestsAttempted": 0,
+    "countsUnchanged": true
+  }
+}
