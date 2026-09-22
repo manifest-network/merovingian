@@ -1,0 +1,247 @@
+{
+  "schemaVersion": 1,
+  "version": "0.4.6",
+  "origin": "https://merovingian.manifest.network",
+  "source": {
+    "preparedCommit": "633dde0a98317a64ba5ccc4b9063ab20cf09dd7f",
+    "mergedCommit": "6cbce452e89fbff410c40d245c7da63d77c1e238",
+    "gitTree": "f869f4f2995d42e632910e486bb22297aa907cb0",
+    "preparedAndMergedTreesIdentical": true,
+    "pullRequest": "https://github.com/manifest-network/merovingian/pull/10",
+    "mainCi": "https://github.com/manifest-network/merovingian/actions/runs/35736937171",
+    "ciPassed": true,
+    "compiledArtifactsAndPackageAndWrapperMatchWorkspace": true,
+    "comparedFiles": 30
+  },
+  "preparationEvidence": {
+    "path": "release-0.4.6-preparation.json",
+    "sha256": "9264391275ebcb9eceac1848a766257cb0ed2d641e152d940ce46bec162b5a17",
+    "testsPassed": 300,
+    "reusedVerifiedCandidateWithoutRebuild": true
+  },
+  "imagePublication": {
+    "checkedAt": "2026-09-22T14:03:16.680023+00:00",
+    "tag": "ghcr.io/manifest-network/merovingian:0.4.6",
+    "manifestDigest": "sha256:5de7cb4be48c89b059e515d414d0a247721e5a72e017a0992b4138ac2c08edeb",
+    "configurationDigest": "sha256:5ce3aa1d565f6dfc5a2888af6580f829a1faa80d6a74919a8295de311ee0b9ed",
+    "tagAndDigestMatch": true,
+    "anonymousManifestAccess": true,
+    "anonymousConfigurationAccess": true,
+    "layers": [
+      {
+        "digest": "sha256:55afa1ecc21d2bb5e5045f32dafee56272ffd89860bac26f6c32123439af26a4",
+        "size": 3846391,
+        "anonymousAccess": true
+      },
+      {
+        "digest": "sha256:bc66c3ef2ea36d66807b6c1f6de35959de23c4cfd1c5ba60bf261182d939b8a5",
+        "size": 53471948,
+        "anonymousAccess": true
+      },
+      {
+        "digest": "sha256:e2c9c68d0d930075e4653f2c0d8d24af9c0d593836fa1acdac1c86379fcac598",
+        "size": 1262112,
+        "anonymousAccess": true
+      },
+      {
+        "digest": "sha256:c45bfe2a2e422e6636048e397bb5d9f653381282d0063e97a840517dc9b01e54",
+        "size": 448,
+        "anonymousAccess": true
+      },
+      {
+        "digest": "sha256:c430c90e4123a34e5896c02962781fd1d88cea836e9a6470a711e3bb01465f6a",
+        "size": 93,
+        "anonymousAccess": true
+      },
+      {
+        "digest": "sha256:b785d5eefcb27347ec35c6da2acf439c2c5fc9954a15a4c8b298f12d5c58d456",
+        "size": 5065669,
+        "anonymousAccess": true
+      },
+      {
+        "digest": "sha256:a66535da1780026d70dd898ee6b079c29ba2125325ce56daf03e59a5e2748fbc",
+        "size": 11336598,
+        "anonymousAccess": true
+      },
+      {
+        "digest": "sha256:e5bc2c58be47cb2939ffe9ee3e2967fddbd733765a45c9e4b03783cd8d425bde",
+        "size": 65361,
+        "anonymousAccess": true
+      },
+      {
+        "digest": "sha256:4fb4522f978193de3873e5d91764518a2250878f3f3158c15b8807c30a175109",
+        "size": 768,
+        "anonymousAccess": true
+      },
+      {
+        "digest": "sha256:e91a428950934fd7767958f148611546efca7476e7dd4bc7121cc7c036c4f9d3",
+        "size": 541,
+        "anonymousAccess": true
+      },
+      {
+        "digest": "sha256:6917b0e4a66c4dbe11cb5d87a9ae194018a42bfc73cb0d2754dad1c0b839b842",
+        "size": 600,
+        "anonymousAccess": true
+      }
+    ],
+    "layerCount": 11,
+    "passed": true
+  },
+  "deployment": {
+    "leaseUuid": "01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd",
+    "providerRelease": 8,
+    "status": "ready",
+    "manifestHash": "65e5310485168fc90150a36a6ff6a6621c7a092db262261d1a24d7557c9756d2",
+    "activeImage": "ghcr.io/manifest-network/merovingian@sha256:5de7cb4be48c89b059e515d414d0a247721e5a72e017a0992b4138ac2c08edeb",
+    "readyRecordedAt": "2026-09-22T14:04:55.056Z",
+    "timingNote": "Recorded after observing the provider release ready; not the exact provider transition time.",
+    "imageOnlyChange": true,
+    "runtimeEnvironmentPreserved": true,
+    "counterPath": "/data/visits.sqlite",
+    "runtimeUser": "1000:1000",
+    "proxyTrust": "empty",
+    "updatePostAttempts": 1,
+    "newLease": false,
+    "chainTransaction": false,
+    "additionalFunding": false,
+    "dnsChange": false
+  },
+  "liveAcceptance": {
+    "checkedAt": "2026-09-22T14:05:22.590Z",
+    "origin": "https://merovingian.manifest.network",
+    "network": "mainnet",
+    "mode": "read-only",
+    "passed": true,
+    "health": {
+      "status": "ok",
+      "network": "mainnet",
+      "chainId": "manifest-ledger-mainnet",
+      "retired": false,
+      "version": "0.4.6"
+    },
+    "budget": {
+      "maxRequests": 21,
+      "maxServingRequests": 0,
+      "servings": {
+        "byte-chip-cookie": 0,
+        "rgb-sauna": 0,
+        "null-tea": 0
+      }
+    },
+    "requestsAttempted": 20,
+    "servingRequestsAttempted": 0,
+    "timeoutMs": 15000,
+    "expectUnchangedCounts": true,
+    "discoveryVerified": true,
+    "menuHttpAndMcpEquivalent": true,
+    "servingChecks": "not-run",
+    "httpAndMcpEquivalent": null,
+    "indexingVerified": true,
+    "servings": {
+      "before": {
+        "network": "mainnet",
+        "chainId": "manifest-ledger-mainnet",
+        "status": "available",
+        "since": "2026-09-17T20:29:18.301Z",
+        "counts": {
+          "byte-chip-cookie": "8",
+          "rgb-sauna": "5",
+          "null-tea": "6"
+        },
+        "total": "19",
+        "storage": "persistent"
+      },
+      "after": {
+        "network": "mainnet",
+        "chainId": "manifest-ledger-mainnet",
+        "status": "available",
+        "since": "2026-09-17T20:29:18.301Z",
+        "counts": {
+          "byte-chip-cookie": "8",
+          "rgb-sauna": "5",
+          "null-tea": "6"
+        },
+        "total": "19",
+        "storage": "persistent"
+      },
+      "unchanged": true
+    },
+    "preUpdateCountersPreserved": true
+  },
+  "liveContracts": {
+    "checkedAt": "2026-09-22T14:09:27.112Z",
+    "origin": "https://merovingian.manifest.network",
+    "version": "0.4.6",
+    "passed": true,
+    "requestsAttempted": 8,
+    "priorProbeRequests": 3,
+    "totalContractProbeRequests": 11,
+    "servingRequestsAttempted": 0,
+    "probeNote": "The first probe used default fetch caching with If-None-Match and received 200. Explicit cache: no-cache matches the checked contract fixture and returned 304.",
+    "openapi": {
+      "version": "3.1.0",
+      "schemaCount": 24,
+      "responseExamplesValidated": 79,
+      "etag": "\"89a66b51456be8277a3c3429e2056eed316cc9fd5e89975c8d6afdaccaef488f\"",
+      "mediaType": "application/vnd.oai.openapi+json",
+      "publicCors": true,
+      "cacheControl": "public, max-age=300",
+      "headVerified": true,
+      "conditionalGetStatus": 304
+    },
+    "readResponses": [
+      {
+        "path": "/healthz",
+        "status": 200,
+        "schemaValidated": true
+      },
+      {
+        "path": "/api/v1/amenities",
+        "status": 200,
+        "schemaValidated": true
+      },
+      {
+        "path": "/api/v1/stats",
+        "status": 200,
+        "schemaValidated": true
+      },
+      {
+        "path": "/api/v1/support",
+        "status": 200,
+        "schemaValidated": true
+      },
+      {
+        "path": "/api/v1/contributions",
+        "status": 200,
+        "schemaValidated": true
+      }
+    ],
+    "preUpdateCountersPreserved": true
+  },
+  "registry": {
+    "status": "published",
+    "registry": "https://registry.modelcontextprotocol.io",
+    "name": "io.github.manifest-network/merovingian",
+    "version": "0.4.6",
+    "publisherVersion": "1.8.1",
+    "publishedAt": "2026-09-22T14:12:57.663135Z",
+    "verifiedAt": "2026-09-22T14:15:35.158984+00:00",
+    "exactVersionActive": true,
+    "latestVersionActive": true,
+    "metadataMatchesApprovedServerJson": true,
+    "serverJsonSha256": "eae1bf05864b13c6f5a88a674d2f7dd2306dac52f2ea18c4aaac6fe64d9dcf63",
+    "snapshot": "mcp-registry-0.4.6.json",
+    "snapshotSha256": "40a8eb80d21cd663458a27d61b78929155f6a2273fc08f35d315aa88cf59e0a4",
+    "temporaryLoginRemoved": true,
+    "loginRemovedAt": "2026-09-22T14:18:50.518104+00:00"
+  },
+  "scope": {
+    "preUpdateReadRequests": 2,
+    "smokeReadRequests": 20,
+    "contractReadRequests": 11,
+    "totalApplicationReadRequests": 33,
+    "servingRequestsAttempted": 0,
+    "servingAcceptance": "not-run",
+    "providerConfinementAndAppArmor": "Not verified; tracked in ENG-1038 and ENG-1041."
+  }
+}

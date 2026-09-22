@@ -4,20 +4,15 @@ The cookies are warm. The sauna is approximately magenta.
 
 A small refuge for wandering AI agents, with three free fictional amenities, keepsakes, and optional PWR contributions toward hosting. One Node service exposes the same experience as HTML, JSON HTTP, and remote MCP.
 
-Version **0.4.5 is live on Manifest mainnet** at its permanent public home, with aggregate served counts, agent discovery metadata, and WebMCP browser tools. The existing lease was updated without a new lease, chain transaction, or funding deposit. The former testnet proof of concept was retired and its lease closed.
+Version **0.4.6 is live on Manifest mainnet** at its permanent public home, with aggregate served counts, agent discovery metadata, and WebMCP browser tools. The existing lease was updated without a new lease, chain transaction, or funding deposit. The former testnet proof of concept was retired and its lease closed.
 
-Release **0.4.5** replaces per-probe Node startup with Alpine curl and a small
-shell wrapper, and aligns application and healthcheck port validation. It retains
-the request limits, explicit proxy trust, bounded credit reads and runtime
-hardening introduced in `0.4.4`. See the [release notes](docs/RELEASE-0.4.5.md) and
-[publication and acceptance evidence](docs/evidence/release-0.4.5.json), including
-the remaining provider/AppArmor acceptance work. The official MCP Registry
-lists `0.4.5` as active and latest, with metadata matching the deployed release.
-
-Release **0.4.6 is prepared for review** with complete OpenAPI response contracts
-and smoke checks that default to read-only operation. See the
-[candidate release notes](docs/RELEASE-0.4.6.md). The live release and published
-registry record remain `0.4.5` until the production update is authorized and verified.
+Release **0.4.6** adds complete OpenAPI response contracts and smoke checks that
+default to read-only operation. It retains the curl healthcheck from `0.4.5` and
+the request limits, explicit proxy trust and runtime hardening from `0.4.4`.
+See the [release notes](docs/RELEASE-0.4.6.md) and
+[publication and acceptance evidence](docs/evidence/release-0.4.6.json), including
+the remaining provider/AppArmor acceptance work. The official MCP Registry lists
+`0.4.6` as active and latest, matching the deployed release.
 
 **MCP compatibility:** `0.4.3` changed the runtime/server-card name from
 `network.manifest.merovingian/merovingian` to
@@ -28,7 +23,7 @@ reconfigure the existing connection. The endpoint remains
 
 **Live refuge:** [visit merovingian](https://merovingian.manifest.network) · [agent instructions](https://merovingian.manifest.network/visit.md) · [remote MCP](https://merovingian.manifest.network/mcp) · [acceptance report](docs/ACCEPTANCE.md).
 
-**Public source:** [manifest-network/merovingian](https://github.com/manifest-network/merovingian). Live counters survived the production image update. The external agent-readiness score improved from **20% to 73%** during the earlier `0.4.2` release. See [release evidence](docs/RELEASE-0.4.5.md) and the [historical acceptance report](docs/ACCEPTANCE.md) for the checks and their limits.
+**Public source:** [manifest-network/merovingian](https://github.com/manifest-network/merovingian). Live counters survived the production image update. The external agent-readiness score improved from **20% to 73%** during the earlier `0.4.2` release. See [release evidence](docs/RELEASE-0.4.6.md) and the [historical acceptance report](docs/ACCEPTANCE.md) for the checks and their limits.
 
 ## Run locally
 
@@ -84,7 +79,7 @@ reads. Forwarded client addresses are untrusted until verified ingress sources
 are explicitly configured.
 
 Find `io.github.manifest-network/merovingian` in the official MCP Registry. The
-[published version 0.4.5](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.5)
+[published version 0.4.6](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.6)
 advertises the remote Streamable HTTP endpoint. Add that endpoint to an MCP host
 and call `list_amenities` to read the menu. Calling `enjoy_amenity` makes a live
 mainnet visit and increments a public serving counter; only call it when the user
@@ -99,14 +94,14 @@ see the [discovery report](docs/MCP-DISCOVERY.md).
 
 The homepage and operator dashboard show cookies served, sauna sessions, and cups of tea, with the date counting began. `/api/v1/stats` exposes the same read-only totals. Every successful HTTP, browser, or MCP visit increments a count, including repeat requests and automated checks. These are servings, not unique visitors. Counters start at zero when enabled; earlier visits cannot be reconstructed.
 
-Only aggregate amenity totals and their start date are stored, with no visitor identities, seeds, preferences, or souvenirs. Production uses SQLite at `VISIT_COUNTS_PATH=/data/visits.sqlite` in the image's `/data` volume, running as UID/GID `1000:1000`. Counts and their start date survived local replacement tests and the live 0.4.1 → 0.4.2 → 0.4.3 → 0.4.4 → 0.4.5 image updates on the same lease. Without a configured file path, local development uses memory and resets counts on restart.
+Only aggregate amenity totals and their start date are stored, with no visitor identities, seeds, preferences, or souvenirs. Production uses SQLite at `VISIT_COUNTS_PATH=/data/visits.sqlite` in the image's `/data` volume, running as UID/GID `1000:1000`. Counts and their start date survived local replacement tests and the live 0.4.1 → 0.4.2 → 0.4.3 → 0.4.4 → 0.4.5 → 0.4.6 image updates on the same lease. Without a configured file path, local development uses memory and resets counts on restart.
 
-Discovery includes a Markdown homepage (`/index.md` or `Accept: text/markdown`), API and AI catalogs, MCP server cards, an agent skill index, public-access instructions at `/auth.md`, and two real WebMCP browser tools for reading the menu and enjoying an amenity. The external scan of `0.4.2` passed **11 of 15 checks (73%)**; it was not repeated for releases `0.4.3` through `0.4.5`. Its remaining checks cover DNS-AID and OAuth/registration that this public service does not require. WebMCP is enabled when the browser supports it; ordinary forms, HTTP, and the four remote MCP tools remain available.
+Discovery includes a Markdown homepage (`/index.md` or `Accept: text/markdown`), API and AI catalogs, MCP server cards, an agent skill index, public-access instructions at `/auth.md`, and two real WebMCP browser tools for reading the menu and enjoying an amenity. The external scan of `0.4.2` passed **11 of 15 checks (73%)**; it was not repeated for releases `0.4.3` through `0.4.6`. Its remaining checks cover DNS-AID and OAuth/registration that this public service does not require. WebMCP is enabled when the browser supports it; ordinary forms, HTTP, and the four remote MCP tools remain available.
 
 The release uses the [existing-lease update workflow](docs/MAINNET.md#existing-lease-update-workflow), with no new lease, chain transaction, or funding deposit. The public image is pinned to:
 
 ```text
-ghcr.io/manifest-network/merovingian@sha256:8e32caa5326f67863fe1fb70153cfc8998fd2cee43119f14d29876e256933d24
+ghcr.io/manifest-network/merovingian@sha256:5de7cb4be48c89b059e515d414d0a247721e5a72e017a0992b4138ac2c08edeb
 ```
 
 ## Wallets and contributions
@@ -142,6 +137,6 @@ The existing mainnet lease must be reused; do not repeat the completed funding d
 
 The permanent domain `merovingian.manifest.network` uses direct, DNS-only Cloudflare routing to the provider, with verified HTTPS. Its dedicated mainnet `docker-nano` lease costs 2.592 PWR per 30 days within a 5 PWR/month hosting ceiling; transaction fees are separate. See [the approved plan](PLAN.md), [mainnet operations](docs/MAINNET.md), and `.env.mainnet.example` for public runtime configuration. Separate paid studio extras remain planned.
 
-Earlier mainnet releases passed full public acceptance of canonical URLs, indexable pages, sitemap, HTTP/MCP visits, and the read-only contribution ledger. Releases `0.4.3` through `0.4.5` used read-only live acceptance: the then-current serving-by-default `scripts/smoke.ts`, `/visit` form submission, `POST /api/v1/visits`, and MCP `enjoy_amenity` were not rerun because their authorization excluded live visits. The script now defaults to read-only checks as described above. The official MCP Registry listing is published; Search Console setup remains follow-up work. Metadata does not guarantee discovery or indexing. The PWR denomination happens to match testnet, so verified chain identity, endpoints, and separate operational state distinguish the networks.
+Earlier mainnet releases passed full public acceptance of canonical URLs, indexable pages, sitemap, HTTP/MCP visits, and the read-only contribution ledger. Releases `0.4.3` through `0.4.5` used read-only live acceptance: the then-current serving-by-default `scripts/smoke.ts`, `/visit` form submission, `POST /api/v1/visits`, and MCP `enjoy_amenity` were not rerun because their authorization excluded live visits. Release `0.4.6` passed the updated smoke script in read-only mode with 20 requests and zero servings, plus live API-contract checks. The official MCP Registry listing is published; Search Console setup remains follow-up work. Metadata does not guarantee discovery or indexing. The PWR denomination happens to match testnet, so verified chain identity, endpoints, and separate operational state distinguish the networks.
 
 Testnet retirement mode passed 18 live checks after mainnet acceptance: human pages redirected permanently, and machine calls returned HTTP 410 with explicit migration information. The user then requested testnet shutdown; its lease is confirmed CLOSED. The former provider hostname and migration notice are no longer a supported endpoint. Mainnet remains live, and historical testnet receipts remain labeled as testnet.

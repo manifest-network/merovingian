@@ -2,33 +2,35 @@
 
 Mainnet supersedes the proof of concept. It is the permanent public refuge and the only environment that will handle real-value contributions or sales. These are follow-on requirements, not claims that the testnet prototype already implements a commercial payment system.
 
-## Current release — 0.4.5 (2026-09-21)
+## Current release — 0.4.6 (2026-09-22)
 
-Merovingian **0.4.5 is live at [merovingian.manifest.network](https://merovingian.manifest.network)**
+Merovingian **0.4.6 is live at [merovingian.manifest.network](https://merovingian.manifest.network)**
 on the original lease `01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd`. Following explicit
-publication and update approval, provider release **7** is ready with manifest
-hash `c4cc3855835d3740b983644c1c4bfed740fe7f41bc2ed3bb19f0fba5466cf344` and the
+publication and update approval, provider release **8** is ready with manifest
+hash `65e5310485168fc90150a36a6ff6a6621c7a092db262261d1a24d7557c9756d2` and the
 verified public image:
 
 ```text
-ghcr.io/manifest-network/merovingian@sha256:8e32caa5326f67863fe1fb70153cfc8998fd2cee43119f14d29876e256933d24
+ghcr.io/manifest-network/merovingian@sha256:5de7cb4be48c89b059e515d414d0a247721e5a72e017a0992b4138ac2c08edeb
 ```
 
-Public read-only acceptance passed at **2026-09-21T17:43:16.792Z**: health,
-OpenAPI, both server cards, and MCP initialization report `0.4.5`. Persistent
+Public read-only smoke acceptance passed at **2026-09-22T14:05:22.590Z**: health,
+OpenAPI, both server cards, and MCP initialization report `0.4.6`. Persistent
 counts stayed at **8 cookies, 5 sauna sessions, and 6 teas** (19 total), with the
 original start date **2026-09-17T20:29:18.301Z**. The runtime environment, counter
-path, UID/GID, and empty proxy trust were preserved. The image replaces per-probe
-Node startup with Alpine curl and a small shell wrapper. MCP Registry publication
-completed at **2026-09-21T18:03:55.231121Z**; exact-version and latest records
-confirmed active `0.4.5` metadata matching the committed `server.json`.
+path, UID/GID, and empty proxy trust were preserved. The release adds complete
+OpenAPI response contracts and smoke checks that default to read-only operation.
+Live schemas, examples, response conformance and cache behavior passed at
+**2026-09-22T14:09:27.112Z**. MCP Registry publication completed at
+**2026-09-22T14:12:57.663135Z**; exact-version and latest records confirmed active
+`0.4.6` metadata matching the committed `server.json`.
 
 No live visits, payments, new lease, additional funding, chain transaction, or
 DNS change were part of this update. **ENG-1038** provider ingress/confinement
 evidence and **ENG-1041** named AppArmor verification remain open. Production
 CPU/alert behavior for **ENG-1044** was not measured by these checks. See
-[release acceptance](ACCEPTANCE.md#release-045-publication-and-verification) and
-[sanitized evidence](evidence/release-0.4.5.json). The dated records below describe
+[release acceptance](ACCEPTANCE.md#release-046-publication-and-verification) and
+[sanitized evidence](evidence/release-0.4.6.json). The dated records below describe
 earlier releases and retain their original observations.
 
 ## Live mainnet acceptance — 2026-09-18
@@ -37,7 +39,7 @@ At the September 18 acceptance, Merovingian **0.4.3 was live at [merovingian.man
 
 The launch CLI's persisted phase remains `awaiting-dns`, its final provider-upload phase. It does not track subsequent public acceptance; `.local/mainnet/dns-acceptance.json` and `.local/mainnet/live-acceptance.json` record those completed checks.
 
-Release **0.4.3** replaced the image on the existing lease with one provider update POST, no new lease, and no chain transaction. Provider release **5** reached ready. The original launch receipts and image/hash below remain historical evidence; the current 0.4.5 image and manifest are recorded above, and the update procedure is documented below.
+Release **0.4.3** replaced the image on the existing lease with one provider update POST, no new lease, and no chain transaction. Provider release **5** reached ready. The original launch receipts and image/hash below remain historical evidence; the current 0.4.6 image and manifest are recorded above, and the update procedure is documented below.
 
 Published SDK 0.22.0 checks and the completed launch confirmed:
 
@@ -179,7 +181,7 @@ The SDK's `restoreApp` has different semantics: it restores a **closed lease's r
 
 ### Release 0.4.3
 
-This section records the historical September 18 release; 0.4.5 is current.
+This section records the historical September 18 release; 0.4.6 is current.
 
 The user explicitly approved image publication, the existing-lease update, and MCP Registry publication. [PR #1](https://github.com/manifest-network/merovingian/pull/1) merged as [`300ac773f28dd61bd804d376cbddcd6ffbd5e82a`](https://github.com/manifest-network/merovingian/commit/300ac773f28dd61bd804d376cbddcd6ffbd5e82a); [main CI](https://github.com/manifest-network/merovingian/actions/runs/35360101100) passed registry consistency, typecheck, 142 tests, and build. The image was built from pre-merge commit `ef53a3feb62e91c0930d8f97a8aeff4e4c7bf17e`. That commit and the public squash merge have the identical Git tree `5783b3031882f6afd263d44b156eb0c219aeb90b`, so the built source matches the merged source. The public image is:
 
@@ -215,11 +217,11 @@ For recovery, retain the historical 0.4.0 journal as **prepared, never attempted
 
 ### Existing-lease update workflow
 
-The update tool checks the exact existing active lease, domain, locked rate, current provider release, reviewed public environment, and pinned image. It uses SDK provider authentication and the update endpoint; it creates no lease and sends no chain transaction. Inspect the current `0.4.5` update with:
+The update tool checks the exact existing active lease, domain, locked rate, current provider release, reviewed public environment, and pinned image. It uses SDK provider authentication and the update endpoint; it creates no lease and sends no chain transaction. Inspect the current `0.4.6` update with:
 
 ```sh
 node --import tsx scripts/mainnet-update.ts status \
-  --image ghcr.io/manifest-network/merovingian@sha256:8e32caa5326f67863fe1fb70153cfc8998fd2cee43119f14d29876e256933d24 \
+  --image ghcr.io/manifest-network/merovingian@sha256:5de7cb4be48c89b059e515d414d0a247721e5a72e017a0992b4138ac2c08edeb \
   --helper "$PWD/.local/mainnet/bin/keyring-signer" \
   --home "$HOME/.manifest" \
   --key-name merovingian
@@ -244,7 +246,7 @@ See `.local/mainnet/resource-smoke.json` for measurements. The optional modern s
 - Use the selected `merovingian.manifest.network` domain and verify its provider routing, DNS, and TLS.
 - Set the explicit HTTPS origin; configure and verify `manifest-ledger-mainnet`, its actual PWR denomination, and the dedicated tenant address. Testnet defaults must not leak into production.
 - Verify canonical page URLs, titles/descriptions, structured data, sitemap, robot rules, and link targets on the live origin. Mainnet pages are rendered as HTML and need no JavaScript to index.
-- Completed: the permanent MCP endpoint is published as `io.github.manifest-network/merovingian` version `0.4.4`, matching the live runtime/card identity and version. A supervised agent found the earlier `0.4.2` listing by name and completed one authorized free visit; the `0.4.3` and `0.4.4` acceptance checks were read-only. Configure Search Console when domain access is available. Keep OpenAPI, `/visit.md`, and `/llms.txt` aligned with the running API.
+- Completed: the permanent MCP endpoint is published as `io.github.manifest-network/merovingian` version `0.4.6`, matching the live runtime/card identity and version. A supervised agent found the earlier `0.4.2` listing by name and completed one authorized free visit; releases `0.4.3` through `0.4.6` used read-only acceptance. Configure Search Console when domain access is available. Keep OpenAPI, `/visit.md`, and `/llms.txt` aligned with the running API.
 - Observe real discovery and successful visits with privacy-conscious aggregate monitoring. Publishing metadata cannot guarantee indexing, ranking, MCP client installation, or demand.
 
 ## Replace the proof of concept

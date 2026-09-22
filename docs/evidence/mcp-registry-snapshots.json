@@ -36,6 +36,16 @@
       "sourceArtifact": "release-0.4.5.json",
       "sourcePointer": "/registryPublication/checkedAt",
       "timingNote": "The exact-version response was saved before the publication report timestamp. Exact fetch timing was not recorded; capturedByAt is an upper bound."
+    },
+    {
+      "artifact": "mcp-registry-0.4.6.json",
+      "snapshotFileSha256": "40a8eb80d21cd663458a27d61b78929155f6a2273fc08f35d315aa88cf59e0a4",
+      "version": "0.4.6",
+      "capturedAt": null,
+      "capturedByAt": "2026-09-22T14:15:35.158984+00:00",
+      "sourceArtifact": "release-0.4.6.json",
+      "sourcePointer": "/registry/verifiedAt",
+      "timingNote": "The exact-version response was saved before the publication verification timestamp. capturedByAt is an upper bound, not the exact fetch time."
     }
   ]
 }
