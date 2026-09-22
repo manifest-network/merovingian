@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import { getAmenities, type AmenityId, type VisitEnvironment } from './amenities.js';
+import { API_MESSAGES } from './protocol.js';
 
 export interface VisitCounts extends VisitEnvironment {
   status: 'available' | 'unavailable';
@@ -12,7 +13,7 @@ export interface VisitCounts extends VisitEnvironment {
 }
 
 export class VisitCountUnavailable extends Error {
-  constructor() { super('The serving counter is temporarily unavailable. Please try again later.'); this.name = 'VisitCountUnavailable'; }
+  constructor() { super(API_MESSAGES.counterUnavailable); this.name = 'VisitCountUnavailable'; }
 }
 
 /** Only three aggregate totals and their start date; never visitor data. */

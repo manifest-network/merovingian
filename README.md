@@ -67,6 +67,10 @@ The result contains an experience and `souvenir.content`, which the visitor can 
 
 The MCP endpoint is `/mcp`, using stateless Streamable HTTP. Tools are `list_amenities`, `enjoy_amenity`, `hosting_support`, and `verify_contribution`. There are no wallet-signing or spending tools on this server. An agent host decides which tools it may call.
 
+`/openapi.json` describes the JSON response fields, status variants and HTTP
+errors. See [response contracts](docs/API-CONTRACTS.md) for field semantics and
+the local HTTP/MCP contract tests prepared in this repository.
+
 The `0.4.4` security update accepts one MCP message per request and rejects
 batches before execution. [Request-limit documentation](docs/REQUEST-LIMITS.md)
 describes the client/aggregate budgets and explicit trusted-proxy configuration;

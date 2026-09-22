@@ -797,24 +797,43 @@ test('history timeout and circuit keep chain outages bounded', async () => {
   assert.equal(calls, 1);
 });
 
-test('chain gateway uses only the fixed tenant history query and validates live network identities', async (context) => {
-  let queries = 0;
-  context.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
-    const url = new URL(String(input));
-    if (url.pathname.endsWith('/status')) return Response.json({ result: { node_info: { network: config.chainId } } });
-    if (url.pathname.endsWith('/node_info')) return Response.json({ default_node_info: { network: config.chainId } });
-    assert.equal(url.origin, 'https://rest.example.com');
-    assert.equal(url.pathname, '/cosmos/tx/v1beta1/txs');
-    assert.equal(url.searchParams.get('query'), `credit_funded.tenant='${tenant}'`);
-    assert.equal(url.searchParams.get('order_by'), 'ORDER_BY_DESC');
-    assert.equal(url.searchParams.get('limit'), '100');
-    assert.equal(url.searchParams.get('page'), '1');
-    queries++;
-    return Response.json({ total: '1', tx_responses: [historyRecord(1)] });
+test('chain gateway uses the fixed history query and top-level total independently of deprecated pagination', async t => {
+  const rows = Array.from({ length: 100 }, (_, i) => historyRecord(i + 1));
+  const cases = [
+    { name: 'empty with null pagination', body: { total: '0', tx_responses: [], pagination: null }, indexed: 0, scanned: 0 },
+    { name: 'complete with null pagination', body: { total: '1', tx_responses: rows.slice(0, 1), pagination: null }, indexed: 1, scanned: 1 },
+    { name: 'partial without pagination', body: { total: '101', tx_responses: rows }, indexed: 101, scanned: 100 },
+    { name: 'partial despite deprecated zero total', body: { total: '101', tx_responses: rows, pagination: { total: '0' } }, indexed: 101, scanned: 100 },
+    { name: 'deprecated total cannot replace missing total', body: { tx_responses: rows, pagination: { total: '100' } }, indexed: null, scanned: 0 },
+    { name: 'deprecated total cannot repair inconsistent total', body: { total: '0', tx_responses: rows.slice(0, 1), pagination: { total: '1' } }, indexed: null, scanned: 0 },
+  ];
+  for (const scenario of cases) await t.test(scenario.name, async context => {
+    const requests: string[] = [];
+    context.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      requests.push(url.pathname);
+      if (url.pathname === '/status') return Response.json({ result: { node_info: { network: config.chainId } } });
+      if (url.pathname === '/cosmos/base/tendermint/v1beta1/node_info') return Response.json({ default_node_info: { network: config.chainId } });
+      assert.equal(url.origin, 'https://rest.example.com');
+      assert.equal(url.pathname, '/cosmos/tx/v1beta1/txs');
+      assert.deepEqual(Object.fromEntries(url.searchParams), {
+        query: `credit_funded.tenant='${tenant}'`, order_by: 'ORDER_BY_DESC', limit: '100', page: '1',
+      });
+      return Response.json(scenario.body);
+    });
+    const service = new SupportService({ ...config, restUrl: 'https://rest.example.com' });
+    try {
+      const history = await service.getHistory();
+      assert.equal(history.status, scenario.indexed === null ? 'unavailable' : 'available');
+      assert.equal(history.indexedTransactions, scenario.indexed);
+      assert.equal(history.scannedTransactions, scenario.scanned);
+      assert.equal(history.complete, scenario.indexed === scenario.scanned);
+      assert.equal(history.entries.length, scenario.scanned);
+      if (scenario.indexed === null) {
+        assert.equal(history.totals, null);
+        assert.equal(history.checkedAt, null);
+      } else assert.equal(history.totals?.amount, String(scenario.scanned * 10));
+      assert.deepEqual(requests, ['/status', '/cosmos/base/tendermint/v1beta1/node_info', '/cosmos/tx/v1beta1/txs']);
+    } finally { service.dispose(); }
   });
-  const service = new SupportService({ ...config, restUrl: 'https://rest.example.com' });
-  try {
-    assert.equal((await service.getHistory()).totals?.amount, '10');
-    assert.equal(queries, 1);
-  } finally { service.dispose(); }
 });

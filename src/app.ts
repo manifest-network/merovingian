@@ -1,5 +1,6 @@
 import express, { type RequestHandler, type ErrorRequestHandler, type Response } from 'express';
 import { isIP } from 'node:net';
+import { createHash } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
@@ -9,9 +10,10 @@ import { aboutPage, homepage, homepageMarkdown, llmsText, openapi, visitMarkdown
 import { SupportService } from './support.js';
 import { operatorPage } from './operator.js';
 import { VisitCounter, VisitCountUnavailable } from './counts.js';
-import { createReadinessRouter, discoveryLinkHeader, contentSignal } from './readiness.js';
+import { createReadinessRouter, discoveryLinkHeader, openapiLink, contentSignal } from './readiness.js';
 import { webMcpScript } from './webmcp.js';
 import { APP_VERSION, MCP_SERVER_INFO } from './identity.js';
+import { API_MESSAGES, MAX_INPUT_BYTES, MAX_VISIT_OUTPUT_BYTES, MAX_FORM_PARAMETERS, OPENAPI_MEDIA_TYPE } from './protocol.js';
 
 export type SupportPort = Pick<SupportService, 'getInfo' | 'getHistory' | 'verify'>;
 
@@ -46,7 +48,7 @@ function limiter(): RequestHandler {
     let entry = clients.get(key);
     if (!entry || entry.until <= now) {
       if (clients.size >= 10000 && !entry) {
-        res.set('Retry-After', '60').status(429).json({ error: 'The refuge is busy. Please try again later.' });
+        res.set('Retry-After', '60').status(429).json({ error: API_MESSAGES.busy });
         return;
       }
       if (entry) { entry.count = 0; entry.until = now + windowMs; }
@@ -54,15 +56,15 @@ function limiter(): RequestHandler {
       clients.set(key, entry);
     }
     if (entry.count >= perClient) {
-      res.set('Retry-After', String(Math.ceil((entry.until - now) / 1000))).status(429).json({ error: 'Visit limit reached. Please try again later.' });
+      res.set('Retry-After', String(Math.ceil((entry.until - now) / 1000))).status(429).json({ error: API_MESSAGES.rateLimited });
       return;
     }
     if (entry.active >= perClientConcurrent || active >= concurrent) {
-      res.set('Retry-After', '1').status(429).json({ error: 'The refuge is busy. Please try again later.' });
+      res.set('Retry-After', '1').status(429).json({ error: API_MESSAGES.busy });
       return;
     }
     if (total >= aggregate) {
-      res.set('Retry-After', String(Math.ceil((totalUntil - now) / 1000))).status(429).json({ error: 'The refuge is busy. Please try again later.' });
+      res.set('Retry-After', String(Math.ceil((totalUntil - now) / 1000))).status(429).json({ error: API_MESSAGES.busy });
       return;
     }
     entry.count++; total++; entry.active++; active++;
@@ -91,6 +93,20 @@ function bounded(handler: RequestHandler): RequestHandler {
   return (req, res, next) => tracked(res, async () => handler(req, res, next));
 }
 
+/** Honor parser client errors only at this boundary; never expose parser messages or bodies. */
+function parseBody(parser: RequestHandler): RequestHandler {
+  return (req, res, next) => parser(req, res, error => {
+    const status = error?.status;
+    if (status === 400 || status === 413 || status === 415) {
+      const message = status === 400 ? API_MESSAGES.malformedBody
+        : status === 413 ? API_MESSAGES.inputLimit : API_MESSAGES.unsupportedEncoding;
+      res.status(status).json({ error: message });
+      return;
+    }
+    next(error);
+  });
+}
+
 export function createApp(config: Config, support: SupportPort = new SupportService(config), counts = new VisitCounter(config, config.visitCountsPath)) {
   const app = express();
   app.disable('x-powered-by');
@@ -98,10 +114,14 @@ export function createApp(config: Config, support: SupportPort = new SupportServ
   const environment = { network: config.network, chainId: config.chainId };
   const serve = (input: unknown) => {
     const result = visit(input, environment);
+    // Check the complete UTF-8 JSON result before committing any serving count.
+    if (Buffer.byteLength(JSON.stringify(result)) > MAX_VISIT_OUTPUT_BYTES) throw new Error(API_MESSAGES.internalError);
     counts.record(result.amenity);
     return result;
   };
-  const menu = () => ({ name: 'merovingian', ...environment, amenities: getAmenities(), maxInputBytes: 8192, maxVisitOutputBytes: 8192, walletRequired: false });
+  const menu = () => ({ name: 'merovingian', ...environment, amenities: getAmenities(), maxInputBytes: MAX_INPUT_BYTES, maxVisitOutputBytes: MAX_VISIT_OUTPUT_BYTES, walletRequired: false });
+  const openapiBody = Buffer.from(JSON.stringify(openapi(config)));
+  const openapiEtag = `"${createHash('sha256').update(openapiBody).digest('hex')}"`;
 
   app.use((_req, res, next) => {
     res.set({
@@ -114,12 +134,17 @@ export function createApp(config: Config, support: SupportPort = new SupportServ
       'X-Merovingian-Chain': config.chainId,
       'Content-Signal': contentSignal,
     });
-    if (!config.mainnetOrigin) res.set('Link', discoveryLinkHeader(config));
+    res.set('Link', config.mainnetOrigin ? openapiLink(config) : discoveryLinkHeader(config));
     if (config.network === 'testnet') res.set('X-Robots-Tag', 'noindex, follow');
     next();
   });
 
   app.get('/healthz', (_req, res) => res.json({ status: 'ok', ...environment, retired: Boolean(config.mainnetOrigin), version: APP_VERSION }));
+  // The cached contract stays readable during retirement and does not consume an API budget.
+  app.get('/openapi.json', (_req, res) => res.set({
+    'Content-Type': `${OPENAPI_MEDIA_TYPE}; charset=utf-8`, 'Cache-Control': 'public, max-age=300',
+    'Access-Control-Allow-Origin': '*', ETag: openapiEtag,
+  }).send(openapiBody));
   app.get('/robots.txt', (_req, res) => res.type('text/plain').send(`User-agent: *\nAllow: /\nContent-Signal: ${contentSignal}\n${config.network === 'mainnet' ? `Sitemap: ${config.publicOrigin}/sitemap.xml\n` : '# Temporary testnet: X-Robots-Tag noindex is sent on all responses.\n'}`));
   app.get('/sitemap.xml', (_req, res) => {
     const urls = config.network === 'mainnet' ? ['/', '/about'].map(path => `<url><loc>${config.publicOrigin}${path}</loc></url>`).join('') : '';
@@ -132,7 +157,7 @@ export function createApp(config: Config, support: SupportPort = new SupportServ
     if ((req.method === 'GET' || req.method === 'HEAD') && ['/', '/about'].includes(req.path)) {
       res.redirect(301, config.mainnetOrigin + req.path);
     } else {
-      res.status(410).json({ error: 'testnet_retired', network: 'testnet', chainId: config.chainId, mainnetOrigin: config.mainnetOrigin, message: 'This proof of concept has retired. Mainnet is a separate network; explicitly reconfigure your client and wallet before visiting or paying.' });
+      res.status(410).json({ error: 'testnet_retired', network: 'testnet', chainId: config.chainId, mainnetOrigin: config.mainnetOrigin, message: API_MESSAGES.retired });
     }
   });
 
@@ -147,7 +172,6 @@ export function createApp(config: Config, support: SupportPort = new SupportServ
   app.get('/about', (_req, res) => res.type('html').send(aboutPage(config)));
   app.get('/llms.txt', (_req, res) => res.type('text/plain').send(llmsText(config)));
   app.get('/visit.md', (_req, res) => res.type('text/markdown').send(visitMarkdown(config)));
-  app.get('/openapi.json', (_req, res) => res.json(openapi(config)));
 
   // Public GET/HEAD discovery above terminates without parsing a request body.
   // Budget every remaining path and method, including unknown routes, before
@@ -157,14 +181,14 @@ export function createApp(config: Config, support: SupportPort = new SupportServ
   app.use(['/api', '/mcp', '/visit', '/operator'], (req, res, next) => {
     const origin = req.get('origin');
     if (origin && origin !== config.publicOrigin) {
-      res.status(403).json({ error: 'origin_not_allowed' });
+      res.status(403).json({ error: API_MESSAGES.originNotAllowed });
       return;
     }
     res.set('Cache-Control', 'no-store');
     next();
   });
-  app.use(express.json({ limit: '8kb', strict: true }));
-  app.use(express.urlencoded({ extended: false, limit: '8kb', parameterLimit: 5 }));
+  app.use(parseBody(express.json({ limit: MAX_INPUT_BYTES, strict: true })));
+  app.use(parseBody(express.urlencoded({ extended: false, limit: MAX_INPUT_BYTES, parameterLimit: MAX_FORM_PARAMETERS })));
 
   app.get('/operator', bounded(async (_req, res) => {
     res.set('X-Robots-Tag', 'noindex, follow');
@@ -182,15 +206,15 @@ export function createApp(config: Config, support: SupportPort = new SupportServ
   }));
   app.get('/api/v1/amenities', (_req, res) => res.json(menu()));
   app.post('/api/v1/visits', (req, res) => {
-    if (!req.is('application/json')) return void res.status(415).json({ error: 'Use Content-Type: application/json.' });
+    if (!req.is('application/json')) return void res.status(415).json({ error: API_MESSAGES.jsonRequired });
     res.json(serve(req.body));
   });
   app.post('/visit', (req, res) => res.type('html').send(visitPage(config, serve(req.body))));
   app.get('/api/v1/support', bounded(async (_req, res) => res.json(await support.getInfo())));
   app.post('/api/v1/support/verify', bounded(async (req, res) => {
-    if (!req.is('application/json')) return void res.status(415).json({ error: 'Use Content-Type: application/json.' });
+    if (!req.is('application/json')) return void res.status(415).json({ error: API_MESSAGES.jsonRequired });
     if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) || Object.keys(req.body).some(key => key !== 'transactionHash')) {
-      return void res.status(400).json({ status: 'invalid_request', error: 'Expected only transactionHash.' });
+      return void res.status(400).json({ status: 'invalid_request', error: API_MESSAGES.invalidVerification });
     }
     const result = await support.verify(req.body);
     res.status(result.status === 'invalid_request' ? 400 : 200).json(result);
@@ -225,7 +249,7 @@ export function createApp(config: Config, support: SupportPort = new SupportServ
     // The SDK accepts some Content-Type strings the Express parser will skip.
     // Require the parsed JSON path so transport fallback cannot bypass its cap.
     if (!req.is('application/json')) {
-      res.status(415).json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Use Content-Type: application/json.' } });
+      res.status(415).json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: API_MESSAGES.jsonRequired } });
       return;
     }
     if (Array.isArray(req.body)) {
@@ -266,10 +290,8 @@ export function createApp(config: Config, support: SupportPort = new SupportServ
   const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
     if (error instanceof AmenityInputError) { res.status(400).json({ error: error.message }); return; }
     if (error instanceof VisitCountUnavailable) { res.set('Retry-After', '5').status(503).json({ error: error.message }); return; }
-    if (error?.type === 'entity.too.large' || error?.type === 'parameters.too.many') { res.status(413).json({ error: 'Request exceeds the refuge input limit.' }); return; }
-    if (error?.type === 'entity.parse.failed') { res.status(400).json({ error: 'Malformed request body.' }); return; }
     console.error(JSON.stringify({ event: 'request_error', name: error instanceof Error ? error.name : 'UnknownError' }));
-    res.status(500).json({ error: 'The refuge could not complete this request.' });
+    res.status(500).json({ error: API_MESSAGES.internalError });
   };
   app.use(errorHandler);
   return app;
