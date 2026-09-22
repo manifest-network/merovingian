@@ -1,13 +1,15 @@
-# Release 0.4.6 — prepared
+# Release 0.4.6 — live
 
 `0.4.6` packages the merged ENG-1031 response contracts and ENG-1032 read-only
 smoke checks for an update to the existing mainnet lease. Package, lockfile and
 generated registry metadata use the same version. Dependency versions, network
 identity and the remote MCP endpoint are unchanged.
 
-The live deployment and official MCP Registry currently remain at `0.4.5`.
-Publication, the provider update and registry publication require authorization
-for the reviewed candidate under [AGENTS.md](../AGENTS.md).
+The user explicitly authorized image publication, the existing-lease update,
+read-only acceptance and matching registry publication on 2026-09-22. The
+verified image is published and deployed, and `0.4.6` is active and latest in the
+official MCP Registry. The earlier [preparation evidence](evidence/release-0.4.6-preparation.json)
+retains its observations from before authorization and publication.
 
 ## Changes
 
@@ -27,17 +29,17 @@ for the reviewed candidate under [AGENTS.md](../AGENTS.md).
 See [API contracts](API-CONTRACTS.md), [request limits](REQUEST-LIMITS.md), and
 [smoke acceptance](ACCEPTANCE.md#repeatable-smoke-checks-eng-1032) for details.
 
-## Intended update
+## Publication and deployment
 
-Use the [existing-lease update workflow](MAINNET.md#existing-lease-update-workflow)
-for lease `01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd` at
-`https://merovingian.manifest.network`. Replace only the image, preserving
+The [existing-lease update workflow](MAINNET.md#existing-lease-update-workflow)
+updated lease `01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd` at
+`https://merovingian.manifest.network`. Only the image changed, preserving
 `/data/visits.sqlite`, UID/GID `1000:1000`, public configuration and empty proxy
 trust. The existing lease's hosting rate remains 2.592 PWR per 30 days within its
 5 PWR monthly ceiling. No new lease, funding deposit, chain transaction or DNS
-change is needed.
+change was performed.
 
-The verified, unpublished candidate is:
+The exact tested image was published with tag `0.4.6`:
 
 ```text
 ghcr.io/manifest-network/merovingian@sha256:5de7cb4be48c89b059e515d414d0a247721e5a72e017a0992b4138ac2c08edeb
@@ -45,18 +47,51 @@ ghcr.io/manifest-network/merovingian@sha256:5de7cb4be48c89b059e515d414d0a247721e
 
 Its configuration digest is
 `sha256:5ce3aa1d565f6dfc5a2888af6580f829a1faa80d6a74919a8295de311ee0b9ed`.
-Authenticated provider reads prepared an image-only manifest with hash
-`65e5310485168fc90150a36a6ff6a6621c7a092db262261d1a24d7557c9756d2`.
-The current `0.4.5` image and provider manifest were checked before preparing it;
-the update has not been submitted. Rebuilding creates a different candidate and
+Provider release **8** was observed ready with manifest hash
+`65e5310485168fc90150a36a6ff6a6621c7a092db262261d1a24d7557c9756d2`
+at **2026-09-22T14:04:55.056Z**. One journaled provider update POST applied the
+reviewed manifest. Anonymous registry requests verified the exact tag and digest
+manifest bytes, configuration digest, and access to all eleven layers. The tested
+candidate was retained without rebuilding.
+
+The prepared source and squash merge have identical Git trees. Release
+[PR #10](https://github.com/manifest-network/merovingian/pull/10) merged as
+`6cbce452e89fbff410c40d245c7da63d77c1e238`; its
+[main CI](https://github.com/manifest-network/merovingian/actions/runs/35736937171)
+passed Check and Final image. Rebuilding creates a different candidate and
 requires fresh verification.
 
-After approval, publish the exact tested image, reconcile its anonymous registry
-digest, and submit one provider update through the journaled workflow. Validate
-the live version, HTTP/MCP discovery, API contracts and persistent counters with
-read-only checks. Publish the matching `server.json` after successful acceptance.
 The previous `0.4.5` digest remains the rollback candidate; rollback requires its
 own authorization.
+
+## Live acceptance
+
+The read-only smoke suite passed against `0.4.6`, with 20 requests, zero serving
+requests and unchanged counters. Health, OpenAPI, both server cards and MCP
+initialization report `0.4.6`. HTTP and MCP menus and visit guides agree.
+Counts remained **8 cookies, 5 sauna sessions and 6 teas**, totaling 19, with the
+original start date `2026-09-17T20:29:18.301Z`, matching the pre-update snapshot.
+
+Additional read-only contract checks passed at **2026-09-22T14:09:27.112Z**:
+all 24 published schemas and 79 response examples validate, five live GET
+responses conform, and OpenAPI media type, CORS, cache headers, HEAD and
+conditional 304 responses are correct. The acceptance evidence records all
+33 application read requests, including an initial conditional-request probe
+that was corrected to use the fixture's explicit fetch cache mode. There were
+no live visits or payments.
+
+See the [release evidence](evidence/release-0.4.6.json) for publication, deployment,
+counter continuity and registry status.
+
+## MCP Registry
+
+Official `mcp-publisher` 1.8.1 published the reviewed metadata at
+**2026-09-22T14:12:57.663135Z**, after live acceptance and a fresh local login.
+Exact-version and latest records returned active `0.4.6` metadata matching
+`server.json`, verified at **2026-09-22T14:15:35.158984Z**. A public lookup timeout
+was reconciled with read-only requests; publication was not repeated. The
+temporary registry login was removed after verification. The
+[saved public response](evidence/mcp-registry-0.4.6.json) preserves that record.
 
 ## Validation
 
