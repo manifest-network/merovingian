@@ -11,7 +11,7 @@ export const PLATFORM: Readonly<{ os: string; architecture: string }>;
 export const DEFAULT_TIMEOUTS: Readonly<Timeouts>;
 
 export interface Timeouts {
-  requestMs: number; dockerMs: number; saveMs: number; loadMs: number; pushMs: number;
+  requestMs: number; layerMs: number; dockerMs: number; saveMs: number; loadMs: number; pushMs: number;
   verifyAttempts: number; verifyIntervalMs: number;
 }
 type Fetch = typeof fetch;
@@ -22,7 +22,7 @@ export interface RegistryResponse {
 }
 export interface TagObservation {
   reference: string; observedAt: string; state: 'absent' | 'present' | 'error'; httpStatus?: number; problem?: string;
-  digest?: string; mediaType?: string; config?: { digest: string; size: number }; layers?: { digest: string; size: number }[];
+  digest?: string; mediaType?: string; config?: { digest: string; size: number }; layers?: { digest: string; size: number; mediaType: string }[];
 }
 export type Evidence = Record<string, any> & { stage: string; outcome: string; passed: boolean };
 
@@ -33,7 +33,7 @@ export function describeManifest(response: RegistryResponse & { bytes: Buffer; c
 export function lookupTag(options: { registry: string; reference: string; fetch?: Fetch; timeoutMs?: number; clock?: () => Date; token?: string }): Promise<TagObservation>;
 export function decidePush(tag: TagObservation, configDigest: string): 'push' | 'already-published';
 export function verifyPublished(options: {
-  registry: string; version: string; digest: string | null; configDigest: string; fetch?: Fetch; timeoutMs?: number; clock?: () => Date;
+  registry: string; version: string; digest: string | null; configDigest: string; fetch?: Fetch; timeoutMs?: number; layerTimeoutMs?: number; clock?: () => Date;
 }): Promise<Record<string, any> & { passed: boolean; problems: string[] }>;
 export function dockerRunner(options: { env: Record<string, string | undefined>; home: string; configDirectory: string }): Docker;
 export function checkImageIdentity(image: Record<string, any>, expected: { imageId: string; version: string; sourceRevision: string }): Record<string, any>;

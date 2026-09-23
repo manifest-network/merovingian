@@ -3,6 +3,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { gzipSync } from 'node:zlib';
 import { join } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -18,7 +19,7 @@ const VERSION = '0.4.7';
 const REGISTRY = 'https://ghcr.test';
 const CDN = 'https://pkg-containers.test';
 const TOKEN = 'workflow-registry-token-secret';
-const FAST = { requestMs: 2_000, dockerMs: 5_000, saveMs: 5_000, loadMs: 5_000, pushMs: 5_000, verifyAttempts: 2, verifyIntervalMs: 1 };
+const FAST = { requestMs: 2_000, layerMs: 5_000, dockerMs: 5_000, saveMs: 5_000, loadMs: 5_000, pushMs: 5_000, verifyAttempts: 2, verifyIntervalMs: 1 };
 const SLOW = { timeout: 120_000 };
 const DOCKER_V2 = 'application/vnd.docker.distribution.manifest.v2+json';
 const sha256 = (bytes: string | Buffer) => createHash('sha256').update(bytes).digest('hex');
@@ -31,20 +32,22 @@ function temporaryDirectory(t: TestContext, prefix: string) {
 }
 
 /** One image as the Build job sees it: labelled config, two layers and the pushed manifest. */
-function imageFixture(sourceRevision: string, changes: { architecture?: string; revision?: string } = {}) {
-  // Like a real image configuration, the config lists every layer's diff ID, so its digest binds the content.
-  const layers = [randomBytes(64), randomBytes(32)];
-  const config = Buffer.from(JSON.stringify({ architecture: changes.architecture ?? 'amd64', os: 'linux',
+function imageFixture(sourceRevision: string, changes: { architecture?: string; revision?: string; configFrom?: { config: Buffer } } = {}) {
+  // Like a real image configuration, the config lists every layer's uncompressed diff ID, so its digest binds the content.
+  // configFrom reuses another image's configuration with unrelated layers, as a crafted manifest could.
+  const contents = [randomBytes(64), randomBytes(32)];
+  const layers = contents.map(content => gzipSync(content));
+  const config = changes.configFrom?.config ?? Buffer.from(JSON.stringify({ architecture: changes.architecture ?? 'amd64', os: 'linux',
     config: { Labels: { 'org.opencontainers.image.revision': changes.revision ?? sourceRevision, 'org.opencontainers.image.version': VERSION,
       'org.opencontainers.image.source': SOURCE_URL } },
-    rootfs: { type: 'layers', diff_ids: layers.map(layer => digestOf(layer)) } }));
+    rootfs: { type: 'layers', diff_ids: contents.map(content => digestOf(content)) } }));
   const manifest = Buffer.from(JSON.stringify({ schemaVersion: 2, mediaType: DOCKER_V2,
     config: { mediaType: 'application/vnd.docker.container.image.v1+json', digest: digestOf(config), size: config.length },
     layers: layers.map(layer => ({ mediaType: 'application/vnd.docker.image.rootfs.diff.tar.gzip', digest: digestOf(layer), size: layer.length })) }));
   const blobs = new Map([[digestOf(config), config], ...layers.map(layer => [digestOf(layer), layer] as [string, Buffer])]);
   return { config, configDigest: digestOf(config), manifest, digest: digestOf(manifest), blobs, layerDigests: layers.map(layer => digestOf(layer)),
-    inspect: { Id: digestOf(config), Os: 'linux', Architecture: changes.architecture ?? 'amd64',
-      Config: { Labels: JSON.parse(config.toString()).config.Labels } } };
+    inspect: { Id: digestOf(config), Os: 'linux', Architecture: JSON.parse(config.toString()).architecture as string,
+      Config: { Labels: JSON.parse(config.toString()).config.Labels as Record<string, string> } } };
 }
 type Image = ReturnType<typeof imageFixture>;
 
@@ -52,7 +55,7 @@ interface Call { url: string; method: string; authorization: string | null }
 
 interface RegistryOptions {
   tags?: Record<string, Image>; token?: 'ok' | 'denied'; untyped404?: boolean; missingLayer?: boolean;
-  tamperedConfig?: boolean; wrongLength?: boolean; httpRedirect?: boolean; digestReference?: Image;
+  tamperedConfig?: boolean; tamperedLayer?: boolean; reencodedLayer?: boolean; httpRedirect?: boolean; digestReference?: Image;
 }
 
 /** In-memory GHCR: anonymous tokens, typed 404s, digest headers and signed-URL blob redirects. Faults can change mid-test. */
@@ -61,8 +64,9 @@ function registryFixture(initial: RegistryOptions = {}) {
   const tags = new Map(Object.entries(options.tags ?? {}));
   const manifests = new Map<string, Image>();
   const blobs = new Map<string, Buffer>();
+  const configs = new Set<string>();
   const publish = (tag: string, image: Image) => {
-    tags.set(tag, image); manifests.set(image.digest, image);
+    tags.set(tag, image); manifests.set(image.digest, image); configs.add(image.configDigest);
     for (const [digest, bytes] of image.blobs) if (!(options.missingLayer && bytes !== image.config)) blobs.set(digest, bytes);
   };
   for (const [tag, image] of tags) publish(tag, image);
@@ -74,9 +78,17 @@ function registryFixture(initial: RegistryOptions = {}) {
     calls.push({ url: url.href, method, authorization: headers.get('authorization') });
     assert.equal(init.redirect, 'manual', 'registry requests never follow redirects');
     if (url.origin === CDN || url.origin === 'http://pkg-containers.test') {
-      const bytes = blobs.get(url.pathname.slice('/blob/'.length));
+      const digest = url.pathname.slice('/blob/'.length);
+      const bytes = blobs.get(digest);
       if (!bytes) return new Response('gone', { status: 404 });
-      return new Response(new Uint8Array(options.tamperedConfig ? Buffer.concat([bytes, Buffer.from(' ')]) : bytes), { status: 200 });
+      const tampered = configs.has(digest) ? options.tamperedConfig : options.tamperedLayer;
+      if (options.reencodedLayer && !configs.has(digest)) {
+        // Same length and same uncompressed content: only the gzip header's timestamp differs.
+        const reencoded = Buffer.from(bytes);
+        reencoded.writeUInt32LE(reencoded.readUInt32LE(4) + 1, 4);
+        return new Response(new Uint8Array(reencoded), { status: 200 });
+      }
+      return new Response(new Uint8Array(tampered ? Buffer.concat([bytes, Buffer.from(' ')]) : bytes), { status: 200 });
     }
     if (url.origin !== REGISTRY) throw new TypeError('fetch failed');
     if (url.pathname === '/token') {
@@ -99,7 +111,7 @@ function registryFixture(initial: RegistryOptions = {}) {
       const digest = url.pathname.slice(blobPath.length);
       const bytes = blobs.get(digest);
       if (!bytes) return Response.json({ errors: [{ code: 'BLOB_UNKNOWN' }] }, { status: 404 });
-      if (method === 'HEAD') return new Response(null, { status: 200, headers: { 'content-length': String(bytes.length + (options.wrongLength ? 1 : 0)) } });
+      if (method === 'HEAD') return new Response(null, { status: 200, headers: { 'content-length': String(bytes.length) } });
       const origin = options.httpRedirect ? 'http://pkg-containers.test' : CDN;
       return new Response(null, { status: 307, headers: { location: `${origin}/blob/${digest}?signature=short-lived` } });
     }
@@ -133,7 +145,13 @@ function repositoryFixture(t: TestContext) {
   git(cwd, 'checkout', '--quiet', '-b', 'side', release);
   const side = commit({ 'SIDE.md': 'side\n' }, 'side');
   git(cwd, 'checkout', '--quiet', 'main');
-  return { directory, cwd, release, head, side };
+  // The next release merges: main's server.json and package.json move on.
+  const moveMain = () => {
+    commit({ 'server.json': '{"version":"0.4.8"}\n', 'package.json': packageJson('0.4.8') }, 'next release');
+    git(cwd, 'push', '--quiet', 'origin', 'main');
+    git(cwd, 'fetch', '--quiet', 'origin', '+refs/heads/main:refs/merovingian/main');
+  };
+  return { directory, cwd, release, head, side, moveMain };
 }
 
 const CONTEXT = (workflowRevision: string) => ({ workflowRevision, run: { id: '123', attempt: 1, url: `https://github.com/${REPOSITORY}/actions/runs/123/attempts/1` } });
@@ -295,21 +313,23 @@ test('anonymous verification binds tag, digest, configuration, platform and ever
   const verified = await verifyPublished({ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registry.fetch, timeoutMs: 1_000 });
   assert.deepEqual(verified.problems, []);
   assert.equal(verified.passed, true);
-  assert.deepEqual(verified.layers.map((layer: { anonymousAccess: boolean }) => layer.anonymousAccess), [true, true]);
-  // The signed blob URL receives no credentials, not even the anonymous pull token.
+  assert.deepEqual(verified.layers.map((layer: { contentVerified: boolean }) => layer.contentVerified), [true, true]);
+  // Signed blob URLs receive no credentials, not even the anonymous pull token.
   const cdn = registry.calls.filter(call => call.url.startsWith(CDN));
-  assert.equal(cdn.length, 1);
+  assert.equal(cdn.length, 3, 'the configuration and both layers');
+  assert.ok(cdn.every(call => call.authorization === null));
   assert.equal(cdn[0].authorization, null);
 
   const other = imageFixture(source);
   const cases: [Parameters<typeof verifyPublished>[0], RegExp][] = [
     [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: other.configDigest, fetch: registry.fetch }, /differs from the verified candidate/],
     [{ registry: REGISTRY, version: VERSION, digest: other.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image, other } }).fetch }, /pushed digest/],
-    [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image }, missingLayer: true }).fetch }, /not anonymously readable/],
+    [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image }, missingLayer: true }).fetch }, /layer unavailable \(HTTP 404\)/],
     [{ registry: REGISTRY, version: VERSION, digest: null, configDigest: image.configDigest, fetch: registry.fetch }, /no pushed digest/],
     [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image }, tamperedConfig: true }).fetch }, /config blob bytes differ/],
     [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image }, httpRedirect: true }).fetch }, /config blob unavailable \(HTTP 307\)/],
-    [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image }, wrongLength: true }).fetch }, /not anonymously readable/],
+    [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image }, tamperedLayer: true }).fetch }, /layer size differs/],
+    [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image }, reencodedLayer: true }).fetch }, /layer bytes differ from their digest/],
     [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image }, digestReference: other }).fetch }, /digest reference differs/],
     [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image }, token: 'denied' }).fetch }, /anonymous pull token unavailable/],
   ];
@@ -490,12 +510,15 @@ test('Check binds the runtime and advisory reports to the image Build recorded a
   }
 });
 
-async function publicationFixture(t: TestContext, options: { tags?: Record<string, 'same' | 'other'>; docker?: DockerBehavior;
+async function publicationFixture(t: TestContext, options: { tags?: Record<string, 'same' | 'other' | 'foreign'>; docker?: DockerBehavior;
+  moveMain?: boolean;
   archive?: string | null; registry?: RegistryOptions; changes?: Record<string, unknown> } = {}) {
   const repo = repositoryFixture(t);
   git(repo.cwd, 'fetch', '--quiet', 'origin', '+refs/heads/main:refs/merovingian/main');
   const image = imageFixture(repo.release);
-  const tags = Object.fromEntries(Object.entries(options.tags ?? {}).map(([tag, kind]) => [tag, kind === 'same' ? image : imageFixture(repo.release)]));
+  const tags = Object.fromEntries(Object.entries(options.tags ?? {}).map(([tag, kind]) => [tag,
+    kind === 'same' ? image : kind === 'foreign' ? imageFixture(repo.release, { configFrom: image }) : imageFixture(repo.release)]));
+  if (options.moveMain) repo.moveMain();
   const registry = registryFixture({ ...options.registry, tags });
   const docker = dockerFixture(image, registry, options.docker);
   const archive = join(repo.directory, 'image.tar');
@@ -566,11 +589,22 @@ test('a re-run after a completed push verifies the same image without the archiv
   assert.deepEqual([evidence.outcome, evidence.digest, commands], ['already-published', image.digest, []]);
   assert.equal(evidence.verification.passed, true);
   const reads = registry.calls.map(call => `${call.method} ${new URL(call.url).pathname.split('/').slice(-2, -1)[0]}`);
-  for (const read of ['GET manifests', 'HEAD blobs', 'GET blob']) assert.ok(reads.includes(read), read);
+  for (const read of ['GET manifests', 'GET blobs', 'GET blob']) assert.ok(reads.includes(read), read);
+  assert.equal(registry.calls.filter(call => call.url.startsWith(CDN)).length, 3, 'configuration and every layer are downloaded and checked');
+});
+
+test('after the next release lands on main, a re-run still attests the published candidate but never pushes', SLOW, async (t) => {
+  const rerun = await publicationFixture(t, { tags: { [VERSION]: 'same' }, archive: null, moveMain: true });
+  assert.equal(rerun.evidence.passed, true, JSON.stringify(rerun.evidence.error));
+  assert.deepEqual([rerun.evidence.outcome, rerun.commands], ['already-published', []]);
+  const push = await publicationFixture(t, { moveMain: true });
+  assert.equal(push.evidence.error.code, 'source');
+  assert.match(push.evidence.error.message, /differs from main/);
+  assert.deepEqual(push.commands, []);
 });
 
 test('a push that does not verify anonymously never yields a digest to attest', SLOW, async (t) => {
-  for (const options of [{ registry: { missingLayer: true } }, { docker: { push: 'moved' as const } }, { registry: { wrongLength: true } }]) {
+  for (const options of [{ registry: { missingLayer: true } }, { docker: { push: 'moved' as const } }, { registry: { tamperedLayer: true } }, { tags: { [VERSION]: 'foreign' as const } }]) {
     const { evidence, output } = await publicationFixture(t, options);
     assert.equal(evidence.passed, false);
     assert.equal(evidence.error.code, 'verification', JSON.stringify([options, evidence.error]));

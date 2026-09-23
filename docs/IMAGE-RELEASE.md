@@ -52,9 +52,11 @@ The **Publish** job runs only after both jobs succeed and the deployment is
 approved in the `image-release` environment. It has `contents: read`,
 `packages: write`, `id-token: write` and `attestations: write`. It:
 
-1. Rechecks the dispatch, source revision and tag. An absent tag is pushed. A tag
-   that already names the same verified configuration is an idempotent re-run,
-   which needs neither the archive nor a login. Any other tag state refuses.
+1. Rechecks the dispatch and tag. An absent tag is pushed, and only while the
+   source revision is still the current release on the live `main`. A tag that
+   already names the same verified configuration is an idempotent re-run: it needs
+   neither the archive nor a login, and still works after the next release lands
+   on `main`. Any other tag state refuses.
 2. For a push, verifies the downloaded archive against Build's SHA-256, loads it
    and checks the image ID, platform and labels.
 3. Logs in to GHCR with the job token, passed on stdin, in a private Docker
@@ -63,8 +65,10 @@ approved in the `image-release` environment. It has `contents: read`,
 4. Reconciles a failed push only from anonymous reads. It never retries the push.
 5. Verifies the result anonymously: the tag resolves to the pushed digest, the
    digest reference serves the same manifest, the configuration digest equals
-   Build's, the configuration bytes match that digest, the platform is
-   `linux/amd64` and every layer is readable at its recorded size.
+   Build's, the configuration bytes match that digest and the platform is
+   `linux/amd64`. It downloads every layer and checks its bytes against the
+   manifest digest and size, and its uncompressed content against the
+   configuration's `diff_ids`. The registry must serve exactly the verified image.
 6. Attests SLSA build provenance for the digest with
    [`actions/attest`](https://github.com/actions/attest). The attestation is signed
    through Sigstore and stored in GitHub's attestation store, not pushed to the
@@ -109,8 +113,12 @@ Before approving, compare the Build and Check job summaries with the release
 notes. The version and release commit must match, the tag must be absent, the
 environment protected, and the runtime and advisory checks passed with zero
 blocked findings. Approval authorizes pushing exactly the image ID and archive
-that Build recorded. Approve within 7 days, while the archive exists. Rejecting
-the deployment, or letting it expire, publishes nothing.
+that Build recorded. Approve within 7 days, while the archive exists.
+
+Rejecting the deployment publishes nothing. Reject a stale approval instead of
+letting it wait: a pending run holds the `image-release` concurrency group, so
+every later dispatch waits behind it until it is rejected, cancelled or expires
+after 30 days.
 
 ## After publication
 
@@ -140,8 +148,11 @@ in the run's evidence.
   for a new candidate.
 - **Push outcome unknown:** read the tag anonymously before any re-run.
 - **Verification or attestation failed after a push:** re-run the failed Publish
-  job, at any time. The recheck recognizes the same verified image as already
-  published, verifies it and attests again without the archive.
+  job. Re-runs ask for approval again, and GitHub allows them for 30 days after the
+  run started. The recheck recognizes the same verified image as already
+  published, verifies it and attests again without the archive, even after the
+  next release has landed on `main`. After 30 days the tag stays without an
+  attestation; release a new version if provenance is required.
 
 ## Trust boundary
 
@@ -151,9 +162,13 @@ in the run's evidence.
   and compiler shape the image, as in any build. The checks cannot detect a
   malicious dependency; they only reject known advisories and broken behavior.
 - Check runs the source revision's npm dependencies, including development-only
-  tools, with read permissions only. A compromised development dependency could
-  make Check pass falsely, but cannot change the candidate, its digests or what
-  Publish pushes. Its summary is only as trustworthy as those dependencies.
+  tools. It has no write permissions on the repository or package, but its code
+  can reach the run's artifact storage. A compromised development dependency
+  could make Check pass falsely, or delete or replace this run's artifacts. That
+  can block a release or forge artifact evidence, but cannot change what Publish
+  pushes: Publish takes identity only from Build's job outputs and hashes the
+  archive against them. Build's job summary, with the SHA-256 of its evidence
+  files, is the authoritative record.
 - The Publish job runs only `main`'s dependency-free script, the runner's `docker`
   and `gh`, and SHA-pinned first-party actions. It uses no npm packages, caches or
   source-revision code. Its token can write this repository's packages and reaches
@@ -162,5 +177,11 @@ in the run's evidence.
   from any workflow in the organization (see
   [MCP Registry trust boundary](MCP-REGISTRY.md#trust-boundary)). Adding a step to
   this job widens that boundary.
+- The package grant gives Write to every workflow in this repository that
+  requests `packages: write`, on any branch, not only this approval-gated job.
+  Anyone who can push such a workflow can push to the package. This workflow
+  never replaces an existing tag, and it verifies content before adopting a tag
+  that already names its configuration, so such a push can block a release but
+  not be attested as it. Keep repository write access limited accordingly.
 - Builds are not reproducible, so only the archive Build recorded is ever pushed;
   nothing is rebuilt after approval.

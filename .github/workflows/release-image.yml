@@ -98,6 +98,17 @@ jobs:
           node scripts/image-release.mjs candidate
           --version "$RELEASE_VERSION" --source-revision "$SOURCE_REVISION"
           --image-id-file "$RUNNER_TEMP/image-release/image-id" --output-dir "$RUNNER_TEMP/image-release"
+      # Check runs untrusted code that could replace run artifacts, so this summary
+      # is the authoritative record of Build's evidence.
+      - name: Record evidence digests in the job summary
+        if: always()
+        run: |
+          cd "$RUNNER_TEMP/image-release"
+          {
+            printf '### Build evidence SHA-256\n\n```text\n'
+            sha256sum preflight.json candidate.json 2>/dev/null || true
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload the candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

@@ -2,8 +2,11 @@ import { createHash } from 'node:crypto';
 import { appendFileSync, createReadStream, existsSync } from 'node:fs';
 import { mkdir, open, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
+import { Readable, Transform, Writable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
+import { createGunzip } from 'node:zlib';
 import {
   PublicationError, REPOSITORY, checkDispatch, checkEnvironment, checkSource, childEnvironment,
   parseReleaseVersion, refreshMain, runGit, runProcess, sanitizeMessage,
@@ -24,7 +27,7 @@ export const SOURCE_URL = `https://github.com/${REPOSITORY}`;
 export const PLATFORM = Object.freeze({ os: 'linux', architecture: 'amd64' });
 
 export const DEFAULT_TIMEOUTS = Object.freeze({
-  requestMs: 15_000, dockerMs: 60_000, saveMs: 600_000, loadMs: 600_000, pushMs: 900_000,
+  requestMs: 15_000, layerMs: 300_000, dockerMs: 60_000, saveMs: 600_000, loadMs: 600_000, pushMs: 900_000,
   verifyAttempts: 4, verifyIntervalMs: 5_000,
 });
 
@@ -34,6 +37,8 @@ const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const USER_AGENT = 'merovingian-image-release (+https://github.com/manifest-network/merovingian)';
 const MANIFEST_TYPES = ['application/vnd.oci.image.manifest.v1+json', 'application/vnd.docker.distribution.manifest.v2+json'];
 const INDEX_TYPES = ['application/vnd.oci.image.index.v1+json', 'application/vnd.docker.distribution.manifest.list.v2+json'];
+const GZIP_LAYERS = ['application/vnd.oci.image.layer.v1.tar+gzip', 'application/vnd.docker.image.rootfs.diff.tar.gzip'];
+const TAR_LAYERS = ['application/vnd.oci.image.layer.v1.tar'];
 const ARCHIVE_NAME = 'image.tar';
 
 function fail(code, message) {
@@ -105,11 +110,12 @@ export function describeManifest(response) {
   const layers = manifest.layers;
   if (!isObject(config) || !DIGEST_PATTERN.test(config.digest) || !Number.isSafeInteger(config.size) || config.size <= 0
     || !Array.isArray(layers) || !layers.length
-    || !layers.every(layer => isObject(layer) && DIGEST_PATTERN.test(layer.digest) && Number.isSafeInteger(layer.size) && layer.size >= 0)) {
+    || !layers.every(layer => isObject(layer) && DIGEST_PATTERN.test(layer.digest) && Number.isSafeInteger(layer.size) && layer.size >= 0
+      && typeof layer.mediaType === 'string')) {
     return { digest, mediaType, problem: 'manifest config or layers are malformed' };
   }
   return { digest, mediaType, config: { digest: config.digest, size: config.size },
-    layers: layers.map(({ digest: layerDigest, size }) => ({ digest: layerDigest, size })) };
+    layers: layers.map(({ digest: layerDigest, size, mediaType: layerType }) => ({ digest: layerDigest, size, mediaType: layerType })) };
 }
 
 /** Read one tag anonymously. Only a typed MANIFEST_UNKNOWN 404 proves absence. Never throws. */
@@ -154,8 +160,57 @@ async function readConfig({ registry, token, digest, fetch: fetchImpl, timeoutMs
   return { config: parseJson(response.bytes) };
 }
 
-/** Anonymous proof that the published tag serves exactly the verified image. Never throws. */
-export async function verifyPublished({ registry, version, digest, configDigest, fetch: fetchImpl, timeoutMs, clock = () => new Date() }) {
+/**
+ * Stream one layer anonymously, following at most one HTTPS redirect without
+ * credentials. Its bytes must match the manifest digest and size, and its
+ * uncompressed content the configuration's diff ID. Returns a problem or null.
+ */
+async function verifyLayer({ registry, token, layer, diffId, fetch: fetchImpl = fetch, timeoutMs }) {
+  if (![...GZIP_LAYERS, ...TAR_LAYERS].includes(layer.mediaType)) return 'unsupported layer media type';
+  const signal = AbortSignal.timeout(timeoutMs);
+  const get = (url, headers = {}) => fetchImpl(url, {
+    headers: { 'user-agent': USER_AGENT, ...headers }, redirect: 'manual', cache: 'no-store', credentials: 'omit', signal });
+  let oversized = false;
+  try {
+    let response = await get(`${registry}/v2/${IMAGE_NAME}/blobs/${layer.digest}`, { authorization: `Bearer ${token}` });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      await response.body?.cancel().catch(() => {});
+      if (!/^https:\/\//.test(location ?? '')) return 'layer redirect is not HTTPS';
+      response = await get(location);
+    }
+    if (response.status !== 200 || !response.body) {
+      await response.body?.cancel().catch(() => {});
+      return `layer unavailable (HTTP ${response.status})`;
+    }
+    const compressed = createHash('sha256');
+    const content = createHash('sha256');
+    let size = 0;
+    const measure = new Transform({ transform(chunk, _encoding, callback) {
+      size += chunk.length;
+      if (size > layer.size) { oversized = true; return callback(new Error('oversized')); }
+      compressed.update(chunk);
+      return callback(null, chunk);
+    } });
+    const sink = new Writable({ write(chunk, _encoding, callback) { content.update(chunk); callback(); } });
+    await pipeline(Readable.fromWeb(response.body), measure, ...(GZIP_LAYERS.includes(layer.mediaType) ? [createGunzip()] : []), sink);
+    if (size !== layer.size) return 'layer size differs from the manifest';
+    if (`sha256:${compressed.digest('hex')}` !== layer.digest) return 'layer bytes differ from their digest';
+    if (`sha256:${content.digest('hex')}` !== diffId) return 'layer content differs from the configuration diff ID';
+    return null;
+  } catch (error) {
+    if (oversized) return 'layer size differs from the manifest';
+    return error?.name === 'TimeoutError' || error?.name === 'AbortError' ? 'layer download timed out' : 'layer could not be read or decompressed';
+  }
+}
+
+/**
+ * Anonymous proof that the published tag serves exactly the verified image: tag,
+ * digest reference, configuration bytes and platform, and every layer's bytes and
+ * uncompressed content against the configuration's diff IDs. Never throws.
+ */
+export async function verifyPublished({ registry, version, digest, configDigest, fetch: fetchImpl, timeoutMs,
+  layerTimeoutMs = DEFAULT_TIMEOUTS.layerMs, clock = () => new Date() }) {
   const result = { checkedAt: clock().toISOString(), reference: `${IMAGE}:${version}`, passed: false, problems: [] };
   const auth = await anonymousToken({ registry, fetch: fetchImpl, timeoutMs });
   if (auth.problem) return { ...result, problems: [auth.problem] };
@@ -171,16 +226,22 @@ export async function verifyPublished({ registry, version, digest, configDigest,
   if (byDigest.digest !== tag.digest) result.problems.push('digest reference differs from the tag');
   if (tag.config.digest !== configDigest) result.problems.push('published configuration differs from the verified candidate');
   const config = await readConfig({ registry, token: auth.token, digest: tag.config.digest, fetch: fetchImpl, timeoutMs });
-  if (config.problem) result.problems.push(config.problem);
-  else if (config.config?.os !== PLATFORM.os || config.config?.architecture !== PLATFORM.architecture) result.problems.push('published image is not linux/amd64');
   result.anonymousConfigurationAccess = !config.problem;
+  if (config.problem) {
+    result.problems.push(config.problem);
+    return result;
+  }
+  if (config.config?.os !== PLATFORM.os || config.config?.architecture !== PLATFORM.architecture) result.problems.push('published image is not linux/amd64');
+  const diffIds = config.config?.rootfs?.type === 'layers' ? config.config.rootfs.diff_ids : undefined;
+  if (!Array.isArray(diffIds) || diffIds.length !== tag.layers.length || !diffIds.every(id => DIGEST_PATTERN.test(id))) {
+    result.problems.push('published layers do not match the configuration diff IDs');
+    return result;
+  }
   result.layers = [];
-  for (const layer of tag.layers) {
-    const head = await request(`${registry}/v2/${IMAGE_NAME}/blobs/${layer.digest}`, {
-      fetch: fetchImpl, timeoutMs, method: 'HEAD', headers: { authorization: `Bearer ${auth.token}` } });
-    const anonymousAccess = head.status === 200 && Number(head.contentLength) === layer.size;
-    result.layers.push({ ...layer, anonymousAccess });
-    if (!anonymousAccess) result.problems.push(`layer ${layer.digest} is not anonymously readable (${httpProblem(head)})`);
+  for (const [index, layer] of tag.layers.entries()) {
+    const problem = await verifyLayer({ registry, token: auth.token, layer, diffId: diffIds[index], fetch: fetchImpl, timeoutMs: layerTimeoutMs });
+    result.layers.push({ ...layer, contentVerified: !problem });
+    if (problem) result.problems.push(`layer ${layer.digest}: ${problem}`);
   }
   result.passed = result.problems.length === 0;
   return result;
@@ -232,10 +293,10 @@ function recordError(evidence, error) {
     : { code: 'internal', message: code };
 }
 
-function checkSourceRevision(opts, evidence) {
+function checkSourceRevision(opts, evidence, requireCurrent = true) {
   const { cwd, version, sourceRevision, context } = opts;
   (opts.refreshMain ?? refreshMain)({ cwd, git: opts.git });
-  const source = checkSource({ cwd, sourceRevision, workflowRevision: context.workflowRevision, version, git: opts.git });
+  const source = checkSource({ cwd, sourceRevision, workflowRevision: context.workflowRevision, version, git: opts.git, requireCurrent });
   evidence.source = { revision: source.revision, workflowRevision: source.workflowRevision, mainRevision: source.mainRevision,
     releaseCommit: source.releaseCommit };
   return source;
@@ -449,7 +510,7 @@ async function pollVerification(opts, digest) {
   let verification;
   for (let attempt = 1; attempt <= opts.timeouts.verifyAttempts; attempt++) {
     verification = await verifyPublished({ registry: opts.registry, version: opts.version, digest, configDigest: opts.configDigest,
-      fetch: opts.fetch, timeoutMs: opts.timeouts.requestMs, clock: opts.clock });
+      fetch: opts.fetch, timeoutMs: opts.timeouts.requestMs, layerTimeoutMs: opts.timeouts.layerMs, clock: opts.clock });
     verification.attempts = attempt;
     if (verification.passed) return verification;
     if (attempt < opts.timeouts.verifyAttempts) await opts.sleep(opts.timeouts.verifyIntervalMs);
@@ -477,11 +538,14 @@ export async function runPublication(options) {
     if (typeof opts.token !== 'string' || !opts.token || typeof opts.username !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9-]{0,38}(\[bot\])?$/.test(opts.username)) {
       fail('input', 'The registry token or username is missing');
     }
-    checkSourceRevision(opts, evidence);
     evidence.candidate = { imageId, configDigest, archiveSha256 };
     evidence.tagBefore = await lookupTag({ registry: opts.registry, reference: version, fetch: opts.fetch, timeoutMs: opts.timeouts.requestMs, clock: opts.clock });
     const decision = decidePush(evidence.tagBefore, configDigest);
     evidence.decision = decision;
+    // A push must still be the current release on the live main. A re-run that only
+    // verifies and attests an already published candidate needs the containment and
+    // version checks, not main's current metadata, which the next release changes.
+    checkSourceRevision(opts, evidence, decision === 'push');
     let digest = null;
     if (decision === 'push') {
       // The archive is only needed to push; an already-published re-run verifies and attests without it.
@@ -563,7 +627,7 @@ export function renderSummary(evidence) {
   if (evidence.push) rows.push(['Push', evidence.push.attempted ? `exit ${evidence.push.exitCode ?? '—'}${evidence.push.timedOut ? ' (timed out)' : ''}` : 'not attempted']);
   if (evidence.verification) {
     rows.push(['Anonymous verification', evidence.verification.passed
-      ? `tag, digest, configuration and ${evidence.verification.layers.length} layers (attempt ${evidence.verification.attempts})`
+      ? `tag, digest, configuration and the content of ${evidence.verification.layers.length} layers (attempt ${evidence.verification.attempts})`
       : evidence.verification.problems.join('; ')]);
   }
   if (evidence.reference) rows.push(['Published reference', evidence.reference]);

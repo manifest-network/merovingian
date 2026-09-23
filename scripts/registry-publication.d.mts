@@ -51,7 +51,7 @@ export function decidePublication(lookup: { exact: RecordObservation; latest: Re
 export function verificationProblems(lookup: { exact: RecordObservation; latest: RecordObservation }, version: string): string[];
 export function checkMetadata(bytes: Buffer, version: string, packageVersion: unknown): { server: Record<string, unknown>; sha256: string; bytes: number };
 export function checkSource(options: {
-  cwd: string; sourceRevision: unknown; workflowRevision: string; mainRef?: string; version: string; git?: Git;
+  cwd: string; sourceRevision: unknown; workflowRevision: string; mainRef?: string; version: string; git?: Git; requireCurrent?: boolean;
 }): { revision: string; workflowRevision: string; mainRevision: string; releaseCommit: boolean; serverJson: Buffer };
 export function refreshMain(options: { cwd: string; git?: Git }): void;
 export function runGit(cwd: string, args: string[]): Buffer;

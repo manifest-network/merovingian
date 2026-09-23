@@ -296,8 +296,9 @@ export function refreshMain({ cwd, git = runGit }) {
   catch { fail('source', 'Could not fetch the current main branch from origin'); }
 }
 
-/** The reviewed source revision must be on main and supply exactly main's metadata. */
-export function checkSource({ cwd, sourceRevision, workflowRevision, mainRef = LIVE_MAIN_REF, version, git = runGit }) {
+/** The reviewed source revision must be on main and, unless requireCurrent is false,
+ * supply exactly main's metadata (the current release). */
+export function checkSource({ cwd, sourceRevision, workflowRevision, mainRef = LIVE_MAIN_REF, version, git = runGit, requireCurrent = true }) {
   if (typeof sourceRevision !== 'string' || !REVISION_PATTERN.test(sourceRevision)) {
     fail('input', 'Source revision must be a full 40-character lowercase commit SHA');
   }
@@ -319,7 +320,7 @@ export function checkSource({ cwd, sourceRevision, workflowRevision, mainRef = L
   if (!isAncestor(source, workflow)) fail('source', 'Source revision is not contained in the dispatched main revision');
   if (!isAncestor(workflow, main)) fail('source', 'The dispatched revision is no longer contained in the current main');
   const serverJson = show(source, 'server.json');
-  if (!serverJson.equals(show(workflow, 'server.json')) || !serverJson.equals(show(main, 'server.json'))) {
+  if (requireCurrent && (!serverJson.equals(show(workflow, 'server.json')) || !serverJson.equals(show(main, 'server.json')))) {
     fail('source', 'server.json at the source revision differs from main; dispatch the current reviewed release');
   }
   const packageVersion = revision => {
