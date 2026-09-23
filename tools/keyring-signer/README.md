@@ -57,7 +57,7 @@ The inherited `jose2go` dependency is pinned to published 1.7.0 to address
 denial of service in the encrypted-file keyring path. This does not change the
 Cosmos SDK version or the keyring format.
 
-Build/test from the repository root, keeping caches off the nearly full `/tmp`:
+Build/test from the repository root with Go 1.26 or later (`go.mod` declares `go 1.26.0`; use `GOTOOLCHAIN=local` so an older Go is not silently replaced), keeping caches off the nearly full `/tmp`:
 
 ```sh
 mkdir -p .local/go-cache .local/go-tmp .local/mainnet/bin

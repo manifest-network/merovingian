@@ -20,7 +20,7 @@ ADR-036 uses the SDK-compatible fixed envelope with an empty chain ID, zero acco
 
 The initial production-key check stopped before signing: the default CLI lookup found `merovingian` in the configured `test` backend, while an explicit `os` lookup failed. The test backend uses a publicly known password and does not provide suitable protection for real funds. After the user imported the same key into a protected OS store locally, the hardened helper verified that copy and its address. The user confirmed a secure recovery backup and explicitly authorized deletion of only the old named `merovingian` test-backend key; removal was verified, and the OS proof passed again at **2026-09-17 19:28:29 UTC**. The CLI default remains `test`, so production commands continue to select `os` explicitly and never fall back. Unlock the protected store locally when needed. Do not export or copy private key material into the repository or send it through chat.
 
-Run from the repository root using the project's Node.js dependencies and a Go toolchain compatible with `tools/keyring-signer/go.mod`:
+Run from the repository root using the project's Node.js dependencies and Go 1.26 or later. The reviewed helper used go1.27.1, and the build sets `GOTOOLCHAIN=local` so an older Go fails instead of downloading a toolchain:
 
 ```sh
 npm run keyring:build

@@ -10,7 +10,8 @@ const output = resolve(root, '.local/mainnet/bin/keyring-signer');
 for (const directory of [cache, temporary, resolve(root, '.local/mainnet/bin')]) await mkdir(directory, { recursive: true, mode: 0o700 });
 const child = spawn('go', ['build', '-p=2', '-mod=readonly', '-trimpath', '-o', output, '.'], {
   cwd: resolve(root, 'tools/keyring-signer'), shell: false, stdio: 'inherit',
-  env: { ...process.env, GOCACHE: cache, GOTMPDIR: temporary, TMPDIR: temporary, GOMAXPROCS: '2' },
+  // GOTOOLCHAIN=local: an older Go fails instead of downloading an unreviewed toolchain.
+  env: { ...process.env, GOCACHE: cache, GOTMPDIR: temporary, TMPDIR: temporary, GOMAXPROCS: '2', GOTOOLCHAIN: 'local' },
 });
 child.on('error', () => { console.error('Unable to start Go. Install the documented Go toolchain first.'); process.exitCode = 1; });
 child.on('exit', async code => {
