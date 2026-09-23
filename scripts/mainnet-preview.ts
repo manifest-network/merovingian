@@ -1,5 +1,5 @@
 import type { AccountData, EncodeObject, OfflineDirectSigner } from '@cosmjs/proto-signing';
-import { CosmosClientManager, createValidatedConfig, parseAddress, type WalletProvider } from '@manifest-network/manifest-sdk';
+import { CosmosClientManager, createValidatedConfig, ManifestMCPError, ManifestMCPErrorCode, parseAddress, type WalletProvider } from '@manifest-network/manifest-sdk';
 import { buildManifest, metaHashHex, validateManifest } from '@manifest-network/manifest-sdk/deploy';
 import { MsgCreateLease, MsgSetItemCustomDomain } from '@manifest-network/manifestjs/dist/codegen/liftedinit/billing/v1/tx.js';
 import { pubkeyToAddress } from 'cosmjs-amino-modern';
@@ -201,6 +201,15 @@ export async function simulateDeployment(prepared: PreparedDeployment, simulate:
   };
 }
 
+/** SDK 0.23 verifies REST and RPC chain identity before exposing a signing
+ * client. Keep this tool's stable operator-facing codes for those mismatches. */
+export function simulationIdentityError(error: unknown): PreviewError | undefined {
+  if (!(error instanceof ManifestMCPError) || error.code !== ManifestMCPErrorCode.INVALID_CONFIG || typeof error.details?.actualChainId !== 'string') return undefined;
+  if (typeof error.details.rpcUrl === 'string') return new PreviewError('simulation_rpc_chain_mismatch');
+  if (typeof error.details.restUrl === 'string') return new PreviewError('simulation_rest_chain_mismatch');
+  return undefined;
+}
+
 /** Uses the published SDK transport, but its wallet contains no signing power. */
 export async function sdkDeploymentPreview(prepared: PreparedDeployment, source: WalletProvider, maxGas = PREVIEW_MAX_GAS) {
   assertFresh(prepared.plan.quote.expiresAt, Date.now());
@@ -212,7 +221,7 @@ export async function sdkDeploymentPreview(prepared: PreparedDeployment, source:
   });
   const chain = CosmosClientManager.getInstance(config, wallet);
   try {
-    const client = await chain.getSigningClient();
+    const client = await chain.getSigningClient().catch((error: unknown) => { throw simulationIdentityError(error) ?? error; });
     if (await client.getChainId() !== MAINNET.chainId) throw new PreviewError('simulation_rpc_chain_mismatch');
     // Calling simulate never signs: CosmJS only reads the public key and sequence
     // and sends an unsigned tx to the chain's simulation query.

@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 import type { OfflineDirectSigner } from '@cosmjs/proto-signing';
-import type { WalletProvider } from '@manifest-network/manifest-sdk';
+import { ManifestMCPError, ManifestMCPErrorCode, type WalletProvider } from '@manifest-network/manifest-sdk';
 import { MsgCreateLease, MsgSetItemCustomDomain } from '@manifest-network/manifestjs/dist/codegen/liftedinit/billing/v1/tx.js';
 import { MAINNET, publicInputs, type Quote } from '../scripts/mainnet-config.js';
-import { DOMAIN_PLACEHOLDER_UUID, PREVIEW_MAX_GAS, fetchPublicAccountWallet, prepareDeployment, previewFee, publicAccountWallet, publicSimulationWallet, simulateDeployment } from '../scripts/mainnet-preview.js';
+import { DOMAIN_PLACEHOLDER_UUID, PREVIEW_MAX_GAS, PreviewError, fetchPublicAccountWallet, prepareDeployment, previewFee, publicAccountWallet, publicSimulationWallet, simulateDeployment, simulationIdentityError } from '../scripts/mainnet-preview.js';
 
 const now = Date.parse('2026-09-17T18:00:00.000Z');
 const denom = 'factory/manifest1afk9zr2hn2jsac63h4hm60vl9z3e5u69gndzf7c99cqge3vzwjzsfmy9qj/upwr';
@@ -211,4 +211,16 @@ test('public source rejects failed, redirected, malformed and oversized response
     await assert.rejects(() => fetchPublicAccountWallet(generatorAddress, publicFetch({ failAccount: response }).fetcher, now), error => error instanceof Error && error.message === 'public_chain_account_query_failed');
   }
   await assert.rejects(() => fetchPublicAccountWallet(generatorAddress, (async () => { throw new Error('secret upstream diagnostic'); }) as typeof fetch, now), error => error instanceof Error && error.message === 'public_chain_account_query_failed');
+});
+
+test('SDK chain-identity failures keep the preview tool\'s stable error codes', () => {
+  const mismatch = (details: Record<string, unknown>) => new ManifestMCPError(ManifestMCPErrorCode.INVALID_CONFIG, 'chain identity does not match', details);
+  const rpc = simulationIdentityError(mismatch({ expectedChainId: MAINNET.chainId, actualChainId: 'other-chain', rpcUrl: MAINNET.rpcUrl }));
+  const rest = simulationIdentityError(mismatch({ expectedChainId: MAINNET.chainId, actualChainId: 'other-chain', restUrl: MAINNET.restUrl }));
+  assert.ok(rpc instanceof PreviewError && rest instanceof PreviewError);
+  assert.deepEqual([rpc.message, rest.message], ['simulation_rpc_chain_mismatch', 'simulation_rest_chain_mismatch']);
+  // Other configuration and transport failures keep their original error.
+  for (const other of [mismatch({ restUrl: MAINNET.restUrl }), new ManifestMCPError(ManifestMCPErrorCode.RPC_CONNECTION_FAILED, 'unavailable', { rpcUrl: MAINNET.rpcUrl, actualChainId: 'x' }), new Error('x')]) {
+    assert.equal(simulationIdentityError(other), undefined);
+  }
 });

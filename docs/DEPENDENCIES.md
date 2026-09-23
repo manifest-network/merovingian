@@ -1,17 +1,17 @@
 # Published dependencies
 
-JavaScript dependencies come from npm and are pinned by `package-lock.json`. The application does not import, link, or build any local Manifest checkout. SDK version: `@manifest-network/manifest-sdk@0.22.0`; generated messages: `@manifest-network/manifestjs@3.0.0`. The operator-only native helper uses pinned published Go modules as described below.
+JavaScript dependencies come from npm and are pinned by `package-lock.json`. The application does not import, link, or build any local Manifest checkout. SDK version: `@manifest-network/manifest-sdk@0.23.0`; generated messages: `@manifest-network/manifestjs@4.0.0`. The operator-only native helper uses pinned published Go modules as described below.
 
-The published SDK differs from the development checkout. Runtime contribution verification explicitly checks RPC and REST chain identities. Deployment tooling checks chain identity before creating a signing client. Compatibility is verified against the installed npm packages.
+The published SDK differs from the development checkout. Runtime contribution verification explicitly checks RPC and REST chain identities. SDK 0.23.0 itself refuses a REST endpoint whose `node_info` reports another chain before exposing queries, and a signing RPC connection whose chain ID differs; the deployment tooling keeps its own chain-identity checks before creating a signing client as defense in depth and maps an SDK identity refusal to stable preview error codes. Compatibility is verified against the installed npm packages.
 
 ## Dependency overrides
 
-The lockfile applies two published dependency overrides:
+The lockfile applies no dependency overrides. The `axios` and `protobufjs` overrides used with SDK 0.22.0 were removed with the 0.23.0 upgrade: manifestjs 4.0.0 depends on Manifest's published forks, which declare the patched lines directly.
 
-- `axios@1.20.0` replaces an older 1.x version pinned by the LCD dependency and addresses published HTTP-client advisories.
-- `protobufjs@7.6.6` replaces the vulnerable 6.x dependency under ICS23. No patched 6.x release is available. ICS23 uses generated `protobufjs/minimal` codecs; test and live deployment coverage exercise compatibility. This is a dependency override, not a change to the Manifest package source.
+- `@cosmology/lcd` resolves to `@manifest-network/lcd@0.14.7`, which declares `axios@^1.19.0`; the lockfile resolves a single `axios@1.20.0`.
+- `@confio/ics23` resolves to `@manifest-network/ics23@0.6.10` (through `@manifest-network/stargate@0.32.4-ll.5`), which declares `protobufjs@^7.6.5` instead of the vulnerable 6.x line; the lockfile resolves a single `protobufjs@7.6.6`.
 
-The remaining low-severity audit finding is inherited through `elliptic` in the SDK's Cosmos signing dependency. A fresh audit on 2026-09-17 reports zero moderate/high/critical findings and 11 low dependency paths to the same advisory. SDK 0.22.0 remained the latest published SDK at this check. SDK 0.23.0 and manifestjs 4.0.0 were published on 2026-09-22 and have not been adopted yet.
+The remaining low-severity audit finding is inherited through `elliptic` in the SDK's Cosmos signing dependency. A fresh audit on 2026-09-23, after adopting SDK 0.23.0 and manifestjs 4.0.0 (both published on 2026-09-22), reports zero moderate/high/critical findings and 11 low dependency paths to the same advisory; no fixed `elliptic` release exists.
 
 [Dependabot](../.github/dependabot.yml) proposes npm, GitHub Actions and Docker updates. It does not cover:
 

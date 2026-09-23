@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { MAINNET, mainnetPaths, publicInputs } from './mainnet-config.js';
 import { collectQuote } from './mainnet.js';
 import { verifyLaunchLease, type LaunchBinding } from './mainnet-launch-plan.js';
-import { createKeyringWalletProvider } from './keyring-wallet.js';
+import { createKeyringWalletProvider, type KeyringWalletProvider } from './keyring-wallet.js';
 import { MAINNET_PROVIDER } from './mainnet-provider.js';
 import { normalizeTrustedProxyCidrs, trustedProxyCidrsSchema, withTrustedProxyCidrs } from './runtime-proxy.js';
 
@@ -290,9 +290,12 @@ async function main() {
       || quote.domainClaim.leaseUuid !== MAINNET_UPDATE_LEASE || quote.domainClaim.tenant !== binding.tenant) fail('update_live_lease_or_domain_mismatch');
     const proof = JSON.parse(await readFile(resolve(paths.directory, 'keyring-check.json'), 'utf8'));
     if (proof.status !== 'passed' || proof.address !== binding.tenant || proof.helperSha256 !== createHash('sha256').update(await readFile(helper)).digest('hex')) fail('update_helper_compatibility_proof_missing');
-    const wallet = await createKeyringWalletProvider({ helperPath: helper, home, keyName, keyringBackend: 'os', expectedAddress: binding.tenant, chainId: MAINNET.chainId });
+    // SDK 0.23 verifies REST chain identity while creating the read client, so
+    // create it before the keyring wallet: a failed check then skips no cleanup.
     const client = await createManifestReadClient({ config: { chainId: MAINNET.chainId, rpcUrl: MAINNET.rpcUrl, restUrl: MAINNET.restUrl, gasPrice: binding.gasPrice, retry: { maxRetries: 0 } } });
+    let wallet: KeyringWalletProvider | undefined;
     try {
+      wallet = await createKeyringWalletProvider({ helperPath: helper, home, keyName, keyringBackend: 'os', expectedAddress: binding.tenant, chainId: MAINNET.chainId });
       const operationId = state?.operationId ?? randomUUID();
       const provider = updateProvider(binding, wallet, operationId, async () => {
         const value = await client.getLease(parseLeaseUuid(MAINNET_UPDATE_LEASE));
@@ -304,7 +307,7 @@ async function main() {
       }
       const result = command === 'prepare' ? state : await advanceMainnetUpdate(state, { ...provider, save: value => durableJson(statePath, value) }, command === 'run');
       console.log(JSON.stringify({ phase: result.phase, leaseUuid: result.leaseUuid, image: result.image, manifestHash: result.manifestHash, observed: result.observed ?? null, newLeaseCreated: false, chainTransactionSent: false, cloudflareProxyAllowed: false, savedTo: statePath }, null, 2));
-    } finally { client.dispose(); await wallet.disconnect(); }
+    } finally { client.dispose(); await wallet?.disconnect(); }
   } finally {
     try { if (JSON.parse(await readFile(lockPath, 'utf8')).id === lockId) await unlink(lockPath); } catch { /* Stale locks require local review. */ }
   }

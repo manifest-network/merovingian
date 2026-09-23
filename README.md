@@ -42,7 +42,8 @@ with pinned, checksum-verified `actionlint` and `shellcheck`
 (`bash scripts/lint-ci.sh`). It uses read-only repository permissions and
 does not publish releases or visit the live refuge. [Dependabot](.github/dependabot.yml)
 proposes weekly npm, GitHub Actions and Docker updates after a seven-day cooldown.
-The Manifest SDK and CosmJS packages arrive as one group for deliberate review.
+The Manifest SDK and CosmJS packages arrive as one group for deliberate review;
+first-party `@manifest-network/*` releases skip the cooldown.
 For the keyring helper's Go module, Dependabot proposes security updates only.
 Security updates depend on Dependabot alerts from the repository's dependency graph.
 See [dependency notes](docs/DEPENDENCIES.md) for what is maintained manually.

@@ -205,8 +205,8 @@ async function main() {
   try { await lock.writeFile(JSON.stringify({ token: lockToken, pid: process.pid, createdAt: new Date().toISOString() })); await lock.sync(); }
   finally { await lock.close(); }
   try {
-    // All read-client factories finish before acquiring the signing manager:
-    // SDK 0.22.0 shares a mutable singleton for identical network endpoints.
+    // Read clients are created before the signing manager. SDK 0.23 isolates
+    // managers per wallet and config, so the order is defense in depth only.
     const freshQuote = await collectQuote(inputs);
     let state = await readState(statePath);
     if (!state) {

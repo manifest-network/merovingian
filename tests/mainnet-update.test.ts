@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { Lease, LeaseState } from '@manifest-network/manifestjs/dist/codegen/liftedinit/billing/v1/types.js';
+import { updateLease } from '@manifest-network/manifest-sdk/deploy';
 import { MAINNET } from '../scripts/mainnet-config.js';
 import type { LaunchBinding } from '../scripts/mainnet-launch-plan.js';
 import { MAINNET_PROVIDER } from '../scripts/mainnet-provider.js';
@@ -172,6 +173,28 @@ test('provider update transport binds exact host/lease/method and stable idempot
   const redirected = mainnetUpdateFetch(operation, (async () => new Response('', { status: 302 })) as typeof fetch);
   await assert.rejects(() => redirected(url, { method: 'POST' }), /transport_refused/);
   assert.equal(observed.length, 1);
+});
+
+test('SDK updateLease sends one journal Idempotency-Key, no redirects and the exact manifest through the update transport', async () => {
+  // Wire-level regression for SDK upgrades: the SDK builds the request and the
+  // repository transport adds the journaled key. Fred v0.13 ignores the key;
+  // later Fred requires exactly one canonical UUIDv4.
+  const operation = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+  const manifest = JSON.stringify({ services: { refuge: { image: 'fixture' } } });
+  const observed: { url: string; init: RequestInit; headers: Headers }[] = [];
+  const transport = mainnetUpdateFetch(operation, (async (input, init) => {
+    observed.push({ url: String(input), init: init!, headers: new Headers(init?.headers) });
+    return Response.json({ status: 'updating' });
+  }) as typeof fetch);
+  const response = await updateLease(MAINNET_PROVIDER.url, MAINNET_UPDATE_LEASE, new TextEncoder().encode(manifest), 'local-test-only', transport);
+  assert.equal(response.status, 'updating');
+  assert.equal(observed.length, 1);
+  const [{ url, init, headers }] = observed;
+  assert.equal(url, `${MAINNET_PROVIDER.url}/v1/leases/${MAINNET_UPDATE_LEASE}/update`);
+  assert.deepEqual([init.method, init.redirect, init.credentials, init.cache], ['POST', 'error', 'omit', 'no-store']);
+  assert.equal(headers.get('Idempotency-Key'), operation);
+  assert.equal(headers.get('Authorization'), 'Bearer local-test-only');
+  assert.deepEqual(JSON.parse(String(init.body)), { payload: Buffer.from(manifest).toString('base64') });
 });
 
 test('published release byte encoding is bounded and canonical; malformed manifests never enter a journal', () => {

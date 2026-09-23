@@ -1,6 +1,6 @@
 # Local keyring operator workflow
 
-Merovingian uses a temporary adapter to connect a protected `manifestd` OS keyring to the published `@manifest-network/manifest-sdk@0.22.0`. No browser wallet connection is needed. The production key's protected OS copy passed the local compatibility proof after the user imported it locally. The intended upstream replacement is [ENG-1012 — SDK: reuse existing manifestd keyrings for transaction and provider signing](https://linear.app/liftedinit/issue/ENG-1012/sdk-reuse-existing-manifestd-keyrings-for-transaction-and-provider).
+Merovingian uses a temporary adapter to connect a protected `manifestd` OS keyring to the published `@manifest-network/manifest-sdk@0.23.0`. No browser wallet connection is needed. The production key's protected OS copy passed the local compatibility proof after the user imported it locally. The intended upstream replacement is [ENG-1012 — SDK: reuse existing manifestd keyrings for transaction and provider signing](https://linear.app/liftedinit/issue/ENG-1012/sdk-reuse-existing-manifestd-keyrings-for-transaction-and-provider).
 
 The adapter consists of the Linux [native helper](../tools/keyring-signer/README.md) and [`scripts/keyring-wallet.ts`](../scripts/keyring-wallet.ts). The helper uses the published `github.com/manifest-network/cosmos-sdk@v0.50.14-liftedinit.1` fork matching the installed CLI. It reads the existing named key through Cosmos keyring APIs and supports public-key lookup, direct transaction signatures, and ADR-036 arbitrary-message signatures. It does not export keys, broadcast transactions, or serve a network API.
 
@@ -63,7 +63,7 @@ npm run mainnet:preview -- \
   --key-name merovingian
 ```
 
-The preflight and plan commands read no wallet secrets. Both preview paths give the published SDK an isolated wallet whose signing methods always throw. The SDK sends unsigned simulation queries to the verified mainnet RPC; it does not broadcast or authenticate with the provider.
+The preflight and plan commands read no wallet secrets. Both preview paths give the published SDK an isolated wallet whose signing methods always throw. The SDK sends unsigned simulation queries to the verified mainnet RPC; it does not broadcast or authenticate with the provider. SDK 0.23 also refuses a REST or RPC endpoint that reports another chain; the preview reports that as `simulation_rest_chain_mismatch` or `simulation_rpc_chain_mismatch`.
 
 The preview rebuilds the manifest from allowlisted public configuration and the immutable image digest. It saves `.local/mainnet/deployment-preview.json`, containing the exact manifest/hash, unsigned lease message, estimated lease-creation fee, and a custom-domain template. The preview checks the fresh quote, selected nano SKU, funded credit, wallet fee balance, and a gas ceiling. Simulation does not authorize spending.
 
@@ -102,7 +102,7 @@ A crash may leave `launch/run.lock` or a transaction `.lock`. Review the recorde
 
 The completed launch followed the published SDK order: create lease, claim the custom domain for `refuge`, upload the exact hashed manifest, and poll readiness. Fred keeps the native instance FQDN separately from the custom domain. The authenticated connection response supplied **`refuge-928a176.barney0.manifest0.net`** for Cloudflare's verified **DNS-only / gray-cloud CNAME**. Launch state remains `awaiting-dns`, the CLI's last provider-upload phase; the CLI neither modifies DNS nor records later acceptance. Public DNS, normal TLS, HTTP/MCP, indexing, and the existing funding receipt passed in `.local/mainnet/dns-acceptance.json` and `.local/mainnet/live-acceptance.json`. See [MAINNET.md](MAINNET.md#cloudflare-and-launch-sequence). Testnet retirement behavior subsequently passed 18 checks, then its lease was confirmed CLOSED at **20:03:48 UTC** following the user's separate shutdown instruction. Mainnet remains live.
 
-Later updates use the SDK's `updateApp` on the same ACTIVE lease; rollback reapplies the previous pinned manifest. `restoreApp` instead uses a closed lease's retained data to create a new lease, incurs new fees/reserve, and does not restore custom domains. Neither operation is part of this launch command or automatically authorized by its fee cap.
+Later updates use the [existing-lease update workflow](MAINNET.md#existing-lease-update-workflow), which sends the SDK's `updateLease` request on the same ACTIVE lease with the journal's operation identifier as its `Idempotency-Key`; rollback reapplies the previous pinned manifest. `restoreApp` instead uses a closed lease's retained data to create a new lease, incurs new fees/reserve, and does not restore custom domains. Neither operation is part of this launch command or automatically authorized by its fee cap.
 
 ## Rebuilding the reviewed helper
 
