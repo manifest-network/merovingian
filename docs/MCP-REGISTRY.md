@@ -128,13 +128,21 @@ cancellation or a real OIDC exchange. On 2026-09-22, a
 [local dry run](#local-dry-run) of the current script in a fresh public clone
 returned `already-published` for `0.4.6`. Its saved snapshot was byte-identical
 to the committed [`mcp-registry-0.4.6.json`](evidence/mcp-registry-0.4.6.json).
-The workflow has not yet run in GitHub Actions. Its first production publication
-needs its own explicit authorization.
+On 2026-09-23, two dispatches for `0.4.6` at `6cbce45` ran in GitHub Actions:
+[`mode=preflight`](https://github.com/manifest-network/merovingian/actions/runs/35861755064)
+and [`mode=publish`](https://github.com/manifest-network/merovingian/actions/runs/35861847194).
+Both Preflight jobs passed the approval-environment check, fetched the live
+`main`, and returned a verified `already-published` no-op. Their snapshots were
+byte-identical to the committed record. Both Publish jobs were skipped, so the
+approval, OIDC login and publish path has not yet run. The next release's
+publication will be its first real use and needs its own explicit authorization.
+The manual PAT fallback remains available if that login fails.
 
-### One-time approval environment
+### Approval environment
 
-Before the first dispatch, a repository administrator creates the
-`mcp-registry-publish` environment (**Settings → Environments**):
+The `mcp-registry-publish` environment (**Settings → Environments**) was
+configured on 2026-09-23 with one required reviewer, administrator bypass
+disabled, and a single `main` branch rule. It must keep this configuration:
 
 - **Required reviewers:** at least one maintainer. Enable *Prevent self-review*
   only if at least two reviewers can approve each other's dispatches.
@@ -145,7 +153,7 @@ Before the first dispatch, a repository administrator creates the
 - **Disable** *Allow administrators to bypass configured protection rules*.
 - No environment secrets. OIDC needs none.
 
-Configuring the environment is an administrative change that needs its own
+Changing the environment is an administrative change that needs its own
 authorization. A job that names a missing environment makes GitHub create it
 **without protection**. The unprivileged Preflight job therefore reads the
 environment through the REST API first. In `publish` mode it stops unless

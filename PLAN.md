@@ -1,7 +1,7 @@
 # Merovingian v1
 
-Status: mainnet 0.4.3 is live at https://merovingian.manifest.network and published in the official MCP Registry; the testnet lease is closed. Publication of 0.4.2 and one fresh-agent visit passed earlier on 2026-09-18. See the [discovery report](docs/MCP-DISCOVERY.md) and [mainnet operations](docs/MAINNET.md) for evidence and current status.
-Updated: 2026-09-18.
+Status: mainnet 0.4.6 is live at https://merovingian.manifest.network and published in the official MCP Registry; the testnet lease is closed. Publication of 0.4.2 and one fresh-agent visit passed earlier on 2026-09-18. Registry publication now runs through the approval-gated GitHub Actions workflow ([ENG-1046](https://linear.app/liftedinit/issue/ENG-1046)). See the [discovery report](docs/MCP-DISCOVERY.md), [mainnet operations](docs/MAINNET.md) and [release 0.4.6](docs/RELEASE-0.4.6.md) for evidence and current status.
+Updated: 2026-09-23.
 
 ## Agreed direction
 
@@ -25,7 +25,7 @@ Publication is tracked in [ENG-1019](https://linear.app/liftedinit/issue/ENG-101
 and the discovery journey in [ENG-1021](https://linear.app/liftedinit/issue/ENG-1021).
 This work made no deployment, DNS, Fred, or `manifest-deploy` changes.
 
-Release `0.4.3` is now deployed on the existing mainnet lease and published in the
+Release `0.4.3` was deployed on the existing mainnet lease and published in the
 registry after separate explicit approval. It aligns MCP identities and release
 versions and labels registry amenities fictional. The runtime/server-card name
 changed from `network.manifest.merovingian/merovingian` to
@@ -34,6 +34,9 @@ need to update it. The `/mcp` endpoint is unchanged. Live acceptance was read-on
 and preserved the serving totals; the full `scripts/smoke.ts` and serving paths
 were not rerun because the release authorization excluded live visits. The
 immutable `0.4.2` listing and its discovery visit remain historical evidence.
+Releases `0.4.4` through `0.4.6` followed on the same lease. They added runtime
+image hardening, a healthcheck fix, complete API contracts and read-only smoke
+checks; see the [0.4.6 release record](docs/RELEASE-0.4.6.md).
 
 Counter backups remain deferred. The user prefers discovery work first and relies
 on the provider's retained-data restore capability for now. This decision does not
