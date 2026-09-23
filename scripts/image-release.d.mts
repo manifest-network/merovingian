@@ -44,7 +44,10 @@ interface CommonOptions {
   refreshMain?: (options: { cwd: string; git?: Git }) => void;
 }
 export function runPreflight(options: CommonOptions & { cwd: string; mode: string; sourceDirectory: string; api?: string; githubToken?: string }): Promise<Evidence>;
-export function runCandidate(options: CommonOptions & { docker: Docker; imageIdFile: string; runtimeReport: string; scanDirectory: string }): Promise<Evidence>;
+export function readTarFiles(path: string, wanted: (name: string) => boolean, options?: { maxBytes?: number }): Promise<Map<string, Buffer>>;
+export function archiveIdentity(path: string, expected: { imageId: string; version: string; sourceRevision: string }): Promise<{ configDigest: string }>;
+export function runCandidate(options: CommonOptions & { docker: Docker; imageIdFile: string }): Promise<Evidence>;
+export function runChecks(options: CommonOptions & { imageId: string; configDigest: string; runtimeReport: string; scanDirectory: string }): Promise<Evidence>;
 export function runPublication(options: CommonOptions & {
   cwd: string; docker: Docker; imageId: string; configDigest: string; archiveSha256: string; archive: string; dockerConfigDirectory: string;
   token: string | undefined; username: string | undefined; sleep?: (ms: number) => Promise<unknown>;

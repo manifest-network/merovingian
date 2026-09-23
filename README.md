@@ -58,8 +58,9 @@ latest records. See the [publication runbook](docs/MCP-REGISTRY.md#github-action
 
 Runtime images are published only by the manually dispatched
 [Release image workflow](.github/workflows/release-image.yml). Its read-only
-Verify job builds the reviewed release commit and runs the repository, runtime
-and advisory checks. The Publish job waits for approval in the protected
+Build job builds the reviewed release commit without running npm code on the
+runner, and its Check job runs the repository, runtime and advisory checks on
+the saved image. The Publish job waits for approval in the protected
 `image-release` environment, pushes exactly the verified image to GHCR, verifies
 it anonymously and attests its build provenance. See the
 [image release runbook](docs/IMAGE-RELEASE.md).

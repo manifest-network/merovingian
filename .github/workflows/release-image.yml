@@ -3,11 +3,13 @@ run-name: Image ${{ inputs.mode }} ${{ inputs.version }}
 
 # Builds, verifies and publishes the runtime image for a reviewed release.
 # Manual dispatch from main only: no push, pull_request, tag or schedule trigger.
-# Verify builds the exact source revision without write access, runs the
-# repository, runtime and advisory checks, and keeps the image's exact bytes.
-# Publish is approval-gated: it pushes those bytes to GHCR, verifies them
-# anonymously and attests build provenance. The existing-lease update and MCP
-# Registry publication remain separate operations. See docs/IMAGE-RELEASE.md.
+# Build runs no npm code on the runner: it builds the exact source revision and
+# records the image ID, configuration digest and archive SHA-256 that Publish
+# trusts. Check runs the repository, runtime and advisory checks on those saved
+# bytes; its result only gates Publish. Publish is approval-gated: it pushes the
+# verified bytes to GHCR, verifies them anonymously and attests build provenance.
+# The existing-lease update and MCP Registry publication remain separate
+# operations. See docs/IMAGE-RELEASE.md.
 on:
   workflow_dispatch:
     inputs:
@@ -37,11 +39,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  verify:
-    name: Verify
+  build:
+    name: Build
     if: github.repository == 'manifest-network/merovingian' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 30
     permissions:
       contents: read
       # Read-only check that the approval environment exists and is protected
@@ -54,6 +56,8 @@ jobs:
       config_digest: ${{ steps.candidate.outputs.config_digest }}
       archive_sha256: ${{ steps.candidate.outputs.archive_sha256 }}
       artifact: image-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+    # Only main's dependency-free script, runner tools and pinned first-party actions
+    # run on this runner. The Dockerfile's RUN steps stay inside BuildKit containers.
     steps:
       - name: Check out dispatched main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -75,16 +79,7 @@ jobs:
           node scripts/image-release.mjs preflight
           --version "$RELEASE_VERSION" --source-revision "$SOURCE_REVISION" --mode "$RELEASE_MODE"
           --source-dir "$RUNNER_TEMP/source" --output-dir "$RUNNER_TEMP/image-release"
-      # The next steps run the checked source revision's own lockfile, checks and
-      # Dockerfile, in a job that holds only read permissions.
-      - name: Install locked dependencies of the source revision
-        working-directory: ${{ runner.temp }}/source
-        run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Run repository checks at the source revision
-        working-directory: ${{ runner.temp }}/source
-        run: npm run check
-      - name: Build the candidate without publishing
-        working-directory: ${{ runner.temp }}/source
+      - name: Build the source revision without publishing
         env:
           RELEASE_VERSION: ${{ inputs.version }}
           SOURCE_REVISION: ${{ inputs.source_revision }}
@@ -93,14 +88,8 @@ jobs:
           --provenance=false --sbom=false
           --label "org.opencontainers.image.revision=$SOURCE_REVISION"
           --label "org.opencontainers.image.version=$RELEASE_VERSION"
-          --iidfile "$RUNNER_TEMP/image-release/image-id" .
-      - name: Check isolated runtime and persistence
-        working-directory: ${{ runner.temp }}/source
-        run: node scripts/check-runtime-image.mjs "$(cat "$RUNNER_TEMP/image-release/image-id")" "$RUNNER_TEMP/image-release/runtime.json"
-      - name: Scan the exact candidate and apply advisory policy
-        working-directory: ${{ runner.temp }}/source
-        run: bash scripts/scan-runtime-image.sh "$(cat "$RUNNER_TEMP/image-release/image-id")" "$RUNNER_TEMP/image-release/scan"
-      - name: Record and save the verified candidate
+          --iidfile "$RUNNER_TEMP/image-release/image-id" "$RUNNER_TEMP/source"
+      - name: Record and save the candidate
         id: candidate
         env:
           RELEASE_VERSION: ${{ inputs.version }}
@@ -108,26 +97,103 @@ jobs:
         run: >-
           node scripts/image-release.mjs candidate
           --version "$RELEASE_VERSION" --source-revision "$SOURCE_REVISION"
-          --image-id-file "$RUNNER_TEMP/image-release/image-id" --runtime-report "$RUNNER_TEMP/image-release/runtime.json"
-          --scan-dir "$RUNNER_TEMP/image-release/scan" --output-dir "$RUNNER_TEMP/image-release"
-      - name: Upload the verified candidate
-        if: steps.candidate.outputs.decision == 'publish'
+          --image-id-file "$RUNNER_TEMP/image-release/image-id" --output-dir "$RUNNER_TEMP/image-release"
+      - name: Upload the candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: image-candidate-${{ github.run_id }}-${{ github.run_attempt }}
-          retention-days: 1
+          # Bounds the approval window and any Publish re-run that still has to push.
+          retention-days: 7
           if-no-files-found: error
           path: ${{ runner.temp }}/image-release/candidate/image.tar
-      - name: Upload sanitized verification evidence
+      - name: Upload sanitized build evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: image-release-verify-${{ github.run_id }}-${{ github.run_attempt }}
+          name: image-release-build-${{ github.run_id }}-${{ github.run_attempt }}
           retention-days: 90
           if-no-files-found: warn
           path: |
             ${{ runner.temp }}/image-release/preflight.json
             ${{ runner.temp }}/image-release/candidate.json
+
+  check:
+    name: Check
+    needs: build
+    if: github.repository == 'manifest-network/merovingian' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    # This job runs the source revision's own npm dependencies and checks against
+    # the saved candidate. Its success gates Publish; none of its values reach the
+    # published image, its digests or the approval gate's identity checks.
+    permissions:
+      contents: read
+    steps:
+      - name: Check out dispatched main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check out the source revision verified by Build
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_revision }}
+          path: source
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Download the candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.build.outputs.artifact }}
+          path: ${{ runner.temp }}/candidate
+      - name: Load exactly the recorded candidate
+        env:
+          IMAGE_ID: ${{ needs.build.outputs.image_id }}
+          ARCHIVE_SHA256: ${{ needs.build.outputs.archive_sha256 }}
+        run: |
+          printf '%s  %s\n' "$ARCHIVE_SHA256" "$RUNNER_TEMP/candidate/image.tar" | sha256sum --check --strict --status
+          docker --host unix:///var/run/docker.sock image load --quiet --input "$RUNNER_TEMP/candidate/image.tar"
+          test "$(docker --host unix:///var/run/docker.sock image inspect --format '{{.Id}}' "$IMAGE_ID")" = "$IMAGE_ID"
+      - name: Install locked dependencies of the source revision
+        working-directory: source
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run repository checks at the source revision
+        working-directory: source
+        run: npm run check
+      - name: Check isolated runtime and persistence
+        working-directory: source
+        env:
+          IMAGE_ID: ${{ needs.build.outputs.image_id }}
+        run: node scripts/check-runtime-image.mjs "$IMAGE_ID" "$RUNNER_TEMP/image-release/runtime.json"
+      - name: Scan the exact candidate and apply advisory policy
+        working-directory: source
+        env:
+          IMAGE_ID: ${{ needs.build.outputs.image_id }}
+        run: bash scripts/scan-runtime-image.sh "$IMAGE_ID" "$RUNNER_TEMP/image-release/scan"
+      - name: Bind the reports to the recorded candidate
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+          IMAGE_ID: ${{ needs.build.outputs.image_id }}
+          CONFIG_DIGEST: ${{ needs.build.outputs.config_digest }}
+        run: >-
+          node scripts/image-release.mjs checks
+          --version "$RELEASE_VERSION" --source-revision "$SOURCE_REVISION"
+          --image-id "$IMAGE_ID" --config-digest "$CONFIG_DIGEST"
+          --runtime-report "$RUNNER_TEMP/image-release/runtime.json" --scan-dir "$RUNNER_TEMP/image-release/scan"
+          --output-dir "$RUNNER_TEMP/image-release"
+      - name: Upload sanitized check evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: image-release-check-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/image-release/checks.json
             ${{ runner.temp }}/image-release/runtime.json
             ${{ runner.temp }}/image-release/scan/vulnerabilities.json
             ${{ runner.temp }}/image-release/scan/sbom.cdx.json
@@ -137,13 +203,13 @@ jobs:
 
   publish:
     name: Publish
-    needs: verify
+    needs: [build, check]
     if: >-
       github.repository == 'manifest-network/merovingian' && github.ref == 'refs/heads/main'
-      && inputs.mode == 'publish' && needs.verify.outputs.decision == 'publish'
+      && inputs.mode == 'publish' && needs.build.outputs.decision == 'publish'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    # Required reviewers approve the verified candidate before any step runs.
+    # Required reviewers approve the checked candidate before any step runs.
     environment: image-release
     # Every step here can push to the package and mint OIDC tokens. Only the
     # SHA-pinned first-party checkout, setup-node, artifact and attest actions,
@@ -165,19 +231,22 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
-      - name: Download the verified candidate
+      # A re-run after the image was pushed must not depend on the expiring archive;
+      # the script refuses to push without it and never trusts it before hashing.
+      - name: Download the candidate
+        continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: ${{ needs.verify.outputs.artifact }}
+          name: ${{ needs.build.outputs.artifact }}
           path: ${{ runner.temp }}/candidate
       - name: Recheck, push the verified bytes once and verify anonymously
         id: publish
         env:
           RELEASE_VERSION: ${{ inputs.version }}
           SOURCE_REVISION: ${{ inputs.source_revision }}
-          IMAGE_ID: ${{ needs.verify.outputs.image_id }}
-          CONFIG_DIGEST: ${{ needs.verify.outputs.config_digest }}
-          ARCHIVE_SHA256: ${{ needs.verify.outputs.archive_sha256 }}
+          IMAGE_ID: ${{ needs.build.outputs.image_id }}
+          CONFIG_DIGEST: ${{ needs.build.outputs.config_digest }}
+          ARCHIVE_SHA256: ${{ needs.build.outputs.archive_sha256 }}
           # Reaches docker only on stdin, for one login immediately before the push.
           REGISTRY_TOKEN: ${{ github.token }}
         run: >-

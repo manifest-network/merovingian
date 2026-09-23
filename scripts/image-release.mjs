@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { appendFileSync, createReadStream, existsSync } from 'node:fs';
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
@@ -246,7 +246,7 @@ async function writeEvidence(outputDirectory, name, evidence) {
 }
 
 /**
- * Verify job, before any source-revision code runs: trusted dispatch, a source
+ * Build job, before any source-revision code runs: trusted dispatch, a source
  * revision on the live main that declares this version, an absent release tag and,
  * for publish mode, a protected approval environment. Then check out the source.
  */
@@ -288,7 +288,86 @@ export async function runPreflight(options) {
   }
 }
 
-/** Verify job, after the source revision's checks: bind the reports to one image and save its exact bytes. */
+async function readSlice(handle, position, length) {
+  const buffer = Buffer.alloc(length);
+  const { bytesRead } = await handle.read(buffer, 0, length, position);
+  if (bytesRead !== length) fail('archive', 'The candidate archive is truncated');
+  return buffer;
+}
+
+/** Read selected small regular files from a tar archive without extracting it. */
+export async function readTarFiles(path, wanted, { maxBytes = 1_048_576 } = {}) {
+  const handle = await open(path, 'r');
+  const found = new Map();
+  try {
+    const header = Buffer.alloc(512);
+    let offset = 0;
+    let longName = null;
+    for (;;) {
+      const { bytesRead } = await handle.read(header, 0, 512, offset);
+      if (bytesRead < 512 || header.every(byte => byte === 0)) break;
+      const field = (start, length) => header.subarray(start, start + length).toString('utf8').replace(/\0[\s\S]*$/, '');
+      const sizeField = field(124, 12).trim();
+      if (!/^[0-7]{1,11}$/.test(sizeField)) fail('archive', 'The candidate archive has a malformed tar header');
+      const size = parseInt(sizeField, 8);
+      const type = field(156, 1) || '0';
+      // Only POSIX ustar headers carry a name prefix; GNU headers reuse those bytes.
+      const ustar = header.subarray(257, 263).equals(Buffer.from('ustar\0', 'latin1'));
+      const name = longName ?? (ustar && field(345, 155) ? `${field(345, 155)}/${field(0, 100)}` : field(0, 100));
+      longName = null;
+      const dataOffset = offset + 512;
+      if (type === 'L') {
+        if (size > 4_096) fail('archive', 'The candidate archive has an oversized long name');
+        longName = (await readSlice(handle, dataOffset, size)).toString('utf8').replace(/\0[\s\S]*$/, '');
+      } else if (type === '0' && wanted(name)) {
+        if (size > maxBytes || found.has(name)) fail('archive', 'The candidate archive has an unexpected metadata entry');
+        found.set(name, await readSlice(handle, dataOffset, size));
+      }
+      offset = dataOffset + Math.ceil(size / 512) * 512;
+    }
+  } finally {
+    await handle.close();
+  }
+  return found;
+}
+
+/**
+ * Derive the configuration digest from the saved bytes themselves. With Docker's
+ * classic store the image ID is the configuration digest; with the containerd
+ * store it is the digest of an OCI manifest that names that configuration.
+ */
+export async function archiveIdentity(path, { imageId, version, sourceRevision }) {
+  const index = parseJson((await readTarFiles(path, name => name === 'manifest.json')).get('manifest.json') ?? Buffer.alloc(0));
+  if (!Array.isArray(index) || index.length !== 1 || typeof index[0]?.Config !== 'string') {
+    fail('archive', 'The candidate archive must contain exactly one image');
+  }
+  const configPath = index[0].Config;
+  const manifestPath = `blobs/sha256/${imageId.slice('sha256:'.length)}`;
+  const blobs = await readTarFiles(path, name => name === configPath || name === manifestPath);
+  const configBytes = blobs.get(configPath);
+  if (!configBytes) fail('archive', 'The candidate archive has no image configuration');
+  const configDigest = `sha256:${sha256(configBytes)}`;
+  if (configDigest !== imageId) {
+    const manifest = blobs.get(manifestPath);
+    if (!manifest || `sha256:${sha256(manifest)}` !== imageId || parseJson(manifest)?.config?.digest !== configDigest) {
+      fail('archive', 'The saved archive does not contain the candidate image');
+    }
+  }
+  const config = parseJson(configBytes);
+  const labels = config?.config?.Labels ?? {};
+  if (config?.os !== PLATFORM.os || config?.architecture !== PLATFORM.architecture
+    || labels['org.opencontainers.image.revision'] !== sourceRevision || labels['org.opencontainers.image.version'] !== version
+    || labels['org.opencontainers.image.source'] !== SOURCE_URL) {
+    fail('archive', 'The saved configuration is not the labelled linux/amd64 image for this source');
+  }
+  return { configDigest };
+}
+
+/**
+ * Build job, directly after the build and before any other code runs: bind the
+ * built image to its saved bytes. Nothing from npm runs in this job, so the image
+ * ID, configuration digest and archive SHA-256 recorded here are what Publish trusts.
+ */
 export async function runCandidate(options) {
   const opts = { clock: () => new Date(), ...options, timeouts: { ...DEFAULT_TIMEOUTS, ...options.timeouts } };
   const { version, sourceRevision, outputDirectory, docker } = opts;
@@ -302,31 +381,19 @@ export async function runCandidate(options) {
     }
     evidence.source = preflight.source;
     evidence.mode = preflight.mode;
+    evidence.environment = preflight.environment;
+    evidence.tag = preflight.tag;
     const imageId = (await readFile(opts.imageIdFile, 'utf8')).trim();
     if (!DIGEST_PATTERN.test(imageId)) fail('image', 'The build did not record an image ID');
-    const runtime = parseJson(await readFile(opts.runtimeReport));
-    if (runtime?.passed !== true || runtime.imageId !== imageId) fail('runtime', 'Isolated runtime checks did not pass for this image');
-    const policy = parseJson(await readFile(join(opts.scanDirectory, 'policy.json')));
-    const provenance = parseJson(await readFile(join(opts.scanDirectory, 'scan-provenance.json')));
-    if (policy?.passed !== true || !Array.isArray(policy.blocked) || policy.blocked.length
-      || provenance?.localImageId !== imageId || !DIGEST_PATTERN.test(provenance?.configurationDigest ?? '')
-      || policy.imageId !== provenance.configurationDigest) {
-      fail('scan', 'The advisory policy did not pass for this image');
-    }
     evidence.image = checkImageIdentity(await inspectImage(docker, imageId, opts.timeouts.dockerMs), { imageId, version, sourceRevision });
-    evidence.image.configDigest = provenance.configurationDigest;
-    evidence.runtime = { checkedAt: runtime.checkedAt, passed: true, completedChecks: runtime.completedChecks,
-      applicationFilesChecked: runtime.applicationFilesChecked, appArmor: runtime.appArmor?.status ?? null };
-    evidence.scan = { checkedAt: policy.checkedAt, passed: true, scannerVersion: policy.scannerVersion, databaseUpdatedAt: policy.databaseUpdatedAt,
-      blockedCount: 0, exceptionCount: Array.isArray(policy.accepted) ? policy.accepted.length : null,
-      reported: Array.isArray(policy.reported) ? policy.reported : [] };
     const archive = join(outputDirectory, 'candidate', ARCHIVE_NAME);
     await mkdir(join(outputDirectory, 'candidate'), { recursive: true, mode: 0o700 });
     const saved = await docker(['image', 'save', '--output', archive, imageId], { timeoutMs: opts.timeouts.saveMs });
     if (saved.exitCode !== 0 || saved.timedOut) fail('image', `Could not save the candidate (${dockerMessage(saved)})`);
+    evidence.image.configDigest = (await archiveIdentity(archive, { imageId, version, sourceRevision })).configDigest;
     evidence.archive = { name: ARCHIVE_NAME, sha256: await fileSha256(archive), bytes: (await stat(archive)).size };
     evidence.decision = preflight.decision;
-    evidence.outcome = preflight.decision === 'publish' ? 'awaiting-approval' : 'verified';
+    evidence.outcome = 'built';
     evidence.passed = true;
     return evidence;
   } catch (error) {
@@ -335,6 +402,46 @@ export async function runCandidate(options) {
   } finally {
     evidence.completedAt = opts.clock().toISOString();
     await writeEvidence(outputDirectory, 'candidate.json', evidence);
+  }
+}
+
+/**
+ * Check job: the runtime and advisory reports must describe the image that Build
+ * recorded. This job runs the source revision's own npm code, so its result only
+ * gates Publish; none of its values reach the published image or its digests.
+ */
+export async function runChecks(options) {
+  const opts = { clock: () => new Date(), ...options };
+  const { imageId, configDigest, outputDirectory } = opts;
+  const evidence = baseEvidence('checks', opts);
+  evidence.startedAt = opts.clock().toISOString();
+  await mkdir(outputDirectory, { recursive: true, mode: 0o700 });
+  try {
+    parseReleaseVersion(opts.version);
+    if (!DIGEST_PATTERN.test(imageId ?? '') || !DIGEST_PATTERN.test(configDigest ?? '')) fail('input', 'The built image ID or configuration digest is malformed');
+    evidence.image = { imageId, configDigest };
+    const runtime = parseJson(await readFile(opts.runtimeReport));
+    if (runtime?.passed !== true || runtime.imageId !== imageId) fail('runtime', 'Isolated runtime checks did not pass for this image');
+    const policy = parseJson(await readFile(join(opts.scanDirectory, 'policy.json')));
+    const provenance = parseJson(await readFile(join(opts.scanDirectory, 'scan-provenance.json')));
+    if (policy?.passed !== true || !Array.isArray(policy.blocked) || policy.blocked.length
+      || provenance?.localImageId !== imageId || provenance?.configurationDigest !== configDigest || policy.imageId !== configDigest) {
+      fail('scan', 'The advisory policy did not pass for this image');
+    }
+    evidence.runtime = { checkedAt: runtime.checkedAt, passed: true, completedChecks: runtime.completedChecks,
+      applicationFilesChecked: runtime.applicationFilesChecked, appArmor: runtime.appArmor?.status ?? null };
+    evidence.scan = { checkedAt: policy.checkedAt, passed: true, scannerVersion: policy.scannerVersion, databaseUpdatedAt: policy.databaseUpdatedAt,
+      blockedCount: 0, exceptionCount: Array.isArray(policy.accepted) ? policy.accepted.length : null,
+      reported: Array.isArray(policy.reported) ? policy.reported : [] };
+    evidence.outcome = 'checked';
+    evidence.passed = true;
+    return evidence;
+  } catch (error) {
+    recordError(evidence, error);
+    return evidence;
+  } finally {
+    evidence.completedAt = opts.clock().toISOString();
+    await writeEvidence(outputDirectory, 'checks.json', evidence);
   }
 }
 
@@ -352,7 +459,7 @@ async function pollVerification(opts, digest) {
 
 /**
  * Approval-gated publication of the verified bytes. Rechecks source and tag,
- * loads the archive whose SHA-256 the Verify job recorded, pushes once with a
+ * loads the archive whose SHA-256 the Build job recorded, pushes once with a
  * short-lived private login, always logs out, then verifies anonymously.
  */
 export async function runPublication(options) {
@@ -377,6 +484,10 @@ export async function runPublication(options) {
     evidence.decision = decision;
     let digest = null;
     if (decision === 'push') {
+      // The archive is only needed to push; an already-published re-run verifies and attests without it.
+      if (typeof opts.archive !== 'string' || !existsSync(opts.archive)) {
+        fail('archive', 'The verified candidate archive is unavailable (it expires 7 days after Build); dispatch again for a new candidate');
+      }
       if (await fileSha256(opts.archive) !== archiveSha256) fail('archive', 'The downloaded candidate differs from the verified archive');
       const loaded = await docker(['image', 'load', '--quiet', '--input', opts.archive], { timeoutMs: opts.timeouts.loadMs });
       if (loaded.exitCode !== 0 || loaded.timedOut) fail('image', `Could not load the verified candidate (${dockerMessage(loaded)})`);
@@ -443,7 +554,8 @@ export function renderSummary(evidence) {
   }
   const tag = evidence.tag ?? evidence.tagBefore;
   if (tag) rows.push(['Tag before', `${tag.state}${tag.digest ? ` ${tag.digest}` : ''}`]);
-  if (evidence.image?.imageId) rows.push(['Image ID (config digest)', evidence.image.imageId]);
+  if (evidence.image?.imageId) rows.push(['Image ID', evidence.image.imageId]);
+  if (evidence.image?.configDigest) rows.push(['Configuration digest', evidence.image.configDigest]);
   if (evidence.runtime) rows.push(['Runtime checks', `passed: ${evidence.runtime.completedChecks?.length ?? 0} checks`]);
   if (evidence.scan) rows.push(['Advisory policy', `passed: ${evidence.scan.blockedCount} blocked, ${evidence.scan.reported.length} reported`]);
   if (evidence.archive) rows.push(['Candidate archive SHA-256', evidence.archive.sha256]);
@@ -477,14 +589,16 @@ export function writeActionsFiles(evidence, env) {
 
 const USAGE = `Usage:
   node scripts/image-release.mjs preflight --version X.Y.Z --source-revision SHA --mode verify|publish --source-dir DIR --output-dir DIR
-  node scripts/image-release.mjs candidate --version X.Y.Z --source-revision SHA --image-id-file FILE --runtime-report FILE --scan-dir DIR --output-dir DIR
+  node scripts/image-release.mjs candidate --version X.Y.Z --source-revision SHA --image-id-file FILE --output-dir DIR
+  node scripts/image-release.mjs checks --version X.Y.Z --source-revision SHA --image-id ID --config-digest DIGEST --runtime-report FILE --scan-dir DIR --output-dir DIR
   node scripts/image-release.mjs publish --version X.Y.Z --source-revision SHA --image-id ID --config-digest DIGEST --archive-sha256 HEX --archive FILE --docker-config DIR --output-dir DIR`;
 
 export function parseArgs(args) {
   const [command, ...rest] = args;
   const allowed = {
     preflight: ['--version', '--source-revision', '--mode', '--source-dir', '--output-dir'],
-    candidate: ['--version', '--source-revision', '--image-id-file', '--runtime-report', '--scan-dir', '--output-dir'],
+    candidate: ['--version', '--source-revision', '--image-id-file', '--output-dir'],
+    checks: ['--version', '--source-revision', '--image-id', '--config-digest', '--runtime-report', '--scan-dir', '--output-dir'],
     publish: ['--version', '--source-revision', '--image-id', '--config-digest', '--archive-sha256', '--archive', '--docker-config', '--output-dir'],
   }[command];
   if (!allowed || rest.length !== allowed.length * 2) throw new Error(USAGE);
@@ -511,7 +625,9 @@ async function main(args) {
     evidence = await runPreflight({ ...common, mode: values['--mode'], sourceDirectory: resolve(values['--source-dir']), githubToken: env.GITHUB_TOKEN });
   } else if (command === 'candidate') {
     const docker = dockerRunner({ env, home, configDirectory: join(home, 'docker-config') });
-    evidence = await runCandidate({ ...common, docker, imageIdFile: resolve(values['--image-id-file']),
+    evidence = await runCandidate({ ...common, docker, imageIdFile: resolve(values['--image-id-file']) });
+  } else if (command === 'checks') {
+    evidence = await runChecks({ ...common, imageId: values['--image-id'], configDigest: values['--config-digest'],
       runtimeReport: resolve(values['--runtime-report']), scanDirectory: resolve(values['--scan-dir']) });
   } else {
     const configDirectory = resolve(values['--docker-config']);

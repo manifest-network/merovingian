@@ -12,7 +12,10 @@ remain separate operations with their own authorization.
 
 ## What the workflow does
 
-The **Verify** job has only `contents: read` and `actions: read`. It:
+The **Build** job has only `contents: read` and `actions: read`. Only `main`'s
+dependency-free [`scripts/image-release.mjs`](../scripts/image-release.mjs), the
+runner's `docker` and SHA-pinned first-party actions run on its runner; no npm
+code does. It:
 
 1. Accepts only a `workflow_dispatch` of this workflow on `main` in this repository.
 2. Checks the source revision. It must be a full commit on the live `main`,
@@ -24,51 +27,58 @@ The **Verify** job has only `contents: read` and `actions: read`. It:
    replaced.
 4. In `publish` mode, requires the `image-release` environment to be protected (see
    below). A missing environment would otherwise be created without protection.
-5. Checks out the source revision and runs `npm ci --ignore-scripts` and
-   `npm run check` there. It then builds a `linux/amd64` image with Buildx, with
-   no Buildx attestations. The image carries `org.opencontainers.image.revision`
-   and `org.opencontainers.image.version` labels.
-6. Runs the same isolated runtime checks and pinned advisory scan as the CI
-   [Final image job](IMAGE-SECURITY.md).
-7. Binds the runtime, scan and policy reports to that one image ID. It then saves
-   the image with `docker image save` and records the archive's SHA-256. In
-   `publish` mode it uploads the archive as a one-day artifact of the run.
+5. Builds the source revision's Dockerfile for `linux/amd64` with Buildx, with no
+   Buildx attestations. The Dockerfile's `RUN` steps stay inside BuildKit
+   containers. The image carries `org.opencontainers.image.revision` and
+   `org.opencontainers.image.version` labels.
+6. Saves the image with `docker image save`. It reads the configuration from the
+   saved bytes, checks that it is the labelled `linux/amd64` image for this source,
+   and records the image ID, configuration digest and archive SHA-256. It uploads
+   the archive as a run artifact kept for 7 days.
 
-The job summary shows what the approver reviews: version, source revision and
-whether it is the release commit, tag state, environment protection, runtime
-checks, advisory policy, image ID (configuration digest) and archive SHA-256.
+The **Check** job has only `contents: read`. It downloads the archive, checks its
+SHA-256, loads it and confirms the image ID Build recorded. It then runs the source
+revision's `npm ci --ignore-scripts` and `npm run check`, plus the same isolated
+runtime checks and pinned advisory scan as the CI
+[Final image job](IMAGE-SECURITY.md). Finally it checks that the reports describe
+that exact image. Its success gates Publish, but none of its values do.
 
-The **Publish** job runs only after approval in the `image-release` environment.
-It has `contents: read`, `packages: write`, `id-token: write` and
-`attestations: write`. It:
+The Build and Check job summaries show what the approver reviews: version, source
+revision and whether it is the release commit, tag state, environment protection,
+image ID, configuration digest, archive SHA-256, runtime checks and advisory
+policy.
+
+The **Publish** job runs only after both jobs succeed and the deployment is
+approved in the `image-release` environment. It has `contents: read`,
+`packages: write`, `id-token: write` and `attestations: write`. It:
 
 1. Rechecks the dispatch, source revision and tag. An absent tag is pushed. A tag
-   that already names the same verified configuration is an idempotent re-run.
-   Any other tag state refuses.
-2. Verifies the downloaded archive's SHA-256, loads it and checks the image ID,
-   platform and labels.
+   that already names the same verified configuration is an idempotent re-run,
+   which needs neither the archive nor a login. Any other tag state refuses.
+2. For a push, verifies the downloaded archive against Build's SHA-256, loads it
+   and checks the image ID, platform and labels.
 3. Logs in to GHCR with the job token, passed on stdin, in a private Docker
    configuration directory. It pushes once, then always logs out and deletes that
    directory.
 4. Reconciles a failed push only from anonymous reads. It never retries the push.
 5. Verifies the result anonymously: the tag resolves to the pushed digest, the
-   digest reference serves the same manifest, the configuration digest equals the
-   verified one, the platform is `linux/amd64` and every layer is readable.
+   digest reference serves the same manifest, the configuration digest equals
+   Build's, the configuration bytes match that digest, the platform is
+   `linux/amd64` and every layer is readable at its recorded size.
 6. Attests SLSA build provenance for the digest with
    [`actions/attest`](https://github.com/actions/attest). The attestation is signed
    through Sigstore and stored in GitHub's attestation store, not pushed to the
    registry. The job then checks it with `gh attestation verify`.
 
-Sanitized evidence is kept for 90 days in the run's `image-release-verify-*` and
-`image-release-publication-*` artifacts: preflight, candidate, runtime report,
-scan, SBOM, policy and publication records. The candidate archive expires after
-one day.
+Sanitized evidence is kept for 90 days in the run's `image-release-build-*`,
+`image-release-check-*` and `image-release-publication-*` artifacts. They hold the
+preflight, candidate, check, runtime, scan, SBOM, policy and publication records.
 
 ## One-time setup
 
 1. **Environment.** Create `image-release` with required reviewers. Disallow
    administrator bypass, and limit deployment branches to the selected branch
-   `main`. These are the same settings as `mcp-registry-publish`. The Verify job
+   `main`. These are the same settings as `mcp-registry-publish`. The Build job
    refuses `publish` mode until the environment passes this check.
 2. **Package access.** In the `merovingian` container package settings, open
    *Manage Actions access*, add `manifest-network/merovingian` and give it the
@@ -86,8 +96,8 @@ from `main`. Inputs:
 - `version`: the reviewed `MAJOR.MINOR.PATCH`, equal to `package.json`.
 - `source_revision`: the full 40-character release commit on `main`, normally the
   release merge commit.
-- `mode`: `verify` (the default) builds and checks a candidate and discards it.
-  `publish` also requests approval, then pushes and attests that candidate.
+- `mode`: `verify` (the default) builds and checks a candidate without publishing
+  it. `publish` also requests approval, then pushes and attests that candidate.
 
 Use `publish` for a release. Builds are not reproducible, because the Dockerfile
 upgrades Alpine packages at build time. A `verify` run is therefore only a dry
@@ -95,11 +105,12 @@ run: a later `publish` run builds and checks its own candidate.
 
 ## Approval
 
-Before approving, compare the Verify job summary with the release notes. The
-version and release commit must match, the tag must be absent, the environment
-protected, and the runtime and advisory checks passed with zero blocked findings.
-Approval authorizes pushing exactly the image ID and archive shown there.
-Rejecting the deployment, or letting it expire, publishes nothing.
+Before approving, compare the Build and Check job summaries with the release
+notes. The version and release commit must match, the tag must be absent, the
+environment protected, and the runtime and advisory checks passed with zero
+blocked findings. Approval authorizes pushing exactly the image ID and archive
+that Build recorded. Approve within 7 days, while the archive exists. Rejecting
+the deployment, or letting it expire, publishes nothing.
 
 ## After publication
 
@@ -125,25 +136,31 @@ in the run's evidence.
 - **`environment`:** protect `image-release` as described above and dispatch again.
 - **`source`:** dispatch the current release from `main`.
 - **Push failed and the tag is absent:** re-run the failed Publish job. It reuses
-  the same verified archive while the artifact exists (one day). After that,
-  dispatch again for a new candidate.
+  the same verified archive while it exists (7 days). After that, dispatch again
+  for a new candidate.
 - **Push outcome unknown:** read the tag anonymously before any re-run.
 - **Verification or attestation failed after a push:** re-run the failed Publish
-  job. The recheck recognizes the same verified image as already published,
-  verifies it and attests again.
+  job, at any time. The recheck recognizes the same verified image as already
+  published, verifies it and attests again without the archive.
 
 ## Trust boundary
 
-- The Verify job runs the source revision's own npm dependencies, checks and
-  Dockerfile, with read permissions only. A compromised dependency could produce
-  a bad candidate but cannot push it. The checks and the approver are the gate.
-- The Publish job runs only `main`'s dependency-free
-  [`scripts/image-release.mjs`](../scripts/image-release.mjs), the runner's
-  `docker` and `gh`, and SHA-pinned first-party actions. It uses no npm packages,
-  caches or source-revision code. Its token can write this repository's packages
-  and reaches `docker` only on stdin.
+- Build fixes what can be published: the image ID, configuration digest and
+  archive SHA-256. No npm code runs on its runner. The source revision's
+  Dockerfile runs inside BuildKit containers, and its locked runtime dependencies
+  and compiler shape the image, as in any build. The checks cannot detect a
+  malicious dependency; they only reject known advisories and broken behavior.
+- Check runs the source revision's npm dependencies, including development-only
+  tools, with read permissions only. A compromised development dependency could
+  make Check pass falsely, but cannot change the candidate, its digests or what
+  Publish pushes. Its summary is only as trustworthy as those dependencies.
+- The Publish job runs only `main`'s dependency-free script, the runner's `docker`
+  and `gh`, and SHA-pinned first-party actions. It uses no npm packages, caches or
+  source-revision code. Its token can write this repository's packages and reaches
+  `docker` only on stdin.
 - The Publish job can mint GitHub OIDC tokens. The MCP Registry trusts such tokens
   from any workflow in the organization (see
   [MCP Registry trust boundary](MCP-REGISTRY.md#trust-boundary)). Adding a step to
   this job widens that boundary.
-- Only the verified archive is ever pushed; nothing is rebuilt after approval.
+- Builds are not reproducible, so only the archive Build recorded is ever pushed;
+  nothing is rebuilt after approval.

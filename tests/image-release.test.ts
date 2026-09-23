@@ -7,8 +7,8 @@ import { join } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
-  checkImageIdentity, decidePush, describeManifest, dockerRunner, ENVIRONMENT, IMAGE, IMAGE_NAME, lookupTag, parseArgs,
-  renderSummary, request, runCandidate, runPreflight, runPublication, SOURCE_URL, verifyPublished, WORKFLOW_FILE,
+  archiveIdentity, checkImageIdentity, decidePush, describeManifest, dockerRunner, ENVIRONMENT, IMAGE, IMAGE_NAME, lookupTag, parseArgs,
+  readTarFiles, renderSummary, request, runCandidate, runChecks, runPreflight, runPublication, SOURCE_URL, verifyPublished, WORKFLOW_FILE,
   writeActionsFiles, type Docker, type ProcessResult,
 } from '../scripts/image-release.mjs';
 import { checkDispatch, REPOSITORY } from '../scripts/registry-publication.mjs';
@@ -30,7 +30,7 @@ function temporaryDirectory(t: TestContext, prefix: string) {
   return directory;
 }
 
-/** One image as the Verify job sees it: labelled config, two layers and the pushed manifest. */
+/** One image as the Build job sees it: labelled config, two layers and the pushed manifest. */
 function imageFixture(sourceRevision: string, changes: { architecture?: string; revision?: string } = {}) {
   // Like a real image configuration, the config lists every layer's diff ID, so its digest binds the content.
   const layers = [randomBytes(64), randomBytes(32)];
@@ -42,7 +42,7 @@ function imageFixture(sourceRevision: string, changes: { architecture?: string; 
     config: { mediaType: 'application/vnd.docker.container.image.v1+json', digest: digestOf(config), size: config.length },
     layers: layers.map(layer => ({ mediaType: 'application/vnd.docker.image.rootfs.diff.tar.gzip', digest: digestOf(layer), size: layer.length })) }));
   const blobs = new Map([[digestOf(config), config], ...layers.map(layer => [digestOf(layer), layer] as [string, Buffer])]);
-  return { config, configDigest: digestOf(config), manifest, digest: digestOf(manifest), blobs,
+  return { config, configDigest: digestOf(config), manifest, digest: digestOf(manifest), blobs, layerDigests: layers.map(layer => digestOf(layer)),
     inspect: { Id: digestOf(config), Os: 'linux', Architecture: changes.architecture ?? 'amd64',
       Config: { Labels: JSON.parse(config.toString()).config.Labels } } };
 }
@@ -50,8 +50,14 @@ type Image = ReturnType<typeof imageFixture>;
 
 interface Call { url: string; method: string; authorization: string | null }
 
-/** In-memory GHCR: anonymous tokens, typed 404s, digest headers and signed-URL blob redirects. */
-function registryFixture(options: { tags?: Record<string, Image>; token?: 'ok' | 'denied'; untyped404?: boolean; missingLayer?: boolean } = {}) {
+interface RegistryOptions {
+  tags?: Record<string, Image>; token?: 'ok' | 'denied'; untyped404?: boolean; missingLayer?: boolean;
+  tamperedConfig?: boolean; wrongLength?: boolean; httpRedirect?: boolean; digestReference?: Image;
+}
+
+/** In-memory GHCR: anonymous tokens, typed 404s, digest headers and signed-URL blob redirects. Faults can change mid-test. */
+function registryFixture(initial: RegistryOptions = {}) {
+  const options: RegistryOptions = { ...initial };
   const tags = new Map(Object.entries(options.tags ?? {}));
   const manifests = new Map<string, Image>();
   const blobs = new Map<string, Buffer>();
@@ -67,9 +73,10 @@ function registryFixture(options: { tags?: Record<string, Image>; token?: 'ok' |
     const method = init.method ?? 'GET';
     calls.push({ url: url.href, method, authorization: headers.get('authorization') });
     assert.equal(init.redirect, 'manual', 'registry requests never follow redirects');
-    if (url.origin === CDN) {
+    if (url.origin === CDN || url.origin === 'http://pkg-containers.test') {
       const bytes = blobs.get(url.pathname.slice('/blob/'.length));
-      return bytes ? new Response(new Uint8Array(bytes), { status: 200 }) : new Response('gone', { status: 404 });
+      if (!bytes) return new Response('gone', { status: 404 });
+      return new Response(new Uint8Array(options.tamperedConfig ? Buffer.concat([bytes, Buffer.from(' ')]) : bytes), { status: 200 });
     }
     if (url.origin !== REGISTRY) throw new TypeError('fetch failed');
     if (url.pathname === '/token') {
@@ -80,8 +87,8 @@ function registryFixture(options: { tags?: Record<string, Image>; token?: 'ok' |
     const manifestPath = `/v2/${IMAGE_NAME}/manifests/`;
     if (url.pathname.startsWith(manifestPath)) {
       const reference = decodeURIComponent(url.pathname.slice(manifestPath.length));
-      const image = tags.get(reference) ?? manifests.get(reference);
-      if (!image) {
+      const image = reference.startsWith('sha256:') && options.digestReference ? options.digestReference : tags.get(reference) ?? manifests.get(reference);
+      if (!image || options.untyped404) {
         return options.untyped404 ? new Response('not found', { status: 404 })
           : Response.json({ errors: [{ code: 'MANIFEST_UNKNOWN', message: 'manifest unknown' }] }, { status: 404 });
       }
@@ -92,12 +99,13 @@ function registryFixture(options: { tags?: Record<string, Image>; token?: 'ok' |
       const digest = url.pathname.slice(blobPath.length);
       const bytes = blobs.get(digest);
       if (!bytes) return Response.json({ errors: [{ code: 'BLOB_UNKNOWN' }] }, { status: 404 });
-      if (method === 'HEAD') return new Response(null, { status: 200, headers: { 'content-length': String(bytes.length) } });
-      return new Response(null, { status: 307, headers: { location: `${CDN}/blob/${digest}?signature=short-lived` } });
+      if (method === 'HEAD') return new Response(null, { status: 200, headers: { 'content-length': String(bytes.length + (options.wrongLength ? 1 : 0)) } });
+      const origin = options.httpRedirect ? 'http://pkg-containers.test' : CDN;
+      return new Response(null, { status: 307, headers: { location: `${origin}/blob/${digest}?signature=short-lived` } });
     }
     return new Response('unexpected', { status: 500 });
   }) as typeof fetch;
-  return { fetch: fetchImpl, calls, publish, tags };
+  return { fetch: fetchImpl, calls, publish, tags, options };
 }
 
 const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
@@ -145,8 +153,27 @@ function environmentFetch(protectedEnvironment: boolean, registry: ReturnType<ty
   }) as typeof fetch;
 }
 
+/** A `docker image save` archive: the classic store names the config as the image ID; containerd adds an OCI manifest blob. */
+function writeDockerArchive(output: string, image: Image, layout: 'classic' | 'containerd' = 'classic', format = 'gnu') {
+  const directory = mkdtempSync(join(tmpdir(), 'merovingian-archive-'));
+  try {
+    const blobs = join(directory, 'blobs', 'sha256');
+    mkdirSync(blobs, { recursive: true });
+    writeFileSync(join(blobs, image.configDigest.slice(7)), image.config);
+    writeFileSync(join(blobs, image.layerDigests[0].slice(7)), 'layer bytes');
+    if (layout === 'containerd') writeFileSync(join(blobs, image.digest.slice(7)), image.manifest);
+    writeFileSync(join(directory, 'manifest.json'), JSON.stringify([{ Config: `blobs/sha256/${image.configDigest.slice(7)}`, RepoTags: null, Layers: [] }]));
+    execFileSync('tar', [`--format=${format}`, '-cf', output, '-C', directory, 'blobs', 'manifest.json']);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+type DockerBehavior = Partial<{ load: 'fail'; login: 'fail'; inspect: 'missing'; save: Image;
+  push: 'fail' | 'fail-after-upload' | 'fail-foreign' | 'fail-unknown' | 'moved' }>;
+
 /** Scripted docker: records every call; secrets may arrive only on stdin. */
-function dockerFixture(t: TestContext, image: Image, registry: ReturnType<typeof registryFixture>, behavior: Partial<Record<'load' | 'login' | 'push' | 'pushPublishes' | 'inspect', string>> = {}) {
+function dockerFixture(image: Image, registry: ReturnType<typeof registryFixture>, behavior: DockerBehavior = {}) {
   const calls: { args: string[]; input?: string }[] = [];
   const ok = (stdout = ''): ProcessResult => ({ exitCode: 0, signal: null, timedOut: false, stdout, stderr: '' });
   const failed = (stderr: string): ProcessResult => ({ exitCode: 1, signal: null, timedOut: false, stdout: '', stderr });
@@ -157,19 +184,22 @@ function dockerFixture(t: TestContext, image: Image, registry: ReturnType<typeof
       return behavior.inspect === 'missing' ? failed('Error: No such image') : ok(JSON.stringify([image.inspect]));
     }
     if (command === 'image' && subcommand === 'save') {
-      writeFileSync(args[args.indexOf('--output') + 1], 'saved image bytes');
+      writeDockerArchive(args[args.indexOf('--output') + 1], behavior.save ?? image);
       return ok();
     }
     if (command === 'image' && subcommand === 'load') return behavior.load === 'fail' ? failed('Error: invalid tar header') : ok(`Loaded image ID: ${image.inspect.Id}\n`);
     if (command === 'image' && subcommand === 'tag') return ok();
     if (command === 'login') return behavior.login === 'fail' ? failed('Error response from daemon: denied') : ok('Login Succeeded\n');
     if (command === 'image' && subcommand === 'push') {
-      if (behavior.push === 'fail' || behavior.push === 'fail-after-upload') {
-        if (behavior.push === 'fail-after-upload') registry.publish(VERSION, image);
-        return failed('error parsing HTTP 502 response body');
+      const reported = ok(`The push refers to repository [${IMAGE}]\n${VERSION}: digest: ${image.digest} size: ${image.manifest.length}\n`);
+      switch (behavior.push) {
+        case 'fail': return failed('error parsing HTTP 502 response body');
+        case 'fail-after-upload': registry.publish(VERSION, image); return failed('error parsing HTTP 502 response body');
+        case 'fail-foreign': registry.publish(VERSION, imageFixture(image.inspect.Config.Labels['org.opencontainers.image.revision'])); return failed('unexpected EOF');
+        case 'fail-unknown': registry.options.untyped404 = true; return failed('unexpected EOF');
+        case 'moved': registry.publish(VERSION, imageFixture(image.inspect.Config.Labels['org.opencontainers.image.revision'])); return reported;
+        default: registry.publish(VERSION, image); return reported;
       }
-      registry.publish(VERSION, image);
-      return ok(`The push refers to repository [${IMAGE}]\n${VERSION}: digest: ${image.digest} size: ${image.manifest.length}\n`);
     }
     if (command === 'logout') return ok('Removing login credentials for ghcr.io\n');
     return failed(`unexpected docker call ${args.join(' ')}`);
@@ -192,7 +222,11 @@ test('command-line arguments are a closed, complete set per command', () => {
   const publish = ['publish', '--version', VERSION, '--source-revision', 'a'.repeat(40), '--image-id', 'i', '--config-digest', 'c',
     '--archive-sha256', 's', '--archive', 'a', '--docker-config', 'd', '--output-dir', 'o'];
   assert.equal(parseArgs(publish).values['--docker-config'], 'd');
+  assert.equal(parseArgs(['candidate', '--version', VERSION, '--source-revision', 'a'.repeat(40), '--image-id-file', 'f', '--output-dir', 'o']).command, 'candidate');
+  assert.equal(parseArgs(['checks', '--version', VERSION, '--source-revision', 'a'.repeat(40), '--image-id', 'i', '--config-digest', 'c',
+    '--runtime-report', 'r', '--scan-dir', 's', '--output-dir', 'o']).command, 'checks');
   for (const args of [[], ['status'], publish.slice(0, -2), [...publish, '--registry', 'http://example.invalid'],
+    ['candidate', '--version', VERSION, '--source-revision', 'a'.repeat(40), '--image-id-file', 'f', '--runtime-report', 'r', '--output-dir', 'o'],
     ['preflight', '--version', VERSION, '--version', VERSION, '--mode', 'verify', '--source-dir', 's', '--output-dir', 'o']]) {
     assert.throws(() => parseArgs(args), /Usage/);
   }
@@ -273,6 +307,11 @@ test('anonymous verification binds tag, digest, configuration, platform and ever
     [{ registry: REGISTRY, version: VERSION, digest: other.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image, other } }).fetch }, /pushed digest/],
     [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image }, missingLayer: true }).fetch }, /not anonymously readable/],
     [{ registry: REGISTRY, version: VERSION, digest: null, configDigest: image.configDigest, fetch: registry.fetch }, /no pushed digest/],
+    [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image }, tamperedConfig: true }).fetch }, /config blob bytes differ/],
+    [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image }, httpRedirect: true }).fetch }, /config blob unavailable \(HTTP 307\)/],
+    [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image }, wrongLength: true }).fetch }, /not anonymously readable/],
+    [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image }, digestReference: other }).fetch }, /digest reference differs/],
+    [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image }, token: 'denied' }).fetch }, /anonymous pull token unavailable/],
   ];
   for (const [options, pattern] of cases) {
     const result = await verifyPublished({ timeoutMs: 1_000, ...options });
@@ -341,46 +380,72 @@ test('preflight checks source, tag and approval gate before checking out the sou
   }
 });
 
-async function candidateFixture(t: TestContext, changes: { runtime?: Record<string, unknown>; policy?: Record<string, unknown>; provenance?: Record<string, unknown>;
-  preflight?: Record<string, unknown>; image?: Image } = {}) {
+test('saved archives are read without extraction and must contain exactly the labelled candidate', SLOW, async (t) => {
+  const directory = temporaryDirectory(t, 'image-archive');
+  const source = 'a'.repeat(40);
+  const image = imageFixture(source);
+  const expected = { imageId: image.inspect.Id, version: VERSION, sourceRevision: source };
+  for (const format of ['gnu', 'ustar', 'posix']) {
+    const archive = join(directory, `classic-${format}.tar`);
+    writeDockerArchive(archive, image, 'classic', format);
+    assert.deepEqual(await archiveIdentity(archive, expected), { configDigest: image.configDigest }, format);
+  }
+  const containerd = join(directory, 'containerd.tar');
+  writeDockerArchive(containerd, image, 'containerd');
+  assert.deepEqual(await archiveIdentity(containerd, { ...expected, imageId: image.digest }), { configDigest: image.configDigest });
+  const files = await readTarFiles(containerd, name => name === 'manifest.json');
+  assert.deepEqual([...files.keys()], ['manifest.json']);
+
+  const other = join(directory, 'other.tar');
+  writeDockerArchive(other, imageFixture(source));
+  const relabelled = join(directory, 'relabelled.tar');
+  const relabelledImage = imageFixture(source, { revision: 'b'.repeat(40) });
+  writeDockerArchive(relabelled, relabelledImage);
+  const truncated = join(directory, 'truncated.tar');
+  writeFileSync(truncated, readFileSync(containerd).subarray(0, 700));
+  for (const [archive, changes, pattern] of [
+    [other, {}, /does not contain the candidate image/],
+    [containerd, { imageId: imageFixture(source).digest }, /does not contain the candidate image/],
+    [relabelled, { imageId: relabelledImage.inspect.Id }, /labelled linux\/amd64 image/],
+    [truncated, {}, /truncated|exactly one image/],
+  ] as [string, Record<string, string>, RegExp][]) {
+    await assert.rejects(() => archiveIdentity(archive, { ...expected, ...changes }), pattern);
+  }
+});
+
+async function candidateFixture(t: TestContext, changes: { preflight?: Record<string, unknown>; imageId?: string; docker?: DockerBehavior; image?: Image } = {}) {
   const directory = temporaryDirectory(t, 'image-candidate');
   const source = 'a'.repeat(40);
   const image = changes.image ?? imageFixture(source);
-  const scan = join(directory, 'scan');
-  mkdirSync(scan);
   writeFileSync(join(directory, 'preflight.json'), JSON.stringify({ passed: true, version: VERSION, mode: 'publish', decision: 'publish',
-    source: { revision: source, releaseCommit: true }, ...changes.preflight }));
-  writeFileSync(join(directory, 'image-id'), `${image.inspect.Id}\n`);
-  writeFileSync(join(directory, 'runtime.json'), JSON.stringify({ passed: true, imageId: image.inspect.Id, checkedAt: 't',
-    completedChecks: ['image-metadata'], applicationFilesChecked: 9, appArmor: { status: 'unavailable' }, ...changes.runtime }));
-  writeFileSync(join(scan, 'policy.json'), JSON.stringify({ passed: true, imageId: image.configDigest, blocked: [], accepted: [],
-    reported: [{ advisory: 'CVE-2025-14505', severity: 'LOW' }], scannerVersion: '0.74.0', ...changes.policy }));
-  writeFileSync(join(scan, 'scan-provenance.json'), JSON.stringify({ localImageId: image.inspect.Id, configurationDigest: image.configDigest, ...changes.provenance }));
+    source: { revision: source, releaseCommit: true }, tag: { state: 'absent' }, environment: { passed: true, reviewerCount: 1 }, ...changes.preflight }));
+  writeFileSync(join(directory, 'image-id'), `${changes.imageId ?? image.inspect.Id}\n`);
+  const docker = dockerFixture(image, registryFixture(), changes.docker);
   const evidence = await runCandidate({ version: VERSION, sourceRevision: source, context: CONTEXT('b'.repeat(40)), outputDirectory: directory,
-    docker: dockerFixture(t, image, registryFixture()).docker, imageIdFile: join(directory, 'image-id'),
-    runtimeReport: join(directory, 'runtime.json'), scanDirectory: scan, timeouts: FAST });
-  return { evidence, directory, image };
+    docker: docker.docker, imageIdFile: join(directory, 'image-id'), timeouts: FAST });
+  return { evidence, directory, image, commands: docker.calls.map(call => call.args.slice(0, 2).join(' ')) };
 }
 
-test('the candidate binds runtime and advisory reports to one labelled image and saves its exact bytes', SLOW, async (t) => {
-  const { evidence, directory, image } = await candidateFixture(t);
+test('Build records the image ID, the configuration digest from the saved bytes and the archive SHA-256', SLOW, async (t) => {
+  const { evidence, directory, image, commands } = await candidateFixture(t);
   assert.equal(evidence.passed, true, JSON.stringify(evidence.error));
-  assert.deepEqual([evidence.image.imageId, evidence.image.configDigest, evidence.decision], [image.inspect.Id, image.configDigest, 'publish']);
-  assert.deepEqual(evidence.archive, { name: 'image.tar', sha256: sha256('saved image bytes'), bytes: 17 });
+  assert.deepEqual(commands, ['image inspect', 'image save']);
+  const archive = readFileSync(join(directory, 'candidate', 'image.tar'));
+  assert.deepEqual([evidence.image.imageId, evidence.image.configDigest, evidence.decision, evidence.outcome], [image.inspect.Id, image.configDigest, 'publish', 'built']);
+  assert.deepEqual(evidence.archive, { name: 'image.tar', sha256: sha256(archive), bytes: archive.length });
   assertPublicEvidence(join(directory, 'candidate.json'));
   const env = { GITHUB_OUTPUT: join(directory, 'output'), GITHUB_STEP_SUMMARY: join(directory, 'summary') };
   writeActionsFiles(evidence, env);
   assert.equal(readFileSync(env.GITHUB_OUTPUT, 'utf8'),
-    `decision=publish\nimage_id=${image.inspect.Id}\nconfig_digest=${image.configDigest}\narchive_sha256=${sha256('saved image bytes')}\n`);
-  assert.match(readFileSync(env.GITHUB_STEP_SUMMARY, 'utf8'), /\*\*awaiting-approval\*\*/);
+    `decision=publish\nimage_id=${image.inspect.Id}\nconfig_digest=${image.configDigest}\narchive_sha256=${sha256(archive)}\n`);
+  assert.match(readFileSync(env.GITHUB_STEP_SUMMARY, 'utf8'), /Configuration digest/);
 
-  const other = `sha256:${'3'.repeat(64)}`;
   for (const [changes, code] of [
-    [{ runtime: { imageId: other } }, 'runtime'], [{ runtime: { passed: false } }, 'runtime'],
-    [{ policy: { passed: false } }, 'scan'], [{ policy: { blocked: [{ advisory: 'CVE-1' }] } }, 'scan'],
-    [{ provenance: { localImageId: other } }, 'scan'], [{ policy: { imageId: other } }, 'scan'],
     [{ preflight: { passed: false } }, 'input'], [{ preflight: { decision: 'refuse' } }, 'input'],
+    [{ preflight: { version: '0.4.8' } }, 'input'], [{ preflight: { source: { revision: 'c'.repeat(40) } } }, 'input'],
+    [{ imageId: 'latest' }, 'image'], [{ docker: { inspect: 'missing' } }, 'image'],
     [{ image: imageFixture('a'.repeat(40), { revision: 'c'.repeat(40) }) }, 'image'],
+    [{ docker: { save: imageFixture('a'.repeat(40)) } }, 'archive'],
   ] as [Parameters<typeof candidateFixture>[1], string][]) {
     const failed = await candidateFixture(t, changes);
     assert.equal(failed.evidence.passed, false);
@@ -390,25 +455,60 @@ test('the candidate binds runtime and advisory reports to one labelled image and
   assert.equal(readFileSync(env.GITHUB_OUTPUT, 'utf8').split('\n').length, 5, 'failed candidates set no outputs');
 });
 
-async function publicationFixture(t: TestContext, options: { tags?: Record<string, 'same' | 'other'>; docker?: Parameters<typeof dockerFixture>[3];
-  archive?: string; registry?: Parameters<typeof registryFixture>[0] } = {}) {
+async function checksFixture(t: TestContext, changes: { runtime?: Record<string, unknown>; policy?: Record<string, unknown>; provenance?: Record<string, unknown>; configDigest?: string } = {}) {
+  const directory = temporaryDirectory(t, 'image-checks');
+  const image = imageFixture('a'.repeat(40));
+  const scan = join(directory, 'scan');
+  mkdirSync(scan);
+  writeFileSync(join(directory, 'runtime.json'), JSON.stringify({ passed: true, imageId: image.inspect.Id, checkedAt: 't',
+    completedChecks: ['image-metadata'], applicationFilesChecked: 9, appArmor: { status: 'unavailable' }, ...changes.runtime }));
+  writeFileSync(join(scan, 'policy.json'), JSON.stringify({ passed: true, imageId: image.configDigest, blocked: [], accepted: [],
+    reported: [{ advisory: 'CVE-2025-14505', severity: 'LOW' }], scannerVersion: '0.74.0', ...changes.policy }));
+  writeFileSync(join(scan, 'scan-provenance.json'), JSON.stringify({ localImageId: image.inspect.Id, configurationDigest: image.configDigest, ...changes.provenance }));
+  const evidence = await runChecks({ version: VERSION, sourceRevision: 'a'.repeat(40), context: CONTEXT('b'.repeat(40)), outputDirectory: join(directory, 'out'),
+    imageId: image.inspect.Id, configDigest: changes.configDigest ?? image.configDigest, runtimeReport: join(directory, 'runtime.json'), scanDirectory: scan });
+  return { evidence, directory };
+}
+
+test('Check binds the runtime and advisory reports to the image Build recorded and sets no outputs', SLOW, async (t) => {
+  const { evidence, directory } = await checksFixture(t);
+  assert.equal(evidence.passed, true, JSON.stringify(evidence.error));
+  assert.deepEqual([evidence.outcome, evidence.scan.blockedCount, evidence.scan.reported.length], ['checked', 0, 1]);
+  const env = { GITHUB_OUTPUT: join(directory, 'output'), GITHUB_STEP_SUMMARY: join(directory, 'summary') };
+  writeActionsFiles(evidence, env);
+  assert.equal(existsSync(env.GITHUB_OUTPUT), false, 'Publish never consumes values from the Check job');
+  const other = `sha256:${'3'.repeat(64)}`;
+  for (const [changes, code] of [
+    [{ runtime: { imageId: other } }, 'runtime'], [{ runtime: { passed: false } }, 'runtime'],
+    [{ policy: { passed: false } }, 'scan'], [{ policy: { blocked: [{ advisory: 'CVE-1' }] } }, 'scan'],
+    [{ provenance: { localImageId: other } }, 'scan'], [{ provenance: { configurationDigest: other } }, 'scan'],
+    [{ policy: { imageId: other } }, 'scan'], [{ configDigest: 'latest' }, 'input'],
+  ] as [Parameters<typeof checksFixture>[1], string][]) {
+    const failed = await checksFixture(t, changes);
+    assert.equal(failed.evidence.passed, false);
+    assert.equal(failed.evidence.error.code, code, JSON.stringify([changes, failed.evidence.error]));
+  }
+});
+
+async function publicationFixture(t: TestContext, options: { tags?: Record<string, 'same' | 'other'>; docker?: DockerBehavior;
+  archive?: string | null; registry?: RegistryOptions; changes?: Record<string, unknown> } = {}) {
   const repo = repositoryFixture(t);
   git(repo.cwd, 'fetch', '--quiet', 'origin', '+refs/heads/main:refs/merovingian/main');
   const image = imageFixture(repo.release);
   const tags = Object.fromEntries(Object.entries(options.tags ?? {}).map(([tag, kind]) => [tag, kind === 'same' ? image : imageFixture(repo.release)]));
   const registry = registryFixture({ ...options.registry, tags });
-  const docker = dockerFixture(t, image, registry, options.docker);
+  const docker = dockerFixture(image, registry, options.docker);
   const archive = join(repo.directory, 'image.tar');
-  writeFileSync(archive, options.archive ?? 'verified image bytes');
+  if (options.archive !== null) writeFileSync(archive, options.archive ?? 'verified image bytes');
   const configDirectory = join(repo.directory, 'image-release-docker-config');
   mkdirSync(configDirectory);
   const output = join(repo.directory, 'publication');
   const evidence = await runPublication({ cwd: repo.cwd, version: VERSION, sourceRevision: repo.release, context: CONTEXT(repo.head),
     outputDirectory: output, docker: docker.docker, imageId: image.inspect.Id, configDigest: image.configDigest,
     archiveSha256: sha256('verified image bytes'), archive, dockerConfigDirectory: configDirectory, token: TOKEN, username: 'release-operator',
-    registry: REGISTRY, fetch: registry.fetch, refreshMain: () => {}, timeouts: FAST, sleep: async () => {} });
+    registry: REGISTRY, fetch: registry.fetch, refreshMain: () => {}, timeouts: FAST, sleep: async () => {}, ...options.changes });
   const commands = docker.calls.map(call => call.args.slice(0, 2).join(' '));
-  return { evidence, image, commands, calls: docker.calls, configDirectory, output };
+  return { evidence, image, commands, calls: docker.calls, configDirectory, output, registry, repo };
 }
 
 test('publication loads the verified archive, logs in on stdin, pushes once, logs out and verifies anonymously', SLOW, async (t) => {
@@ -428,21 +528,57 @@ test('publication loads the verified archive, logs in on stdin, pushes once, log
   assert.match(renderSummary(evidence), /\*\*published\*\*/);
 });
 
-test('publication refuses changed bytes or a conflicting tag before any login', SLOW, async (t) => {
-  const changed = await publicationFixture(t, { archive: 'different bytes' });
-  assert.deepEqual([changed.evidence.error.code, changed.commands], ['archive', []]);
-  const conflict = await publicationFixture(t, { tags: { [VERSION]: 'other' } });
-  assert.deepEqual([conflict.evidence.error.code, conflict.commands], ['tag-conflict', []]);
-  const unknown = await publicationFixture(t, { registry: { untyped404: true } });
-  assert.deepEqual([unknown.evidence.error.code, unknown.commands], ['registry', []]);
+test('publication refuses bad inputs, changed bytes, a moved source or a conflicting tag before any docker call', SLOW, async (t) => {
+  const cases: [Parameters<typeof publicationFixture>[1], string, RegExp?][] = [
+    [{ archive: 'different bytes' }, 'archive'],
+    [{ archive: null }, 'archive', /unavailable \(it expires 7 days after Build\)/],
+    [{ tags: { [VERSION]: 'other' } }, 'tag-conflict'],
+    [{ registry: { untyped404: true } }, 'registry'],
+    [{ changes: { configDigest: 'sha256:short' } }, 'input'],
+    [{ changes: { token: undefined } }, 'input'],
+    [{ changes: { username: 'bad user' } }, 'input'],
+    [{ changes: { version: '0.4.8' } }, 'source'],
+  ];
+  for (const [options, code, pattern] of cases) {
+    const { evidence, commands, output } = await publicationFixture(t, options);
+    assert.equal(evidence.error?.code, code, JSON.stringify([options, evidence.error]));
+    if (pattern) assert.match(evidence.error.message, pattern);
+    assert.deepEqual(commands, [], JSON.stringify(options));
+    assertPublicEvidence(join(output, 'publication.json'));
+  }
+  // The source revision is rechecked after approval, not only before the build.
+  const moved = await publicationFixture(t, { changes: { sourceRevision: 'f'.repeat(40) } });
+  assert.deepEqual([moved.evidence.error.code, moved.commands], ['source', []]);
   const failedLoad = await publicationFixture(t, { docker: { load: 'fail' } });
   assert.deepEqual([failedLoad.evidence.error.code, failedLoad.commands], ['image', ['image load']]);
 });
 
-test('a re-run after a completed push verifies the same image without logging in again', SLOW, async (t) => {
-  const { evidence, image, commands } = await publicationFixture(t, { tags: { [VERSION]: 'same' } });
+test('unexpected failures keep only an error code, never a local path', SLOW, async (t) => {
+  const directory = temporaryDirectory(t, 'directory-archive');
+  const { evidence, output } = await publicationFixture(t, { changes: { archive: directory } });
+  assert.deepEqual(evidence.error, { code: 'internal', message: 'EISDIR' });
+  assertPublicEvidence(join(output, 'publication.json'));
+});
+
+test('a re-run after a completed push verifies the same image without the archive or a login', SLOW, async (t) => {
+  const { evidence, image, commands, registry } = await publicationFixture(t, { tags: { [VERSION]: 'same' }, archive: null });
   assert.equal(evidence.passed, true, JSON.stringify(evidence.error));
   assert.deepEqual([evidence.outcome, evidence.digest, commands], ['already-published', image.digest, []]);
+  assert.equal(evidence.verification.passed, true);
+  const reads = registry.calls.map(call => `${call.method} ${new URL(call.url).pathname.split('/').slice(-2, -1)[0]}`);
+  for (const read of ['GET manifests', 'HEAD blobs', 'GET blob']) assert.ok(reads.includes(read), read);
+});
+
+test('a push that does not verify anonymously never yields a digest to attest', SLOW, async (t) => {
+  for (const options of [{ registry: { missingLayer: true } }, { docker: { push: 'moved' as const } }, { registry: { wrongLength: true } }]) {
+    const { evidence, output } = await publicationFixture(t, options);
+    assert.equal(evidence.passed, false);
+    assert.equal(evidence.error.code, 'verification', JSON.stringify([options, evidence.error]));
+    assert.equal(evidence.digest, undefined);
+    const env = { GITHUB_OUTPUT: join(output, 'output') };
+    writeActionsFiles(evidence, env);
+    assert.equal(existsSync(env.GITHUB_OUTPUT), false);
+  }
 });
 
 test('failed logins and pushes always log out and are reconciled only from anonymous reads', SLOW, async (t) => {
@@ -456,6 +592,13 @@ test('failed logins and pushes always log out and are reconciled only from anony
   assert.match(absent.evidence.error.message, /tag is absent; re-run/);
   assert.equal(absent.commands.filter(command => command === 'image push').length, 1, 'a failed push is never retried');
   assert.equal(absent.commands.at(-1), 'logout ghcr.io');
+
+  for (const push of ['fail-foreign', 'fail-unknown'] as const) {
+    const unknown = await publicationFixture(t, { docker: { push } });
+    assert.equal(unknown.evidence.error.code, 'push', push);
+    assert.match(unknown.evidence.error.message, /outcome is unknown/);
+    assert.equal(unknown.evidence.verification, undefined, 'nothing unknown is verified or attested');
+  }
 
   const uploaded = await publicationFixture(t, { docker: { push: 'fail-after-upload' } });
   assert.equal(uploaded.evidence.passed, true, JSON.stringify(uploaded.evidence.error));
@@ -491,33 +634,41 @@ function workflowJobs() {
 
 test('the image workflow is manual, pinned, least-privilege and approval gated', () => {
   const { text, jobs } = workflowJobs();
-  assert.deepEqual(Object.keys(jobs), ['verify', 'publish']);
+  assert.deepEqual(Object.keys(jobs), ['build', 'check', 'publish']);
   assert.match(text, /^on:\n {2}workflow_dispatch:\n/m);
   assert.doesNotMatch(text, /^\s+(push|pull_request|pull_request_target|schedule|release|workflow_run|repository_dispatch):/m);
   assert.match(text, /^permissions: \{\}$/m);
   assert.match(text, /^concurrency:\n {2}group: image-release\n {2}cancel-in-progress: false$/m);
-  assert.match(jobs.verify, /permissions:\n {6}contents: read\n(?: {6}#.*\n)* {6}actions: read\n {4}outputs:/);
+  assert.match(jobs.build, /permissions:\n {6}contents: read\n(?: {6}#.*\n)* {6}actions: read\n {4}outputs:/);
+  assert.match(jobs.check, /permissions:\n {6}contents: read\n {4}steps:/);
   assert.match(jobs.publish, /permissions:\n {6}contents: read\n {6}packages: write\n {6}id-token: write\n {6}attestations: write\n {4}steps:/);
   for (const permission of ['packages: write', 'id-token: write', 'attestations: write']) assert.equal(text.split(permission).length - 1, 1, permission);
-  assert.doesNotMatch(jobs.verify, /environment:/);
+  assert.doesNotMatch(jobs.build + jobs.check, /environment:/);
   assert.match(jobs.publish, /\n {4}environment: image-release\n/);
-  assert.match(jobs.publish, /needs: verify/);
-  assert.match(jobs.publish, /inputs\.mode == 'publish' && needs\.verify\.outputs\.decision == 'publish'/);
+  assert.match(jobs.check, /needs: build\n/);
+  assert.match(jobs.publish, /needs: \[build, check\]/);
+  assert.match(jobs.publish, /inputs\.mode == 'publish' && needs\.build\.outputs\.decision == 'publish'/);
   for (const job of Object.values(jobs)) assert.match(job, /github\.repository == 'manifest-network\/merovingian' && github\.ref == 'refs\/heads\/main'/);
+  const code = (job: string) => job.replace(/^\s*#.*$/gm, '');
+  const actions = (job: string) => [...code(job).matchAll(/uses: ([^@\s]+)@/g)].map(match => match[1]);
+  // Build fixes the published identity: no npm code, working directories or other actions run on its runner.
+  assert.doesNotMatch(code(jobs.build), /\bnpm\b|\bnpx\b|\btsx\b|working-directory|^\s+cache:/m);
+  assert.deepEqual(actions(jobs.build), ['actions/checkout', 'actions/setup-node', 'actions/upload-artifact', 'actions/upload-artifact']);
+  assert.match(jobs.build, /--provenance=false --sbom=false/);
+  assert.match(jobs.build, /retention-days: 7\n\s+if-no-files-found: error/);
+  // Publish takes identity only from Build; Check's result gates it but none of its values reach it.
+  assert.doesNotMatch(jobs.publish, /needs\.check\.outputs/);
+  assert.doesNotMatch(jobs.check, /^ {4}outputs:/m);
+  assert.match(jobs.check, /sha256sum --check --strict/);
   // The job that can push and mint OIDC tokens runs no packages, caches or source-revision code.
-  const publishCode = jobs.publish.replace(/^\s*#.*$/gm, '');
-  assert.doesNotMatch(publishCode, /\bnpm\b|\bnpx\b|^\s+cache:|include-hidden-files|working-directory/m);
-  assert.deepEqual([...publishCode.matchAll(/uses: ([^@\s]+)@/g)].map(match => match[1]),
-    ['actions/checkout', 'actions/setup-node', 'actions/download-artifact', 'actions/attest', 'actions/upload-artifact']);
+  assert.doesNotMatch(code(jobs.publish), /\bnpm\b|\bnpx\b|^\s+cache:|include-hidden-files|working-directory|ref: \$\{\{ inputs/m);
+  assert.deepEqual(actions(jobs.publish), ['actions/checkout', 'actions/setup-node', 'actions/download-artifact', 'actions/attest', 'actions/upload-artifact']);
+  assert.match(jobs.publish, /continue-on-error: true\n\s+uses: actions\/download-artifact@/);
   assert.match(jobs.publish, /Remove any registry login\n {8}if: always\(\)/);
   assert.doesNotMatch(jobs.publish, /push-to-registry/);
   for (const [, reference] of text.matchAll(/uses: (\S+)/g)) assert.match(reference, /^[a-z-]+\/[a-z-]+@[0-9a-f]{40}$/);
-  assert.equal(text.match(/package-manager-cache: false/g)?.length, 2);
-  assert.equal(text.match(/persist-credentials: false/g)?.length, 2);
-  // Only the preflight's verified checkout runs source-revision code, and only in the read-only job.
-  assert.ok(jobs.verify.indexOf('image-release.mjs preflight') < jobs.verify.indexOf('working-directory'));
-  assert.match(jobs.verify, /--provenance=false --sbom=false/);
-  assert.match(jobs.verify, /if: steps\.candidate\.outputs\.decision == 'publish'\n\s+uses: actions\/upload-artifact@/);
+  assert.equal(text.match(/package-manager-cache: false/g)?.length, 3);
+  assert.equal(text.match(/persist-credentials: false/g)?.length, 4);
   // Expressions never reach a shell script; inputs travel through env.
   const lines = text.split('\n');
   for (let index = 0; index < lines.length; index++) {
