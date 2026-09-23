@@ -16,6 +16,7 @@ The remaining low-severity audit finding is inherited through `elliptic` in the 
 [Dependabot](../.github/dependabot.yml) proposes npm, GitHub Actions and Docker updates. It does not cover:
 
 - the npm-aliased operator-signing packages `cosmjs-amino-modern` and `cosmjs-proto-signing-modern`;
+- minor and major updates of `@cosmjs/proto-signing` and `cosmjs-types`, which must match the versions the Manifest SDK pins and move only in an SDK migration;
 - the move of the Docker base image to a new Alpine line (it follows only the pinned `-alpine3.24` tags).
 
 Review those by hand, together with the keyring helper's Go module, when updating operator tooling or the runtime base. The public service has no signing keys; the existing testnet operator script uses dedicated, faucet-funded testnet keys only.
