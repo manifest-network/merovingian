@@ -57,13 +57,18 @@ The inherited `jose2go` dependency is pinned to published 1.7.0 to address
 denial of service in the encrypted-file keyring path. This does not change the
 Cosmos SDK version or the keyring format.
 
-Build/test from the repository root, keeping caches off the nearly full `/tmp`:
+Build/test from the repository root with Go 1.26 or later (`go.mod` declares `go 1.26.0`; use `GOTOOLCHAIN=local` so an older Go is not silently replaced), keeping caches off the nearly full `/tmp`:
 
 ```sh
 mkdir -p .local/go-cache .local/go-tmp .local/mainnet/bin
-GOMAXPROCS=2 GOCACHE="$PWD/.local/go-cache" GOTMPDIR="$PWD/.local/go-tmp" TMPDIR="$PWD/.local/go-tmp" go -C tools/keyring-signer test -p 2 ./...
-GOMAXPROCS=2 GOCACHE="$PWD/.local/go-cache" GOTMPDIR="$PWD/.local/go-tmp" TMPDIR="$PWD/.local/go-tmp" go -C tools/keyring-signer build -p 2 -o ../../.local/mainnet/bin/keyring-signer .
+GOTOOLCHAIN=local GOMAXPROCS=2 GOCACHE="$PWD/.local/go-cache" GOTMPDIR="$PWD/.local/go-tmp" TMPDIR="$PWD/.local/go-tmp" go -C tools/keyring-signer test -p 2 ./...
+npm run keyring:build
 ```
+
+`npm run keyring:build` uses the reviewed build flags (`-mod=readonly -trimpath`,
+`GOTOOLCHAIN=local`) and **replaces** `.local/mainnet/bin/keyring-signer`. To
+replace a reviewed helper, follow
+[Rebuilding the reviewed helper](../../docs/KEYRING.md#rebuilding-the-reviewed-helper).
 
 Tests use an in-memory keyring and a public BIP-39 test vector. To create a
 disposable filesystem fixture for cross-language verification, run only

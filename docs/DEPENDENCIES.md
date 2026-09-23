@@ -48,20 +48,52 @@ The adapter uses the native keyring implementation for signing, while the Node l
 
 Review found a concrete keyring dependency path through `99designs/keyring`'s encrypted-file decoding to `jose2go.Decode`. `github.com/dvsekhvalnov/jose2go` is therefore explicitly pinned to **v1.7.0**, replacing inherited v1.6.0 and addressing [GO-2025-4123](https://pkg.go.dev/vuln/GO-2025-4123). Production operator commands still require the protected OS backend and never fall back to the insecure test backend.
 
-A final binary scan with `govulncheck@v1.7.0`, using the hardened helper built with `go1.27.1-X:nodwarf5`, confirmed the JOSE finding was removed. Nine findings associated with linked code remain, plus three additional imported-package findings and 35 additional module-only findings. One of the nine, GO-2026-4361, uses a broad CometBFT module match rather than a precise vulnerable-symbol definition.
+The currently reviewed operator helper (SHA-256 `721fc4cdde962d12d998739a8f466730398048c0504e86ff671129de023189ee`) was built on 2026-09-17 with `go1.27.1-X:nodwarf5`, from the earlier dependency set. Its binary scan with `govulncheck@v1.7.0` confirmed the JOSE finding was removed. It left nine findings associated with linked code, three imported-package findings and 35 module-only findings. That helper stays in use until it is rebuilt and re-verified, as described below.
 
-| Linked dependency family | Advisory behavior and reviewed helper path | Published fix target, not yet integrated |
-| --- | --- | --- |
-| gRPC | [GO-2026-6443](https://pkg.go.dev/vuln/GO-2026-6443), [6348](https://pkg.go.dev/vuln/GO-2026-6348), [6061](https://pkg.go.dev/vuln/GO-2026-6061), and [4762](https://pkg.go.dev/vuln/GO-2026-4762) concern HTTP/2 transport, xDS routing/authorization, or server handling. The helper creates no gRPC client or server. | v1.83.2 covers all four |
-| `golang.org/x/text/unicode/norm` | [GO-2026-5970](https://pkg.go.dev/vuln/GO-2026-5970) concerns a loop on invalid UTF-8. The retained `Form.Properties` path enters through IDNA/HTTP and Sentry case conversion; neither is called by the helper's key lookup/signing flow. Its JSON input also rejects invalid UTF-8. | v0.39.0 |
-| OpenPGP | [GO-2026-5932](https://pkg.go.dev/vuln/GO-2026-5932) covers the unmaintained OpenPGP package. Armor methods are retained through SDK key import/export functionality, which the helper does not expose or call. Legacy key-record decoding uses Amino rather than PGP armor. | No fixed version in this package |
-| CometBFT | [GO-2026-4361](https://pkg.go.dev/vuln/GO-2026-4361), [GO-2025-4025](https://pkg.go.dev/vuln/GO-2025-4025), and [3443](https://pkg.go.dev/vuln/GO-2025-3443) concern commit time, consensus bit arrays, and block parts. The helper does not construct or verify those objects; transaction message `Any` payloads remain opaque. | v0.38.21 covers all three |
+On 2026-09-23 the helper's module graph was updated to fix all 32 Dependabot alerts on `tools/keyring-signer/go.mod`. The cosmos-sdk fork (`v0.50.14-liftedinit.1`) did not change, and neither did any keyring-format module (`99designs/keyring` v1.2.1, `jose2go` v1.7.0, `go-bip39`, `gogoproto`, `btcutil`, `godbus`, `go-libsecret`).
+
+| Module | Before | After | Notes |
+| --- | --- | --- | --- |
+| `google.golang.org/grpc` | v1.67.1 | v1.83.2 | Must be exactly v1.83.2. [GO-2026-6443](https://pkg.go.dev/vuln/GO-2026-6443) (GHSA-2v4p-qf9q-27wj) also affects v1.83.0–v1.83.1 and v1.84.x. Dependabot alert #33 showed only the range matching v1.67.1 (first patched 1.82.2). |
+| `github.com/cometbft/cometbft` | v0.38.12 | v0.38.21 | The same version the installed `manifestd` links. |
+| `golang.org/x/crypto` | v0.27.0 | v0.56.0 | v0.56.0 also clears the unlinked `x/crypto/ssh` advisories GO-2026-6354 and GO-2026-6355. |
+| `golang.org/x/net` | v0.29.0 | v0.58.0 | Required by grpc v1.83.2. |
+| `golang.org/x/text` | v0.18.0 | v0.41.0 | Also clears [GO-2026-5970](https://pkg.go.dev/vuln/GO-2026-5970). |
+| `github.com/golang/glog` | v1.2.2 | v1.2.5 | Not in the build graph; it is reached only through the `badgerdb` build tag. |
+| `filippo.io/edwards25519` | v1.0.0 | v1.1.1 | The same version `manifestd` links. |
+| `github.com/decred/dcrd/dcrec/secp256k1/v4` (direct) | v4.2.0 | v4.4.0 | Forced by the graph; the same version `manifestd` links. |
+| `golang.org/x/sys` (direct) | v0.25.0 | v0.47.0 | Forced by the graph. |
+
+The `go` directive rises from 1.23.0 to 1.26.0. grpc v1.83.2 and its dependencies need Go 1.25; choosing `x/crypto` v0.56.0 raises that to 1.26. Build with Go 1.26 or later. `npm run keyring:build` sets `GOTOOLCHAIN=local`, so an older local Go fails instead of downloading a toolchain nobody reviewed.
+
+Compatibility was checked on the public disposable fixture:
+
+- Keyring records written with either dependency set decode to the same bytes.
+- The pre-update and post-update helpers return byte-identical public keys, direct and ADR-036 signatures, and failure codes.
+- 2,000 synthetic secp256k1 vectors and 20 BIP-32 derivations match across the old and new secp256k1, `x/crypto` and CometBFT versions.
+
+The production `os` backend (Secret Service) was not exercised; its modules are unchanged. The `Keyring helper` CI job runs the Go tests and the public-fixture Node integration on every change.
+
+`govulncheck@v1.8.0` source mode now works with Go 1.27.1. The earlier source-mode failure no longer reproduces. On the updated graph it reports:
+
+- [GO-2026-5932](https://pkg.go.dev/vuln/GO-2026-5932), the unmaintained `x/crypto/openpgp`, with no fixed version. It is reached only through package initialization of the SDK's key import/export code, which the helper never calls. The fork's `liftedinit.3` replaces it with `ProtonMail/go-crypto`. The helper stays on `liftedinit.1` to match the installed CLI.
+- GO-2025-3442, module-only. This comes from a second advisory range for CometBFT v1's `internal/blocksync`. v0.38.21 is outside the affected v0.38 range.
+
+No imported-package findings remain. Before the update, source mode classified two advisories as called: GO-2026-5932 (the same init-only OpenPGP path, still present) and GO-2026-4361. GO-2026-4361 counted as called only because that advisory has no symbol-level data; the functions its fix changed are not reachable from the helper.
 
 The manually traced entry point is bounded JSON input, local keyring lookup, protobuf/Amino record decoding, local secp256k1 signing, and response verification. `keyring.Sign` extracts the cached local key and uses SHA-256 plus Decred's compact ECDSA signing; it does not invoke the behaviors above. No concrete path from the three exposed operations to the remaining advisory mechanisms was identified.
 
-This is not a clean dependency scan or a formal proof of unreachability. Vulnerable code remains linked, and binary presence does not establish a call path. Source-mode reachability analysis was attempted but failed because this scanner's source-processing dependencies support Go 1.25 while the installed Go 1.27.1 sources use newer features. The fix targets above still require compatibility testing. Keep the helper local and limited to its current operations, and repeat the review before adding network services, import/export, or other input paths that could activate retained functionality.
+This is not a formal proof of unreachability. Keep the helper local and limited to its current operations. Repeat the review before adding network services, import/export, or other input paths that could activate retained functionality.
 
-The reviewed hardened helper's SHA-256 is `721fc4cdde962d12d998739a8f466730398048c0504e86ff671129de023189ee`. Rebuilding with a different toolchain or dependencies requires a fresh scan and fixture verification.
+The reviewed helper digest is still `721fc4cd…` from the earlier dependency set. A rebuilt helper has a different digest; the digest also embeds the checkout's VCS state. The launch and update commands refuse a helper whose digest does not match `keyring-check.json`. Before using a rebuilt helper, follow [Rebuilding the reviewed helper](KEYRING.md#rebuilding-the-reviewed-helper). In outline:
+
+1. Back up the current evidence.
+2. Build and fixture-check the candidate in a clean clone.
+3. Scan that exact binary.
+4. Install it.
+5. Pass `npm run keyring:check` against the protected OS keyring.
+
+These are operator actions.
 
 Before keyring access, the helper requires Linux `RLIMIT_CORE=0` and `PR_SET_DUMPABLE=0`, and fails closed if either setting fails. An isolated subprocess test verified both settings. Both are needed because piped core collectors can ignore the resource limit. See the primary Linux documentation for [core dumps](https://man7.org/linux/man-pages/man5/core.5.html) and [process dumpability](https://man7.org/linux/man-pages/man2/pr_set_dumpable.2const.html). This prevents ordinary crash-dump capture of the helper's key-bearing memory; it is not a hardware-wallet isolation or memory-zeroization guarantee.
 
