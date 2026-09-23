@@ -9,6 +9,17 @@ const MAX_BYTES = 64 * 1024;
 const MAX_ERROR_BYTES = 4096;
 const PUBLIC_KEY_TYPE = 'tendermint/PubKeySecp256k1';
 
+/** Every stable code the native helper can emit (constants in tools/keyring-signer/main.go).
+ * Only these are surfaced; any other diagnostic is discarded. A test keeps the lists equal. */
+export const HELPER_ERROR_CODES: readonly string[] = Object.freeze([
+  'ADDRESS_MISMATCH', 'CHAIN_MISMATCH', 'CORE_DUMP_PROTECTION_FAILED', 'INTERNAL_ERROR', 'INVALID_CHAIN_CONFIGURATION',
+  'INVALID_CONFIGURATION', 'INVALID_EXPECTED_ADDRESS', 'INVALID_FLAGS', 'INVALID_PUBLIC_KEY', 'INVALID_REQUEST',
+  'INVALID_SIGN_DOCUMENT', 'KEYRING_HOME_UNAVAILABLE', 'KEYRING_OPERATION_TIMEOUT', 'KEYRING_UNAVAILABLE_OR_LOCKED',
+  'KEY_UNAVAILABLE_OR_LOCKED', 'NONINTERACTIVE_SIGNING_UNAVAILABLE', 'NONINTERACTIVE_UNLOCK_UNAVAILABLE',
+  'OUTPUT_INITIALIZATION_FAILED', 'REQUEST_READ_FAILED', 'REQUEST_TOO_LARGE', 'SIGNATURE_VERIFICATION_FAILED',
+  'SIGNING_FAILED', 'SIGN_DOCUMENT_FAILED', 'UNSUPPORTED_BACKEND', 'UNSUPPORTED_KEY_TYPE', 'UNSUPPORTED_OPERATION',
+]);
+
 export interface KeyringWalletOptions {
   helperPath: string;
   home: string;
@@ -109,11 +120,8 @@ export const runKeyringHelper: KeyringRunner = (options, request, signal) => new
       let suffix = '';
       try {
         const result: unknown = JSON.parse(Buffer.concat(errors).toString('utf8'));
-        const safeCodes = ['INVALID_REQUEST', 'REQUEST_TOO_LARGE', 'INVALID_CONFIGURATION', 'KEYRING_UNAVAILABLE',
-          'KEY_UNAVAILABLE_OR_LOCKED', 'ADDRESS_MISMATCH', 'UNSUPPORTED_KEY_TYPE', 'CHAIN_MISMATCH', 'SIGNING_FAILED',
-          'NONINTERACTIVE_UNLOCK_UNAVAILABLE', 'NONINTERACTIVE_SIGNING_UNAVAILABLE', 'SIGNATURE_VERIFICATION_FAILED'];
         if (typeof result === 'object' && result !== null && 'error' in result
-          && typeof result.error === 'string' && safeCodes.includes(result.error)) suffix = ` (${result.error})`;
+          && typeof result.error === 'string' && HELPER_ERROR_CODES.includes(result.error)) suffix = ` (${result.error})`;
       } catch { /* Discard all unrecognized diagnostics. */ }
       reject(new Error(`Local keyring operation failed${suffix}. Check the selected key and unlock its store locally.`));
       return;
