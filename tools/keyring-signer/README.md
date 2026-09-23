@@ -71,3 +71,16 @@ disposable filesystem fixture for cross-language verification, run only
 absolute directory beneath `.local/`. The test refuses an existing directory.
 It writes a key named `fixture` and `public.json`; its mnemonic is public and the
 fixture must never hold real assets. No test reads the user's production keyring.
+
+CI runs the same checks on every pull request and push to `main` in the
+**Keyring helper** job of [`ci.yml`](../../.github/workflows/ci.yml):
+
+1. `go mod verify` and the Go tests with pinned Go 1.27.1, `GOTOOLCHAIN=local`
+   and `-mod=readonly`.
+2. [`scripts/keyring-ci.sh`](../../scripts/keyring-ci.sh), which builds the
+   helper, writes the public fixture and runs `scripts/test-keyring-native.ts`.
+
+The script refuses to run where `.local/mainnet` already exists, so it can never
+overwrite an operator's reviewed helper or evidence. The job uploads no
+artifacts. A CI build is a regression check only. Its digest differs from the
+reviewed operator helper, which is built locally and verified separately.

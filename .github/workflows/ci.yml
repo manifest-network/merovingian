@@ -33,6 +33,39 @@ jobs:
       - name: Check metadata, types, tests, and build
         run: npm run check
 
+  keyring:
+    name: Keyring helper
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # Operator-only signing helper: public disposable fixtures only. No artifacts
+    # are uploaded, so fixture keyrings and local reports stay on the runner.
+    env:
+      GOFLAGS: -mod=readonly
+      GOTOOLCHAIN: local
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.1'
+          cache-dependency-path: tools/keyring-signer/go.sum
+      - name: Verify the locked module graph
+        run: go -C tools/keyring-signer mod verify
+      - name: Test signing, verification and hardening failure paths
+        run: go -C tools/keyring-signer test -p 2 -count=1 ./...
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build the helper and sign through the Node adapter with the public fixture
+        run: bash scripts/keyring-ci.sh
+
   image:
     name: Final image
     runs-on: ubuntu-24.04
