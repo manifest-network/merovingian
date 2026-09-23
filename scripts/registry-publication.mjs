@@ -279,7 +279,7 @@ export function checkMetadata(bytes, version, packageVersion) {
 }
 
 // Git never inherits tokens or OIDC request variables from the step environment.
-function runGit(cwd, args) {
+export function runGit(cwd, args) {
   return execFileSync('git', ['-C', cwd, ...args], {
     stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 1_048_576, timeout: 60_000,
     env: { ...childEnvironment(process.env, process.env.HOME || cwd), GIT_TERMINAL_PROMPT: '0' },
@@ -332,10 +332,10 @@ export function checkSource({ cwd, sourceRevision, workflowRevision, mainRef = L
 }
 
 /** Actions context for a trusted dispatch; values are checked before they reach evidence. */
-export function checkDispatch(env) {
+export function checkDispatch(env, workflowFile = WORKFLOW_FILE) {
   const expected = {
     GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: REPOSITORY, GITHUB_EVENT_NAME: 'workflow_dispatch',
-    GITHUB_REF: 'refs/heads/main', GITHUB_WORKFLOW_REF: `${REPOSITORY}/${WORKFLOW_FILE}@refs/heads/main`,
+    GITHUB_REF: 'refs/heads/main', GITHUB_WORKFLOW_REF: `${REPOSITORY}/${workflowFile}@refs/heads/main`,
     GITHUB_SERVER_URL: 'https://github.com',
   };
   for (const [key, value] of Object.entries(expected)) {
@@ -353,11 +353,11 @@ export function checkDispatch(env) {
 }
 
 /** Fail-closed read of the approval environment, so a missing environment is never auto-created unprotected. */
-export async function checkEnvironment({ api = 'https://api.github.com', token, fetch: fetchImpl, timeoutMs, clock = () => new Date() }) {
+export async function checkEnvironment({ api = 'https://api.github.com', token, fetch: fetchImpl, timeoutMs, clock = () => new Date(), environment: name = ENVIRONMENT }) {
   const headers = { accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28',
     ...(token ? { authorization: `Bearer ${token}` } : {}) };
-  const base = `${api}/repos/${REPOSITORY}/environments/${ENVIRONMENT}`;
-  const result = { checkedAt: clock().toISOString(), name: ENVIRONMENT, passed: false, problems: [] };
+  const base = `${api}/repos/${REPOSITORY}/environments/${name}`;
+  const result = { checkedAt: clock().toISOString(), name, passed: false, problems: [] };
   const environment = await getJson(base, { fetch: fetchImpl, timeoutMs, headers, clock });
   if (environment.status !== 200 || !isObject(environment.json)) {
     result.problems.push(environment.status === 404 ? 'environment does not exist'
@@ -415,8 +415,9 @@ export async function checkDeployment({ origin = PRODUCTION_ORIGIN, version, fet
   return { ...result, passed: true };
 }
 
-/** Spawn with a hard deadline and bounded output capture. Never throws. */
-export function runProcess(file, args, { cwd, env, timeoutMs, maxOutput = 65_536 }) {
+/** Spawn with a hard deadline and bounded output capture. Never throws. Optional
+ * input is written to stdin (for example a password), never to the arguments. */
+export function runProcess(file, args, { cwd, env, timeoutMs, maxOutput = 65_536, input }) {
   return new Promise(resolvePromise => {
     const output = { stdout: [], stderr: [], size: 0 };
     let timedOut = false;
@@ -429,7 +430,7 @@ export function runProcess(file, args, { cwd, env, timeoutMs, maxOutput = 65_536
       resolvePromise({ ...result, timedOut, stdout: Buffer.concat(output.stdout).toString('utf8'), stderr: Buffer.concat(output.stderr).toString('utf8') });
     };
     let child;
-    try { child = spawn(file, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] }); }
+    try { child = spawn(file, args, { cwd, env, stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] }); }
     catch (error) { finish({ exitCode: null, signal: null, error: sanitizeMessage(error?.code || 'spawn failed', 40) }); return; }
     timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, timeoutMs);
     const collect = name => chunk => {
@@ -442,6 +443,10 @@ export function runProcess(file, args, { cwd, env, timeoutMs, maxOutput = 65_536
     child.stderr.on('data', collect('stderr'));
     child.on('error', error => finish({ exitCode: null, signal: null, error: sanitizeMessage(error?.code || 'spawn failed', 40) }));
     child.on('close', (exitCode, signal) => finish({ exitCode, signal }));
+    if (input !== undefined) {
+      child.stdin.on('error', () => {});
+      child.stdin.end(input);
+    }
   });
 }
 

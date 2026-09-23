@@ -56,6 +56,14 @@ waits for approval in the protected `mcp-registry-publish` environment. It then
 publishes with GitHub OIDC, without a PAT, and verifies the exact-version and
 latest records. See the [publication runbook](docs/MCP-REGISTRY.md#github-actions-publication).
 
+Runtime images are published only by the manually dispatched
+[Release image workflow](.github/workflows/release-image.yml). Its read-only
+Verify job builds the reviewed release commit and runs the repository, runtime
+and advisory checks. The Publish job waits for approval in the protected
+`image-release` environment, pushes exactly the verified image to GHCR, verifies
+it anonymously and attests its build provenance. See the
+[image release runbook](docs/IMAGE-RELEASE.md).
+
 `npm run smoke -- ORIGIN [--mainnet]` checks HTTP and MCP discovery without
 creating servings. Explicit `--serve` adds seven visits; live targets also require
 `--live-serve-authorization REFERENCE` naming the user's authorization for that

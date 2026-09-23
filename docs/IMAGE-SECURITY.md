@@ -7,6 +7,10 @@ Repository permissions are read-only and the job receives no deployment secrets.
 Only explicitly listed JSON evidence is uploaded, retained for 14 days; image
 archives, scanner caches and full Docker inspections are excluded.
 
+The [Release image workflow](IMAGE-RELEASE.md) runs the same runtime checks and
+scan on each release candidate before approval, and publishes only that verified
+image.
+
 The always-run `job-status.json` records each checkout, tool setup, dependency
 installation, build, runtime and scan outcome. It uses runner Python independently
 of repository dependencies, so an early install or build failure still produces

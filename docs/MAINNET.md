@@ -217,7 +217,7 @@ For recovery, retain the historical 0.4.0 journal as **prepared, never attempted
 
 ### Existing-lease update workflow
 
-The update tool checks the exact existing active lease, domain, locked rate, current provider release, reviewed public environment, and pinned image. It uses SDK provider authentication and the update endpoint; it creates no lease and sends no chain transaction. Inspect the current `0.4.6` update with:
+The update tool checks the exact existing active lease, domain, locked rate, current provider release, reviewed public environment, and pinned image. From `0.4.7`, the pinned image is the digest published by the [Release image workflow](IMAGE-RELEASE.md). It uses SDK provider authentication and the update endpoint; it creates no lease and sends no chain transaction. Inspect the current `0.4.6` update with:
 
 ```sh
 node --import tsx scripts/mainnet-update.ts status \
