@@ -11,7 +11,14 @@ The lockfile applies two published dependency overrides:
 - `axios@1.20.0` replaces an older 1.x version pinned by the LCD dependency and addresses published HTTP-client advisories.
 - `protobufjs@7.6.6` replaces the vulnerable 6.x dependency under ICS23. No patched 6.x release is available. ICS23 uses generated `protobufjs/minimal` codecs; test and live deployment coverage exercise compatibility. This is a dependency override, not a change to the Manifest package source.
 
-The remaining low-severity audit finding is inherited through `elliptic` in the SDK's Cosmos signing dependency. A fresh audit on 2026-09-17 reports zero moderate/high/critical findings and 11 low dependency paths to the same advisory. SDK 0.22.0 remained the latest published SDK at this check. SDK 0.23.0 and manifestjs 4.0.0 were published on 2026-09-22 and have not been adopted yet. The public service has no signing keys; the existing testnet operator script uses dedicated, faucet-funded testnet keys only.
+The remaining low-severity audit finding is inherited through `elliptic` in the SDK's Cosmos signing dependency. A fresh audit on 2026-09-17 reports zero moderate/high/critical findings and 11 low dependency paths to the same advisory. SDK 0.22.0 remained the latest published SDK at this check. SDK 0.23.0 and manifestjs 4.0.0 were published on 2026-09-22 and have not been adopted yet.
+
+[Dependabot](../.github/dependabot.yml) proposes npm, GitHub Actions and Docker updates. It does not cover:
+
+- the npm-aliased operator-signing packages `cosmjs-amino-modern` and `cosmjs-proto-signing-modern`;
+- the move of the Docker base image to a new Alpine line (it follows only the pinned `-alpine3.24` tags).
+
+Review those by hand, together with the keyring helper's Go module, when updating operator tooling or the runtime base. The public service has no signing keys; the existing testnet operator script uses dedicated, faucet-funded testnet keys only.
 
 The [2026-09-18 security audit](SECURITY-AUDIT-2026-09-18.md) reproduced that result for the repository's production npm dependencies, but found additional OS and globally bundled npm advisories in the final container image. The application-only npm result is not a clean bill of health for the image. The audit records package paths, fix targets, exposure limitations and tracked remediation.
 

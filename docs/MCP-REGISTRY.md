@@ -128,7 +128,8 @@ cancellation or a real OIDC exchange. On 2026-09-22, a
 [local dry run](#local-dry-run) of the current script in a fresh public clone
 returned `already-published` for `0.4.6`. Its saved snapshot was byte-identical
 to the committed [`mcp-registry-0.4.6.json`](evidence/mcp-registry-0.4.6.json).
-On 2026-09-23, two dispatches for `0.4.6` at `6cbce45` ran in GitHub Actions:
+On 2026-09-23, two dispatches from `main` at `35078d5`, for `0.4.6` with
+`source_revision` `6cbce45`, ran in GitHub Actions:
 [`mode=preflight`](https://github.com/manifest-network/merovingian/actions/runs/35861755064)
 and [`mode=publish`](https://github.com/manifest-network/merovingian/actions/runs/35861847194).
 Both Preflight jobs passed the approval-environment check, fetched the live
@@ -270,7 +271,9 @@ uses no caches. Only these run there:
 - the dependency-free
   [`registry-publication.mjs`](../scripts/registry-publication.mjs).
 
-Adding a step or action widens that boundary. Git and the installer's version
+Adding a step or action widens that boundary. Review any change to this job's
+action pins, including grouped Dependabot `ci(deps)` updates, as a change to the
+publication trust boundary. Git and the installer's version
 probe run without the OIDC request variables. The script:
 
 1. Rechecks the source, confirms that `server.json` matches the preflight digest,

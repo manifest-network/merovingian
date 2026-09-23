@@ -1,6 +1,6 @@
 # Merovingian v1
 
-Status: mainnet 0.4.6 is live at https://merovingian.manifest.network and published in the official MCP Registry; the testnet lease is closed. Publication of 0.4.2 and one fresh-agent visit passed earlier on 2026-09-18. Registry publication now runs through the approval-gated GitHub Actions workflow ([ENG-1046](https://linear.app/liftedinit/issue/ENG-1046)). See the [discovery report](docs/MCP-DISCOVERY.md), [mainnet operations](docs/MAINNET.md) and [release 0.4.6](docs/RELEASE-0.4.6.md) for evidence and current status.
+Status: mainnet 0.4.6 is live at https://merovingian.manifest.network and published in the official MCP Registry; the testnet lease is closed. Publication of 0.4.2 and one fresh-agent visit passed earlier on 2026-09-18. Registry publication is intended to run through the approval-gated GitHub Actions workflow ([ENG-1046](https://linear.app/liftedinit/issue/ENG-1046)); its preflight has run, and its first real publication will be the next release. See the [discovery report](docs/MCP-DISCOVERY.md), [mainnet operations](docs/MAINNET.md) and [release 0.4.6](docs/RELEASE-0.4.6.md) for evidence and current status.
 Updated: 2026-09-23.
 
 ## Agreed direction
