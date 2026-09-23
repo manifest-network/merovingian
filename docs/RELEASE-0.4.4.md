@@ -1,7 +1,8 @@
 # Release 0.4.4 — live
 
-This dated record describes the `0.4.4` publication. The current release is
-[0.4.5](RELEASE-0.4.5.md); the observations and digests below are historical.
+This dated record describes the `0.4.4` publication. Later releases are
+[0.4.5](RELEASE-0.4.5.md) and [0.4.6](RELEASE-0.4.6.md), which is current. The
+observations and digests below are historical.
 
 Release `0.4.4` is live on Manifest mainnet and published as the latest version
 in the official MCP Registry as of 2026-09-21. The user explicitly approved

@@ -1,5 +1,8 @@
 # Release 0.4.5 — live
 
+This dated record describes the `0.4.5` publication. The current release is
+[0.4.6](RELEASE-0.4.6.md); the observations and digests below are historical.
+
 `0.4.5` delivers the ENG-1044 healthcheck fix on the existing mainnet lease.
 The user requested release and deployment on 2026-09-21, then completed registry
 login and confirmed readiness to publish. Its package/lockfile versions and

@@ -1,0 +1,71 @@
+# Dependency update proposals only. Every update is a reviewed PR. Only the Check
+# job is a required status, so confirm Final image (and Keyring helper) results
+# before merging. An updated image still needs its own verified, authorized
+# release. The cooldown delays version updates until releases have aged.
+# Security updates are not delayed or capped, but they are raised only from
+# Dependabot alerts, which need the repository's dependency graph.
+# Not covered: the npm-aliased cosmjs-*-modern operator packages and moves to a
+# new Alpine line (see docs/DEPENDENCIES.md).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore(deps)
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+        exclude-patterns: ['@manifest-network/*', '@cosmjs/*', 'cosmjs-types']
+      # 0.x Manifest SDK and CosmJS packages are coupled and can break in "minor"
+      # releases: review them together as one migration.
+      manifest-and-cosmjs:
+        patterns: ['@manifest-network/*', '@cosmjs/*', 'cosmjs-types']
+    ignore:
+      # TypeScript 7 removes the compiler API used by scripts/check-runtime-image.mjs.
+      - dependency-name: typescript
+        versions: ['>=7']
+      # Node type definitions follow the Node 24 runtime.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: ci(deps)
+    groups:
+      github-actions:
+        patterns: ['*']
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore(deps)
+    ignore:
+      # The runtime stays on the Node 24 line. Only tags with the pinned
+      # -alpine3.24 suffix are followed; moving Alpine lines is manual.
+      - dependency-name: node
+        update-types: ['version-update:semver-major']
+
+  # Operator-only keyring helper: security updates only (alert-driven). Any bump
+  # means a rebuild, a new reviewed helper SHA-256, a govulncheck run and fixture
+  # verification (docs/DEPENDENCIES.md).
+  - package-ecosystem: gomod
+    directory: /tools/keyring-signer
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    commit-message:
+      prefix: chore(deps)
