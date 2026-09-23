@@ -32,6 +32,13 @@ updates:
       # Node type definitions follow the Node 24 runtime.
       - dependency-name: '@types/node'
         update-types: ['version-update:semver-major']
+      # These must match the versions the Manifest SDK pins (0.32.4 and its
+      # cosmjs-types line); newer ones break the build. They move only as part of
+      # an SDK migration, which also covers any security fix for them.
+      - dependency-name: '@cosmjs/proto-signing'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      - dependency-name: cosmjs-types
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
 
   - package-ecosystem: github-actions
     directory: /
