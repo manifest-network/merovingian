@@ -61,9 +61,14 @@ Build/test from the repository root with Go 1.26 or later (`go.mod` declares `go
 
 ```sh
 mkdir -p .local/go-cache .local/go-tmp .local/mainnet/bin
-GOMAXPROCS=2 GOCACHE="$PWD/.local/go-cache" GOTMPDIR="$PWD/.local/go-tmp" TMPDIR="$PWD/.local/go-tmp" go -C tools/keyring-signer test -p 2 ./...
-GOMAXPROCS=2 GOCACHE="$PWD/.local/go-cache" GOTMPDIR="$PWD/.local/go-tmp" TMPDIR="$PWD/.local/go-tmp" go -C tools/keyring-signer build -p 2 -o ../../.local/mainnet/bin/keyring-signer .
+GOTOOLCHAIN=local GOMAXPROCS=2 GOCACHE="$PWD/.local/go-cache" GOTMPDIR="$PWD/.local/go-tmp" TMPDIR="$PWD/.local/go-tmp" go -C tools/keyring-signer test -p 2 ./...
+npm run keyring:build
 ```
+
+`npm run keyring:build` uses the reviewed build flags (`-mod=readonly -trimpath`,
+`GOTOOLCHAIN=local`) and **replaces** `.local/mainnet/bin/keyring-signer`. To
+replace a reviewed helper, follow
+[Rebuilding the reviewed helper](../../docs/KEYRING.md#rebuilding-the-reviewed-helper).
 
 Tests use an in-memory keyring and a public BIP-39 test vector. To create a
 disposable filesystem fixture for cross-language verification, run only

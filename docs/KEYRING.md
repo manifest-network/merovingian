@@ -26,7 +26,7 @@ Run from the repository root using the project's Node.js dependencies and Go 1.2
 npm run keyring:build
 ```
 
-The build uses pinned published modules and `go.sum`, sets bounded build concurrency, keeps caches and temporary files under `.local/`, and writes `.local/mainnet/bin/keyring-signer` with owner-only executable permissions. It does not open a wallet. Source tests use a widely published test mnemonic and disposable fixtures; they must never hold real assets.
+The build uses pinned published modules and `go.sum`, sets bounded build concurrency, keeps caches and temporary files under `.local/`, and writes `.local/mainnet/bin/keyring-signer` with owner-only executable permissions. It does not open a wallet. It **replaces any existing helper at that path in place**. To replace a reviewed helper, follow [Rebuilding the reviewed helper](#rebuilding-the-reviewed-helper) instead. Source tests use a widely published test mnemonic and disposable fixtures; they must never hold real assets.
 
 Set the public keyring location to the same root used by `manifestd`: its `--keyring-dir` when configured, otherwise its `--home`. Replace the example path with that existing directory; do not create a new keyring or copy key files here.
 
@@ -90,7 +90,7 @@ npm run mainnet:launch -- run \
   --max-total-fee-pwr 0.5
 ```
 
-Use the actual existing keyring root if different; the helper path must be absolute. The command requires a matching successful `keyring-check.json` and helper digest, and hardwires `os` with no fallback. Unlock the store locally if required. No password or private-key argument is accepted. Changing the helper requires rebuilding and repeating the harmless compatibility check before execution.
+Use the actual existing keyring root if different; the helper path must be absolute. The command requires a matching successful `keyring-check.json` and helper digest, and hardwires `os` with no fallback. Unlock the store locally if required. No password or private-key argument is accepted. Changing the helper requires the [rebuild procedure](#rebuilding-the-reviewed-helper) before execution.
 
 The cap is an aggregate ceiling for creation and domain-claim transaction fees, not an amount to deposit or necessarily spend. Fresh simulations determine each fee; failed and uncertain transactions conservatively reserve their recorded fees against the total. The CLI refuses more than 1 PWR, and an existing launch cannot silently change its cap. Hosting remains separately bounded by the configured 5 PWR monthly plan. **Do not repeat the completed 15 PWR credit deposit.**
 
@@ -103,6 +103,26 @@ A crash may leave `launch/run.lock` or a transaction `.lock`. Review the recorde
 The completed launch followed the published SDK order: create lease, claim the custom domain for `refuge`, upload the exact hashed manifest, and poll readiness. Fred keeps the native instance FQDN separately from the custom domain. The authenticated connection response supplied **`refuge-928a176.barney0.manifest0.net`** for Cloudflare's verified **DNS-only / gray-cloud CNAME**. Launch state remains `awaiting-dns`, the CLI's last provider-upload phase; the CLI neither modifies DNS nor records later acceptance. Public DNS, normal TLS, HTTP/MCP, indexing, and the existing funding receipt passed in `.local/mainnet/dns-acceptance.json` and `.local/mainnet/live-acceptance.json`. See [MAINNET.md](MAINNET.md#cloudflare-and-launch-sequence). Testnet retirement behavior subsequently passed 18 checks, then its lease was confirmed CLOSED at **20:03:48 UTC** following the user's separate shutdown instruction. Mainnet remains live.
 
 Later updates use the SDK's `updateApp` on the same ACTIVE lease; rollback reapplies the previous pinned manifest. `restoreApp` instead uses a closed lease's retained data to create a new lease, incurs new fees/reserve, and does not restore custom domains. Neither operation is part of this launch command or automatically authorized by its fee cap.
+
+## Rebuilding the reviewed helper
+
+The launch and update commands accept only the helper digest recorded in `.local/mainnet/keyring-check.json`. After the helper's source or dependencies change, for example the 2026-09-23 Go dependency update in [DEPENDENCIES.md](DEPENDENCIES.md#native-keyring-adapter), replace the reviewed helper as follows. Every step is an operator action.
+
+1. **Back up the current reviewed state.** Copy `.local/mainnet/bin/keyring-signer`, `.local/mainnet/keyring-check.json` and `.local/mainnet/keyring-fixture-check.json` to a dated directory under `.local/`. Note the current check's public-key digest.
+2. **Build and fixture-check in a clean clone.** Clone the merged commit into a new directory without `.local/`, then run `npm ci --ignore-scripts` and `bash scripts/keyring-ci.sh` with Go 1.26 or later and `GOTOOLCHAIN=local`. This builds the candidate and verifies that exact binary through the Node adapter with the public disposable fixture. Record `sha256sum .local/mainnet/bin/keyring-signer` in the clone. The clean clone matters because the digest embeds the checkout's VCS state, and the operator checkout has untracked files.
+3. **Scan that exact binary** with `govulncheck` v1.8.0 or later: `govulncheck -mode binary <clone>/.local/mainnet/bin/keyring-signer`. The expected result for the 2026-09-23 dependency set:
+   - GO-2026-5932 at symbol level. Its OpenPGP armor symbols are linked but reached only through package initialization.
+   - No package-level findings.
+   - GO-2025-3442 at module level only.
+
+   Any other finding needs a new review before continuing.
+4. **Install it.** Copy the verified binary to `.local/mainnet/bin/keyring-signer` in the operator checkout with mode `0700`, and confirm its SHA-256 matches step 2.
+5. **Run `npm run keyring:check`** as shown above, with the protected OS store unlocked locally. Confirm:
+   - the address equals the tenant;
+   - the public-key digest equals the backed-up check's;
+   - `helperSha256` equals the new digest.
+
+   Until this passes, launch and update fail closed. Keep the step 2 fixture report with the backup as its evidence.
 
 ## Verification status
 

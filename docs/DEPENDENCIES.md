@@ -54,7 +54,7 @@ On 2026-09-23 the helper's module graph was updated to fix all 32 Dependabot ale
 
 | Module | Before | After | Notes |
 | --- | --- | --- | --- |
-| `google.golang.org/grpc` | v1.67.1 | v1.83.2 | Must be exactly v1.83.2. The Go vulnerability database lists v1.83.0–v1.83.1 and v1.84.0 as affected by [GO-2026-6443](https://pkg.go.dev/vuln/GO-2026-6443), even though GitHub's advisory range does not. |
+| `google.golang.org/grpc` | v1.67.1 | v1.83.2 | Must be exactly v1.83.2. [GO-2026-6443](https://pkg.go.dev/vuln/GO-2026-6443) (GHSA-2v4p-qf9q-27wj) also affects v1.83.0–v1.83.1 and v1.84.x. Dependabot alert #33 showed only the range matching v1.67.1 (first patched 1.82.2). |
 | `github.com/cometbft/cometbft` | v0.38.12 | v0.38.21 | The same version the installed `manifestd` links. |
 | `golang.org/x/crypto` | v0.27.0 | v0.56.0 | v0.56.0 also clears the unlinked `x/crypto/ssh` advisories GO-2026-6354 and GO-2026-6355. |
 | `golang.org/x/net` | v0.29.0 | v0.58.0 | Required by grpc v1.83.2. |
@@ -64,7 +64,7 @@ On 2026-09-23 the helper's module graph was updated to fix all 32 Dependabot ale
 | `github.com/decred/dcrd/dcrec/secp256k1/v4` (direct) | v4.2.0 | v4.4.0 | Forced by the graph; the same version `manifestd` links. |
 | `golang.org/x/sys` (direct) | v0.25.0 | v0.47.0 | Forced by the graph. |
 
-The `go` directive rises from 1.23.0 to 1.26.0. The updated modules and `x/crypto` v0.56.0 force this. Build with Go 1.26 or later. `npm run keyring:build` sets `GOTOOLCHAIN=local`, so an older local Go fails instead of downloading a toolchain nobody reviewed.
+The `go` directive rises from 1.23.0 to 1.26.0. grpc v1.83.2 and its dependencies need Go 1.25; choosing `x/crypto` v0.56.0 raises that to 1.26. Build with Go 1.26 or later. `npm run keyring:build` sets `GOTOOLCHAIN=local`, so an older local Go fails instead of downloading a toolchain nobody reviewed.
 
 Compatibility was checked on the public disposable fixture:
 
@@ -79,21 +79,21 @@ The production `os` backend (Secret Service) was not exercised; its modules are 
 - [GO-2026-5932](https://pkg.go.dev/vuln/GO-2026-5932), the unmaintained `x/crypto/openpgp`, with no fixed version. It is reached only through package initialization of the SDK's key import/export code, which the helper never calls. The fork's `liftedinit.3` replaces it with `ProtonMail/go-crypto`. The helper stays on `liftedinit.1` to match the installed CLI.
 - GO-2025-3442, module-only. This comes from a second advisory range for CometBFT v1's `internal/blocksync`. v0.38.21 is outside the affected v0.38 range.
 
-No imported-package findings remain. Before the update, source mode classified only GO-2026-4361 as called, and only because that advisory has no symbol-level data. The functions its fix changed are not reachable from the helper.
+No imported-package findings remain. Before the update, source mode classified two advisories as called: GO-2026-5932 (the same init-only OpenPGP path, still present) and GO-2026-4361. GO-2026-4361 counted as called only because that advisory has no symbol-level data; the functions its fix changed are not reachable from the helper.
 
 The manually traced entry point is bounded JSON input, local keyring lookup, protobuf/Amino record decoding, local secp256k1 signing, and response verification. `keyring.Sign` extracts the cached local key and uses SHA-256 plus Decred's compact ECDSA signing; it does not invoke the behaviors above. No concrete path from the three exposed operations to the remaining advisory mechanisms was identified.
 
 This is not a formal proof of unreachability. Keep the helper local and limited to its current operations. Repeat the review before adding network services, import/export, or other input paths that could activate retained functionality.
 
-The reviewed helper digest is still `721fc4cd…` from the earlier dependency set. A rebuilt helper has a different digest; the digest also embeds the checkout's VCS state. The launch and update commands refuse a helper whose digest does not match `keyring-check.json`. Before using a rebuilt helper:
+The reviewed helper digest is still `721fc4cd…` from the earlier dependency set. A rebuilt helper has a different digest; the digest also embeds the checkout's VCS state. The launch and update commands refuse a helper whose digest does not match `keyring-check.json`. Before using a rebuilt helper, follow [Rebuilding the reviewed helper](KEYRING.md#rebuilding-the-reviewed-helper). In outline:
 
-1. Keep copies of the current reviewed helper and `keyring-check.json`.
-2. Rebuild from a clean checkout and record the new SHA-256.
-3. Scan the binary with `govulncheck -mode binary`.
-4. Verify it with the public fixture.
+1. Back up the current evidence.
+2. Build and fixture-check the candidate in a clean clone.
+3. Scan that exact binary.
+4. Install it.
 5. Pass `npm run keyring:check` against the protected OS keyring.
 
-The rebuild and check are operator actions.
+These are operator actions.
 
 Before keyring access, the helper requires Linux `RLIMIT_CORE=0` and `PR_SET_DUMPABLE=0`, and fails closed if either setting fails. An isolated subprocess test verified both settings. Both are needed because piped core collectors can ignore the resource limit. See the primary Linux documentation for [core dumps](https://man7.org/linux/man-pages/man5/core.5.html) and [process dumpability](https://man7.org/linux/man-pages/man2/pr_set_dumpable.2const.html). This prevents ordinary crash-dump capture of the helper's key-bearing memory; it is not a hardware-wallet isolation or memory-zeroization guarantee.
 
