@@ -52,8 +52,11 @@ jobs:
         with:
           go-version: '1.27.1'
           cache-dependency-path: tools/keyring-signer/go.sum
-      - name: Verify the locked module graph
-        run: go -C tools/keyring-signer mod verify
+      - name: Download and verify the locked modules
+        # Downloads are checked against go.sum; verify then re-hashes the module cache.
+        run: |
+          go -C tools/keyring-signer mod download
+          go -C tools/keyring-signer mod verify
       - name: Test signing, verification and hardening failure paths
         run: go -C tools/keyring-signer test -p 2 -count=1 ./...
       - name: Set up Node.js

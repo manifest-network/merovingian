@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -8,7 +8,7 @@ import { createAuthTokens } from '@manifest-network/manifest-sdk/deploy';
 import { makeSignDoc } from 'cosmjs-proto-signing-modern';
 import { SignDoc } from 'cosmjs-types/cosmos/tx/v1beta1/tx.js';
 import { createMainnetWalletProvider } from '../scripts/mainnet-wallet.js';
-import { createKeyringWalletProvider, runKeyringHelper, type KeyringRunner, type KeyringWalletOptions } from '../scripts/keyring-wallet.js';
+import { createKeyringWalletProvider, HELPER_ERROR_CODES, runKeyringHelper, type KeyringRunner, type KeyringWalletOptions } from '../scripts/keyring-wallet.js';
 
 // Public fixture only. No production keyring is accessed by these tests.
 const mnemonic = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
@@ -139,4 +139,21 @@ test('native errors are sanitized and subprocess requests, responses and waits a
   });
   await assert.rejects(runKeyringHelper(options, { operation: 'sign-adr036', data: 'x'.repeat(70000) }, new AbortController().signal), /size limit/);
   await assert.rejects(createKeyringWalletProvider({ ...options, home: '/bad\0path' }), /Invalid local keyring configuration/);
+});
+
+test('every stable helper error code is surfaced, and only those codes', async () => {
+  // The helper writes {"error": CODE} with constant codes only; the adapter's list must match them exactly.
+  const source = await readFile(new URL('../tools/keyring-signer/main.go', import.meta.url), 'utf8');
+  const emitted = new Set([...source.matchAll(/safeError\("([A-Z_]+)"\)|"error": "([A-Z_]+)"/g)].map(match => match[1] ?? match[2]));
+  assert.deepEqual([...HELPER_ERROR_CODES].sort(), [...emitted].sort());
+  for (const code of ['KEYRING_HOME_UNAVAILABLE', 'KEYRING_UNAVAILABLE_OR_LOCKED', 'KEYRING_OPERATION_TIMEOUT']) {
+    await fakeHelper(`process.stderr.write(JSON.stringify({ error: ${JSON.stringify(code)} })); process.exit(1);`, async helperPath => {
+      await assert.rejects(runKeyringHelper({ ...options, helperPath }, { operation: 'public-key' }, new AbortController().signal),
+        new RegExp(`Local keyring operation failed \\(${code}\\)`));
+    });
+  }
+  await fakeHelper(`process.stderr.write(JSON.stringify({ error: 'KEYRING_UNAVAILABLE' })); process.exit(1);`, async helperPath => {
+    await assert.rejects(runKeyringHelper({ ...options, helperPath }, { operation: 'public-key' }, new AbortController().signal),
+      error => error instanceof Error && error.message === 'Local keyring operation failed. Check the selected key and unlock its store locally.');
+  });
 });

@@ -75,12 +75,19 @@ fixture must never hold real assets. No test reads the user's production keyring
 CI runs the same checks on every pull request and push to `main` in the
 **Keyring helper** job of [`ci.yml`](../../.github/workflows/ci.yml):
 
-1. `go mod verify` and the Go tests with pinned Go 1.27.1, `GOTOOLCHAIN=local`
-   and `-mod=readonly`.
+1. `go mod download` and `go mod verify`, then the Go tests, with pinned Go
+   1.27.1, `GOTOOLCHAIN=local` and `-mod=readonly`. Downloads are checked against
+   `go.sum`, and verify re-hashes the module cache.
 2. [`scripts/keyring-ci.sh`](../../scripts/keyring-ci.sh), which builds the
    helper, writes the public fixture and runs `scripts/test-keyring-native.ts`.
+   That script signs through the Node adapter. It also checks that the real
+   helper's `ADDRESS_MISMATCH`, `KEYRING_HOME_UNAVAILABLE` and
+   `NONINTERACTIVE_UNLOCK_UNAVAILABLE` codes reach the caller.
 
-The script refuses to run where `.local/mainnet` already exists, so it can never
-overwrite an operator's reviewed helper or evidence. The job uploads no
+The script always works from the repository root. It refuses to run where
+`.local/mainnet` already exists, even as a symlink, so it can never overwrite an
+operator's reviewed helper or evidence. The adapter surfaces exactly the stable
+codes the helper can emit; a test keeps that list equal to the codes in
+`main.go`. The job uploads no
 artifacts. A CI build is a regression check only. Its digest differs from the
 reviewed operator helper, which is built locally and verified separately.

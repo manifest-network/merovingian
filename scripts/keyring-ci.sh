@@ -2,14 +2,15 @@
 set -euo pipefail
 
 # CI integration check for the operator keyring helper: build it with the locked
-# module graph, create the PUBLIC disposable fixture, and sign through the Node
-# adapter and published SDK. No production keyring, network request, broadcast
-# or provider authentication is involved.
+# module graph, create the PUBLIC disposable fixture, then sign and check stable
+# failure codes through the Node adapter and published SDK. No production
+# keyring, network request, broadcast or provider authentication is involved.
 #
-# The build and the check write under .local/mainnet, where an operator
-# checkout keeps its reviewed helper binary and evidence. Run this only in a
-# fresh checkout; it refuses to touch existing operator state.
-if [ -e .local/mainnet ]; then
+# The build and the check write under <repository>/.local/mainnet, where an
+# operator checkout keeps its reviewed helper binary and evidence. Run this only
+# in a fresh checkout; it refuses to touch existing operator state.
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
+if [ -e .local/mainnet ] || [ -L .local/mainnet ]; then
   echo 'Refusing to run: .local/mainnet exists. Use a fresh checkout so the reviewed helper and operator evidence are never overwritten.' >&2
   exit 1
 fi
