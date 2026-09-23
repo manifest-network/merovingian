@@ -32,11 +32,12 @@ function temporaryDirectory(t: TestContext, prefix: string) {
 }
 
 /** One image as the Build job sees it: labelled config, two layers and the pushed manifest. */
-function imageFixture(sourceRevision: string, changes: { architecture?: string; revision?: string; configFrom?: { config: Buffer } } = {}) {
+function imageFixture(sourceRevision: string, changes: { architecture?: string; revision?: string; configFrom?: { config: Buffer }; paddedLayers?: boolean } = {}) {
   // Like a real image configuration, the config lists every layer's uncompressed diff ID, so its digest binds the content.
   // configFrom reuses another image's configuration with unrelated layers, as a crafted manifest could.
   const contents = [randomBytes(64), randomBytes(32)];
-  const layers = contents.map(content => gzipSync(content));
+  // Padding after the gzip stream is ignored by Node's gunzip but rejected by Go's reader.
+  const layers = contents.map(content => changes.paddedLayers ? Buffer.concat([gzipSync(content), Buffer.alloc(64)]) : gzipSync(content));
   const config = changes.configFrom?.config ?? Buffer.from(JSON.stringify({ architecture: changes.architecture ?? 'amd64', os: 'linux',
     config: { Labels: { 'org.opencontainers.image.revision': changes.revision ?? sourceRevision, 'org.opencontainers.image.version': VERSION,
       'org.opencontainers.image.source': SOURCE_URL } },
@@ -50,6 +51,23 @@ function imageFixture(sourceRevision: string, changes: { architecture?: string; 
       Config: { Labels: JSON.parse(config.toString()).config.Labels as Record<string, string> } } };
 }
 type Image = ReturnType<typeof imageFixture>;
+
+/** The same configuration and layers under a manifest whose descriptors were changed, as a crafted push could. */
+function manifestVariant(image: Image, change: (manifest: { config: Record<string, unknown>; mediaType: string }) => void): Image {
+  const manifest = JSON.parse(image.manifest.toString());
+  change(manifest);
+  const bytes = Buffer.from(JSON.stringify(manifest));
+  return { ...image, manifest: bytes, digest: digestOf(bytes) };
+}
+/** Byte-level variants that JSON.parse and Go's encoding/json read differently. */
+function manifestText(image: Image, change: (text: string) => string): Image {
+  const bytes = Buffer.from(change(image.manifest.toString()));
+  return { ...image, manifest: bytes, digest: digestOf(bytes) };
+}
+const configText = (image: Image) => JSON.stringify(JSON.parse(image.manifest.toString()).config);
+const appendField = (image: Image, field: string) => manifestText(image, text => `${text.slice(0, -1)},${field}}`);
+const oversizedConfig = (image: Image) => manifestVariant(image, manifest => { manifest.config.size = (manifest.config.size as number) + 1; });
+const unsupportedConfigType = (image: Image) => manifestVariant(image, manifest => { manifest.config.mediaType = 'application/vnd.example.config+json'; });
 
 interface Call { url: string; method: string; authorization: string | null }
 
@@ -104,7 +122,8 @@ function registryFixture(initial: RegistryOptions = {}) {
         return options.untyped404 ? new Response('not found', { status: 404 })
           : Response.json({ errors: [{ code: 'MANIFEST_UNKNOWN', message: 'manifest unknown' }] }, { status: 404 });
       }
-      return new Response(new Uint8Array(image.manifest), { status: 200, headers: { 'content-type': DOCKER_V2, 'docker-content-digest': image.digest } });
+      const contentType = (/"mediaType":"([^"]+)","config"/.exec(image.manifest.toString())?.[1] ?? DOCKER_V2);
+      return new Response(new Uint8Array(image.manifest), { status: 200, headers: { 'content-type': contentType, 'docker-content-digest': image.digest } });
     }
     const blobPath = `/v2/${IMAGE_NAME}/blobs/`;
     if (url.pathname.startsWith(blobPath)) {
@@ -188,7 +207,7 @@ function writeDockerArchive(output: string, image: Image, layout: 'classic' | 'c
 }
 
 type DockerBehavior = Partial<{ load: 'fail'; login: 'fail'; inspect: 'missing'; save: Image;
-  push: 'fail' | 'fail-after-upload' | 'fail-foreign' | 'fail-unknown' | 'moved' }>;
+  push: 'fail' | 'fail-after-upload' | 'fail-foreign' | 'fail-unknown' | 'moved' | 'fail-crafted-size' | 'fail-crafted-type' | 'fail-crafted-shadow' }>;
 
 /** Scripted docker: records every call; secrets may arrive only on stdin. */
 function dockerFixture(image: Image, registry: ReturnType<typeof registryFixture>, behavior: DockerBehavior = {}) {
@@ -216,6 +235,10 @@ function dockerFixture(image: Image, registry: ReturnType<typeof registryFixture
         case 'fail-foreign': registry.publish(VERSION, imageFixture(image.inspect.Config.Labels['org.opencontainers.image.revision'])); return failed('unexpected EOF');
         case 'fail-unknown': registry.options.untyped404 = true; return failed('unexpected EOF');
         case 'moved': registry.publish(VERSION, imageFixture(image.inspect.Config.Labels['org.opencontainers.image.revision'])); return reported;
+        // A concurrent writer leaves a crafted manifest that reuses the verified configuration.
+        case 'fail-crafted-size': registry.publish(VERSION, oversizedConfig(image)); return failed('unexpected EOF');
+        case 'fail-crafted-type': registry.publish(VERSION, unsupportedConfigType(image)); return failed('unexpected EOF');
+        case 'fail-crafted-shadow': registry.publish(VERSION, appendField(image, `"Config":${configText(imageFixture('b'.repeat(40)))}`)); return failed('unexpected EOF');
         default: registry.publish(VERSION, image); return reported;
       }
     }
@@ -284,7 +307,35 @@ test('manifests must be single, well-formed images whose bytes match their diges
     [response(index), /index/],
     [response(Buffer.from(JSON.stringify({ schemaVersion: 1, mediaType: DOCKER_V2 }))), /unsupported/],
     [response(Buffer.from(JSON.stringify({ schemaVersion: 2, mediaType: DOCKER_V2, config: { digest: 'sha256:x', size: 1 }, layers: [] }))), /malformed/],
+    [response(unsupportedConfigType(image).manifest), /unsupported configuration media type/],
+    // Each manifest type must name its own configuration type.
+    [response(manifestVariant(image, manifest => { manifest.config.mediaType = 'application/vnd.oci.image.config.v1+json'; }).manifest), /unsupported configuration media type/],
+    [response(manifestVariant(image, manifest => { manifest.mediaType = 'application/vnd.oci.image.manifest.v1+json'; }).manifest), /unsupported configuration media type/],
+    [response(manifestVariant(image, manifest => { delete manifest.config.mediaType; }).manifest), /unsupported configuration media type/],
+    [response(manifestVariant(image, manifest => { manifest.config.mediaType = 'application/vnd.docker.container.image.v1+json'.toUpperCase(); }).manifest), /unsupported configuration media type/],
+    [response(manifestVariant(image, manifest => { manifest.config.mediaType += '.x'; }).manifest), /unsupported configuration media type/],
+    [response(manifestVariant(image, manifest => { manifest.config.mediaType += '; charset=utf-8'; }).manifest), /unsupported configuration media type/],
+    // Go matches keys case-insensitively (with Unicode folding) and merges duplicates; JSON.parse does neither.
+    [response(appendField(image, `"Config":${configText(imageFixture('a'.repeat(40)))}`).manifest), /not canonical/],
+    [response(appendField(image, `"Layers":[]`).manifest), /not canonical/],
+    [response(manifestText(image, text => text.replace('"config":{', '"config":{"Size":1,')).manifest), /not canonical/],
+    [response(manifestText(image, text => text.replace('"config":{', '"config":{"\u017fize":1,')).manifest), /not canonical/],
+    [response(manifestText(image, text => text.replace('"config":{', `"config":${configText(image)},"\u0063onfig":{`)).manifest), /not canonical/],
+    [response(manifestText(image, text => text.replace(/"size":([0-9]+)/, '"size":$1.0')).manifest), /not canonical/],
+    [response(manifestText(image, text => `${text}\n{}`).manifest), /not canonical/],
+    // containerd fetches descriptor URLs, or uses inline data, instead of the registry.
+    [response(manifestVariant(image, manifest => { manifest.config.urls = ['https://elsewhere.test/config']; }).manifest), /not canonical/],
+    [response(manifestText(image, text => text.replace('"layers":[{', '"layers":[{"data":"AA==",')).manifest), /not canonical/],
+    [response(appendField(image, `"subject":${configText(image)}`).manifest), /not canonical/],
+    [response(manifestVariant(image, manifest => { manifest.config.annotations = { size: 1 } as unknown as string; }).manifest), /not canonical/],
   ];
+  assert.equal(describeManifest(response(manifestVariant(image, manifest => { manifest.config.annotations = { note: 'reviewed' } as unknown as string; }).manifest)).problem, undefined,
+    'string annotations are allowed');
+  const oci = manifestVariant(image, manifest => {
+    manifest.mediaType = 'application/vnd.oci.image.manifest.v1+json';
+    manifest.config.mediaType = 'application/vnd.oci.image.config.v1+json';
+  });
+  assert.equal(describeManifest(response(oci.manifest)).config?.mediaType, 'application/vnd.oci.image.config.v1+json');
   for (const [candidate, pattern] of cases) assert.match(describeManifest(candidate).problem ?? '', pattern);
 });
 
@@ -321,12 +372,16 @@ test('anonymous verification binds tag, digest, configuration, platform and ever
   assert.equal(cdn[0].authorization, null);
 
   const other = imageFixture(source);
+  const padded = imageFixture(source, { paddedLayers: true });
   const cases: [Parameters<typeof verifyPublished>[0], RegExp][] = [
     [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: other.configDigest, fetch: registry.fetch }, /differs from the verified candidate/],
     [{ registry: REGISTRY, version: VERSION, digest: other.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image, other } }).fetch }, /pushed digest/],
     [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image }, missingLayer: true }).fetch }, /layer unavailable \(HTTP 404\)/],
     [{ registry: REGISTRY, version: VERSION, digest: null, configDigest: image.configDigest, fetch: registry.fetch }, /no pushed digest/],
-    [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image }, tamperedConfig: true }).fetch }, /config blob bytes differ/],
+    [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image }, tamperedConfig: true }).fetch }, /config blob size differs/],
+    [{ registry: REGISTRY, version: VERSION, digest: oversizedConfig(image).digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: oversizedConfig(image) } }).fetch }, /config blob size differs from its descriptor/],
+    [{ registry: REGISTRY, version: VERSION, digest: padded.digest, configDigest: padded.configDigest, fetch: registryFixture({ tags: { [VERSION]: padded } }).fetch }, /data after its gzip stream/],
+    [{ registry: REGISTRY, version: VERSION, digest: unsupportedConfigType(image).digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: unsupportedConfigType(image) } }).fetch }, /unsupported configuration media type/],
     [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image }, httpRedirect: true }).fetch }, /config blob unavailable \(HTTP 307\)/],
     [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image }, tamperedLayer: true }).fetch }, /layer size differs/],
     [{ registry: REGISTRY, version: VERSION, digest: image.digest, configDigest: image.configDigest, fetch: registryFixture({ tags: { [VERSION]: image }, reencodedLayer: true }).fetch }, /layer bytes differ from their digest/],
@@ -510,14 +565,16 @@ test('Check binds the runtime and advisory reports to the image Build recorded a
   }
 });
 
-async function publicationFixture(t: TestContext, options: { tags?: Record<string, 'same' | 'other' | 'foreign'>; docker?: DockerBehavior;
+async function publicationFixture(t: TestContext, options: { tags?: Record<string, 'same' | 'other' | 'foreign' | 'config-size' | 'config-type' | 'shadow'>; docker?: DockerBehavior;
   moveMain?: boolean;
   archive?: string | null; registry?: RegistryOptions; changes?: Record<string, unknown> } = {}) {
   const repo = repositoryFixture(t);
   git(repo.cwd, 'fetch', '--quiet', 'origin', '+refs/heads/main:refs/merovingian/main');
   const image = imageFixture(repo.release);
   const tags = Object.fromEntries(Object.entries(options.tags ?? {}).map(([tag, kind]) => [tag,
-    kind === 'same' ? image : kind === 'foreign' ? imageFixture(repo.release, { configFrom: image }) : imageFixture(repo.release)]));
+    kind === 'same' ? image : kind === 'foreign' ? imageFixture(repo.release, { configFrom: image })
+      : kind === 'config-size' ? oversizedConfig(image) : kind === 'config-type' ? unsupportedConfigType(image)
+      : kind === 'shadow' ? appendField(image, `"Config":${configText(imageFixture('b'.repeat(40)))}`) : imageFixture(repo.release)]));
   if (options.moveMain) repo.moveMain();
   const registry = registryFixture({ ...options.registry, tags });
   const docker = dockerFixture(image, registry, options.docker);
@@ -603,8 +660,32 @@ test('after the next release lands on main, a re-run still attests the published
   assert.deepEqual(push.commands, []);
 });
 
+test('a tag that reuses the verified configuration under crafted descriptors is never adopted or attested', SLOW, async (t) => {
+  // Same configuration digest and layer content; only the configuration descriptor differs, so Docker cannot pull it.
+  const oversized = await publicationFixture(t, { tags: { [VERSION]: 'config-size' }, archive: null });
+  assert.deepEqual([oversized.evidence.decision, oversized.evidence.error?.code, oversized.commands], ['already-published', 'verification', []]);
+  assert.match(oversized.evidence.error.message, /config blob size differs from its descriptor/);
+  assert.equal(oversized.evidence.digest, undefined);
+  const unsupported = await publicationFixture(t, { tags: { [VERSION]: 'config-type' }, archive: null });
+  assert.deepEqual([unsupported.evidence.error?.code, unsupported.commands], ['registry', []]);
+  assert.match(unsupported.evidence.error.message, /unsupported configuration media type/);
+  // Docker would pull the shadowing "Config" instead of the verified configuration.
+  const shadow = await publicationFixture(t, { tags: { [VERSION]: 'shadow' }, archive: null });
+  assert.deepEqual([shadow.evidence.error?.code, shadow.commands, shadow.evidence.digest], ['registry', [], undefined]);
+  assert.match(shadow.evidence.error.message, /not canonical/);
+  // The same crafted tags appearing during a failed push are never adopted either.
+  const size = await publicationFixture(t, { docker: { push: 'fail-crafted-size' } });
+  assert.deepEqual([size.evidence.decision, size.evidence.error?.code, size.evidence.digest], ['push', 'verification', undefined]);
+  for (const push of ['fail-crafted-type', 'fail-crafted-shadow'] as const) {
+    const crafted = await publicationFixture(t, { docker: { push } });
+    assert.deepEqual([crafted.evidence.decision, crafted.evidence.error?.code, crafted.evidence.digest], ['push', 'push', undefined], push);
+    assert.match(crafted.evidence.error.message, /outcome is unknown/);
+  }
+});
+
 test('a push that does not verify anonymously never yields a digest to attest', SLOW, async (t) => {
-  for (const options of [{ registry: { missingLayer: true } }, { docker: { push: 'moved' as const } }, { registry: { tamperedLayer: true } }, { tags: { [VERSION]: 'foreign' as const } }]) {
+  for (const options of [{ registry: { missingLayer: true } }, { docker: { push: 'moved' as const } }, { registry: { tamperedLayer: true } },
+    { tags: { [VERSION]: 'foreign' as const } }, { docker: { push: 'fail-crafted-size' as const } }]) {
     const { evidence, output } = await publicationFixture(t, options);
     assert.equal(evidence.passed, false);
     assert.equal(evidence.error.code, 'verification', JSON.stringify([options, evidence.error]));

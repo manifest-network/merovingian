@@ -69,6 +69,12 @@ approved in the `image-release` environment. It has `contents: read`,
    `linux/amd64`. It downloads every layer and checks its bytes against the
    manifest digest and size, and its uncompressed content against the
    configuration's `diff_ids`. The registry must serve exactly the verified image.
+   Manifests must be canonical, so that Docker and containerd, which decode with
+   Go's case-insensitive, merging JSON reader, resolve the same content: no
+   duplicate or case-variant keys, only the supported fields (no descriptor `urls`
+   or inline `data`), the configuration type paired with the manifest type, a
+   configuration size equal to its descriptor, and no data after a layer's gzip
+   stream.
 6. Attests SLSA build provenance for the digest with
    [`actions/attest`](https://github.com/actions/attest). The attestation is signed
    through Sigstore and stored in GitHub's attestation store, not pushed to the

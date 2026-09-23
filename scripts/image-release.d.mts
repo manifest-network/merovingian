@@ -22,13 +22,14 @@ export interface RegistryResponse {
 }
 export interface TagObservation {
   reference: string; observedAt: string; state: 'absent' | 'present' | 'error'; httpStatus?: number; problem?: string;
-  digest?: string; mediaType?: string; config?: { digest: string; size: number }; layers?: { digest: string; size: number; mediaType: string }[];
+  digest?: string; mediaType?: string; config?: { digest: string; size: number; mediaType?: string }; layers?: { digest: string; size: number; mediaType: string }[];
 }
 export type Evidence = Record<string, any> & { stage: string; outcome: string; passed: boolean };
 
 export function fileSha256(path: string): Promise<string>;
 export function request(url: string, options?: { fetch?: Fetch; timeoutMs?: number; method?: string; headers?: Record<string, string>; maxBytes?: number }): Promise<RegistryResponse>;
 export function anonymousToken(options: { registry: string; fetch?: Fetch; timeoutMs?: number }): Promise<{ token?: string; problem?: string }>;
+export function parseCanonicalJson(bytes: Buffer): unknown;
 export function describeManifest(response: RegistryResponse & { bytes: Buffer; contentType: string }): Omit<TagObservation, 'reference' | 'observedAt' | 'state'>;
 export function lookupTag(options: { registry: string; reference: string; fetch?: Fetch; timeoutMs?: number; clock?: () => Date; token?: string }): Promise<TagObservation>;
 export function decidePush(tag: TagObservation, configDigest: string): 'push' | 'already-published';

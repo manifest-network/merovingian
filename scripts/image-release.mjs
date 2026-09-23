@@ -37,6 +37,12 @@ const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const USER_AGENT = 'merovingian-image-release (+https://github.com/manifest-network/merovingian)';
 const MANIFEST_TYPES = ['application/vnd.oci.image.manifest.v1+json', 'application/vnd.docker.distribution.manifest.v2+json'];
 const INDEX_TYPES = ['application/vnd.oci.image.index.v1+json', 'application/vnd.docker.distribution.manifest.list.v2+json'];
+// Policy: accept only the configuration type each manifest type defines; unknown or
+// mixed types are refused rather than guessed at.
+const CONFIG_TYPES = Object.freeze({
+  'application/vnd.oci.image.manifest.v1+json': 'application/vnd.oci.image.config.v1+json',
+  'application/vnd.docker.distribution.manifest.v2+json': 'application/vnd.docker.container.image.v1+json',
+});
 const GZIP_LAYERS = ['application/vnd.oci.image.layer.v1.tar+gzip', 'application/vnd.docker.image.rootfs.diff.tar.gzip'];
 const TAR_LAYERS = ['application/vnd.oci.image.layer.v1.tar'];
 const ARCHIVE_NAME = 'image.tar';
@@ -85,6 +91,90 @@ export async function request(url, { fetch: fetchImpl = fetch, timeoutMs = DEFAU
 }
 
 const parseJson = bytes => { try { return JSON.parse(bytes.toString('utf8')); } catch { return undefined; } };
+
+/**
+ * Parse registry JSON only where JavaScript and Go's encoding/json (used by Docker
+ * and containerd) must read the same thing. Rejects duplicate keys in any object
+ * (Go merges them; JSON.parse keeps the last), number spellings other than plain
+ * integers, invalid UTF-8 and trailing data. Callers then allow only exact keys,
+ * which also rejects Go's case-insensitive aliases such as "Config" or "ſize".
+ * Returns undefined for anything else.
+ */
+export function parseCanonicalJson(bytes) {
+  const text = bytes.toString('utf8');
+  if (!Buffer.from(text, 'utf8').equals(bytes)) return undefined;
+  let index = 0;
+  const invalid = () => { throw new SyntaxError('non-canonical JSON'); };
+  const skip = () => { while (index < text.length && ' \t\n\r'.includes(text[index])) index++; };
+  const string = () => {
+    const start = index++;
+    while (index < text.length && text[index] !== '"') index += text[index] === '\\' ? 2 : 1;
+    if (index >= text.length) invalid();
+    index++;
+    return JSON.parse(text.slice(start, index));
+  };
+  const value = depth => {
+    if (depth > 32) invalid();
+    skip();
+    const character = text[index];
+    if (character === '{') {
+      index++;
+      const object = {};
+      const keys = new Set();
+      skip();
+      if (text[index] === '}') { index++; return object; }
+      for (;;) {
+        skip();
+        if (text[index] !== '"') invalid();
+        const key = string();
+        if (keys.has(key)) invalid();
+        keys.add(key);
+        skip();
+        if (text[index++] !== ':') invalid();
+        Object.defineProperty(object, key, { value: value(depth + 1), enumerable: true, writable: true, configurable: true });
+        skip();
+        if (text[index] === ',') { index++; continue; }
+        if (text[index++] === '}') return object;
+        invalid();
+      }
+    }
+    if (character === '[') {
+      index++;
+      const array = [];
+      skip();
+      if (text[index] === ']') { index++; return array; }
+      for (;;) {
+        array.push(value(depth + 1));
+        skip();
+        if (text[index] === ',') { index++; continue; }
+        if (text[index++] === ']') return array;
+        invalid();
+      }
+    }
+    if (character === '"') return string();
+    const literal = /^(?:true|false|null|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)/.exec(text.slice(index))?.[0];
+    if (!literal) invalid();
+    index += literal.length;
+    if (literal === 'true') return true;
+    if (literal === 'false') return false;
+    if (literal === 'null') return null;
+    if (!/^-?(?:0|[1-9][0-9]*)$/.test(literal) || !Number.isSafeInteger(Number(literal))) invalid();
+    return Number(literal);
+  };
+  try {
+    const result = value(0);
+    skip();
+    return index === text.length ? result : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const MANIFEST_KEYS = new Set(['schemaVersion', 'mediaType', 'config', 'layers', 'annotations']);
+// No urls or data: containerd fetches from descriptor URLs, or uses inline data, instead of the registry.
+const DESCRIPTOR_KEYS = new Set(['mediaType', 'digest', 'size', 'annotations']);
+const exactKeys = (value, allowed) => isObject(value) && Object.keys(value).every(key => allowed.has(key))
+  && (value.annotations === undefined || (isObject(value.annotations) && Object.values(value.annotations).every(entry => typeof entry === 'string')));
 const httpProblem = response => response.problem || `HTTP ${response.status}`;
 
 /** Anonymous pull token: the package must be public for the provider to pull it. */
@@ -102,19 +192,23 @@ export async function anonymousToken({ registry, fetch: fetchImpl, timeoutMs }) 
 export function describeManifest(response) {
   const digest = `sha256:${sha256(response.bytes)}`;
   if (response.digest && response.digest !== digest) return { problem: 'Docker-Content-Digest differs from the manifest bytes' };
-  const manifest = parseJson(response.bytes);
-  const mediaType = manifest?.mediaType ?? response.contentType.split(';')[0].trim();
+  const manifest = parseCanonicalJson(response.bytes);
+  const mediaType = (isObject(manifest) ? manifest.mediaType : undefined) ?? response.contentType.split(';')[0].trim();
   if (INDEX_TYPES.includes(mediaType) || Array.isArray(manifest?.manifests)) return { digest, mediaType, problem: 'tag names an index, not a single image manifest' };
+  if (!exactKeys(manifest, MANIFEST_KEYS)) return { digest, mediaType, problem: 'manifest is not canonical JSON with only the supported fields' };
   if (!MANIFEST_TYPES.includes(mediaType) || manifest?.schemaVersion !== 2) return { digest, mediaType, problem: 'unsupported manifest media type' };
   const config = manifest.config;
   const layers = manifest.layers;
-  if (!isObject(config) || !DIGEST_PATTERN.test(config.digest) || !Number.isSafeInteger(config.size) || config.size <= 0
-    || !Array.isArray(layers) || !layers.length
-    || !layers.every(layer => isObject(layer) && DIGEST_PATTERN.test(layer.digest) && Number.isSafeInteger(layer.size) && layer.size >= 0
+  if (!exactKeys(config, DESCRIPTOR_KEYS) || !Array.isArray(layers) || !layers.every(layer => exactKeys(layer, DESCRIPTOR_KEYS))) {
+    return { digest, mediaType, problem: 'manifest descriptors are not canonical: only mediaType, digest, size and string annotations are supported' };
+  }
+  if (!DIGEST_PATTERN.test(config.digest) || !Number.isSafeInteger(config.size) || config.size <= 0 || !layers.length
+    || !layers.every(layer => DIGEST_PATTERN.test(layer.digest) && Number.isSafeInteger(layer.size) && layer.size >= 0
       && typeof layer.mediaType === 'string')) {
     return { digest, mediaType, problem: 'manifest config or layers are malformed' };
   }
-  return { digest, mediaType, config: { digest: config.digest, size: config.size },
+  if (config.mediaType !== CONFIG_TYPES[mediaType]) return { digest, mediaType, problem: 'unsupported configuration media type' };
+  return { digest, mediaType, config: { digest: config.digest, size: config.size, mediaType: config.mediaType },
     layers: layers.map(({ digest: layerDigest, size, mediaType: layerType }) => ({ digest: layerDigest, size, mediaType: layerType })) };
 }
 
@@ -149,13 +243,15 @@ export function decidePush(tag, configDigest) {
 }
 
 /** Fetch the config blob anonymously; follow at most one redirect, without credentials. */
-async function readConfig({ registry, token, digest, fetch: fetchImpl, timeoutMs }) {
+async function readConfig({ registry, token, digest, size, fetch: fetchImpl, timeoutMs }) {
   let response = await request(`${registry}/v2/${IMAGE_NAME}/blobs/${digest}`, {
     fetch: fetchImpl, timeoutMs, maxBytes: 1_048_576, headers: { authorization: `Bearer ${token}` } });
   if (response.status >= 300 && response.status < 400 && /^https:\/\//.test(response.location ?? '')) {
     response = await request(response.location, { fetch: fetchImpl, timeoutMs, maxBytes: 1_048_576 });
   }
   if (response.status !== 200 || !response.bytes) return { problem: `config blob unavailable (${httpProblem(response)})` };
+  // Pulls read exactly the descriptor's size, so a hash match alone is not enough.
+  if (response.bytes.length !== size) return { problem: 'config blob size differs from its descriptor' };
   if (`sha256:${sha256(response.bytes)}` !== digest) return { problem: 'config blob bytes differ from their digest' };
   return { config: parseJson(response.bytes) };
 }
@@ -193,8 +289,11 @@ async function verifyLayer({ registry, token, layer, diffId, fetch: fetchImpl = 
       return callback(null, chunk);
     } });
     const sink = new Writable({ write(chunk, _encoding, callback) { content.update(chunk); callback(); } });
-    await pipeline(Readable.fromWeb(response.body), measure, ...(GZIP_LAYERS.includes(layer.mediaType) ? [createGunzip()] : []), sink);
+    const gunzip = GZIP_LAYERS.includes(layer.mediaType) ? createGunzip() : null;
+    await pipeline(Readable.fromWeb(response.body), measure, ...(gunzip ? [gunzip] : []), sink);
     if (size !== layer.size) return 'layer size differs from the manifest';
+    // Node's gunzip ignores trailing zero padding that Go's reader, and so containerd, rejects.
+    if (gunzip && gunzip.bytesWritten !== layer.size) return 'layer has data after its gzip stream';
     if (`sha256:${compressed.digest('hex')}` !== layer.digest) return 'layer bytes differ from their digest';
     if (`sha256:${content.digest('hex')}` !== diffId) return 'layer content differs from the configuration diff ID';
     return null;
@@ -225,7 +324,7 @@ export async function verifyPublished({ registry, version, digest, configDigest,
   if (tag.digest !== digest) result.problems.push('tag does not resolve to the pushed digest');
   if (byDigest.digest !== tag.digest) result.problems.push('digest reference differs from the tag');
   if (tag.config.digest !== configDigest) result.problems.push('published configuration differs from the verified candidate');
-  const config = await readConfig({ registry, token: auth.token, digest: tag.config.digest, fetch: fetchImpl, timeoutMs });
+  const config = await readConfig({ registry, token: auth.token, digest: tag.config.digest, size: tag.config.size, fetch: fetchImpl, timeoutMs });
   result.anonymousConfigurationAccess = !config.problem;
   if (config.problem) {
     result.problems.push(config.problem);
