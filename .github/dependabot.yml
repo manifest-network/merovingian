@@ -1,7 +1,7 @@
-# Dependency update proposals only. Every update is a reviewed PR. Only the Check
-# job is a required status, so confirm Final image (and Keyring helper) results
-# before merging. An updated image still needs its own verified, authorized
-# release. The cooldown delays version updates until releases have aged.
+# Dependency update proposals only. Every update is a reviewed PR that must pass
+# the Check, Final image and Keyring helper jobs. An updated image still needs
+# its own verified, authorized release. The cooldown delays version updates
+# until releases have aged.
 # Security updates are not delayed or capped, but they are raised only from
 # Dependabot alerts, which need the repository's dependency graph.
 # Not covered: the npm-aliased cosmjs-*-modern operator packages and moves to a
@@ -14,6 +14,9 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+      # First-party Manifest releases are proposed immediately; the SDK
+      # migration review replaces the aging period.
+      exclude: ['@manifest-network/*']
     open-pull-requests-limit: 5
     commit-message:
       prefix: chore(deps)

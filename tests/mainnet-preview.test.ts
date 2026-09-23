@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 import type { OfflineDirectSigner } from '@cosmjs/proto-signing';
-import type { WalletProvider } from '@manifest-network/manifest-sdk';
+import { ManifestMCPError, ManifestMCPErrorCode, type WalletProvider } from '@manifest-network/manifest-sdk';
 import { MsgCreateLease, MsgSetItemCustomDomain } from '@manifest-network/manifestjs/dist/codegen/liftedinit/billing/v1/tx.js';
 import { MAINNET, publicInputs, type Quote } from '../scripts/mainnet-config.js';
-import { DOMAIN_PLACEHOLDER_UUID, PREVIEW_MAX_GAS, fetchPublicAccountWallet, prepareDeployment, previewFee, publicAccountWallet, publicSimulationWallet, simulateDeployment } from '../scripts/mainnet-preview.js';
+import { DOMAIN_PLACEHOLDER_UUID, PREVIEW_MAX_GAS, PreviewError, fetchPublicAccountWallet, prepareDeployment, previewFee, publicAccountWallet, publicSimulationWallet, sdkDeploymentPreview, simulateDeployment, simulationIdentityError } from '../scripts/mainnet-preview.js';
 
 const now = Date.parse('2026-09-17T18:00:00.000Z');
 const denom = 'factory/manifest1afk9zr2hn2jsac63h4hm60vl9z3e5u69gndzf7c99cqge3vzwjzsfmy9qj/upwr';
@@ -211,4 +211,63 @@ test('public source rejects failed, redirected, malformed and oversized response
     await assert.rejects(() => fetchPublicAccountWallet(generatorAddress, publicFetch({ failAccount: response }).fetcher, now), error => error instanceof Error && error.message === 'public_chain_account_query_failed');
   }
   await assert.rejects(() => fetchPublicAccountWallet(generatorAddress, (async () => { throw new Error('secret upstream diagnostic'); }) as typeof fetch, now), error => error instanceof Error && error.message === 'public_chain_account_query_failed');
+});
+
+test('SDK chain-identity failures keep the preview tool\'s stable error codes', () => {
+  const mismatch = (details: Record<string, unknown>) => new ManifestMCPError(ManifestMCPErrorCode.INVALID_CONFIG, 'chain identity does not match', details);
+  const rpc = simulationIdentityError(mismatch({ expectedChainId: MAINNET.chainId, actualChainId: 'other-chain', rpcUrl: MAINNET.rpcUrl }));
+  const rest = simulationIdentityError(mismatch({ expectedChainId: MAINNET.chainId, actualChainId: 'other-chain', restUrl: MAINNET.restUrl }));
+  assert.ok(rpc instanceof PreviewError && rest instanceof PreviewError);
+  assert.deepEqual([rpc.message, rest.message], ['simulation_rpc_chain_mismatch', 'simulation_rest_chain_mismatch']);
+  // Other configuration and transport failures keep their original error.
+  for (const other of [mismatch({ restUrl: MAINNET.restUrl }), new ManifestMCPError(ManifestMCPErrorCode.RPC_CONNECTION_FAILED, 'unavailable', { rpcUrl: MAINNET.rpcUrl, actualChainId: 'x' }), new Error('x')]) {
+    assert.equal(simulationIdentityError(other), undefined);
+  }
+});
+
+function cometStatus(network: string) {
+  const hash = 'A'.repeat(64);
+  return {
+    node_info: { protocol_version: { p2p: '8', block: '11', app: '0' }, id: 'a'.repeat(40), listen_addr: 'tcp://0.0.0.0:26656', network, version: '0.38.12', channels: '40202122233038606100', moniker: 'fixture', other: { tx_index: 'on', rpc_address: 'tcp://0.0.0.0:26657' } },
+    sync_info: { latest_block_hash: hash, latest_app_hash: hash, latest_block_height: '10', latest_block_time: '2026-09-17T18:00:00Z', earliest_block_hash: hash, earliest_app_hash: hash, earliest_block_height: '1', earliest_block_time: '2026-09-17T00:00:00Z', catching_up: false },
+    validator_info: { address: 'A'.repeat(40), pub_key: { type: 'tendermint/PubKeyEd25519', value: Buffer.alloc(32).toString('base64') }, voting_power: '1' },
+  };
+}
+
+test('the real SDK signing-client path reports REST and RPC chain mismatches with the preview codes', async t => {
+  // Offline: every request is answered here and any other URL fails the test.
+  // This pins the SDK's refusal shape that simulationIdentityError relies on.
+  t.mock.method(Date, 'now', () => now);
+  const prepared = await prepareDeployment(quote(), inputs(), now);
+  const pubkey = Uint8Array.from([2, ...new Array<number>(32).fill(1)]);
+  const source: WalletProvider = {
+    getAddress: async () => tenant,
+    getSigner: async () => ({ getAccounts: async () => [{ address: tenant, algo: 'secp256k1', pubkey }], signDirect: async () => { throw new Error('real signer reached'); } }),
+  };
+  for (const [restNetwork, rpcNetwork, code, expected] of [
+    ['other-chain', MAINNET.chainId, 'simulation_rest_chain_mismatch', ['REST']],
+    [MAINNET.chainId, 'other-chain', 'simulation_rpc_chain_mismatch', ['REST', 'RPC status']],
+  ] as const) {
+    const calls: string[] = [];
+    t.mock.method(globalThis, 'fetch', async (input: string | URL | Request, init: RequestInit = {}) => {
+      const url = String(input);
+      if (url === `${MAINNET.restUrl}/cosmos/base/tendermint/v1beta1/node_info`) {
+        calls.push('REST');
+        return Response.json({ default_node_info: { network: restNetwork } });
+      }
+      const request = JSON.parse(String(init.body ?? 'null')) as { id?: number; method?: string } | null;
+      if (url.replace(/\/+$/, '') === MAINNET.rpcUrl && request?.method === 'status') {
+        calls.push('RPC status');
+        return Response.json({ jsonrpc: '2.0', id: request.id, result: cometStatus(rpcNetwork) });
+      }
+      throw new Error(`unexpected request ${init.method ?? 'GET'} ${url}`);
+    });
+    await assert.rejects(() => sdkDeploymentPreview(prepared, source), error => error instanceof PreviewError && error.code === code);
+    // REST identity is checked first; a REST mismatch never reaches RPC.
+    // CosmJS decides how many status reads it makes while connecting.
+    assert.deepEqual([...new Set(calls)], expected);
+    assert.equal(calls[0], 'REST');
+    t.mock.restoreAll();
+    t.mock.method(Date, 'now', () => now);
+  }
 });

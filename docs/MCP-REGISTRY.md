@@ -371,7 +371,8 @@ namespace.
 
 A writer who can run an `id-token: write` workflow in any organization repository
 could publish outside this workflow. Direct pushes to `main` are also allowed
-when the required `Check` status passes, without review. The pre-publication
+when the required `Check`, `Final image` and `Keyring helper` statuses pass,
+without review. The pre-publication
 registry lookup detects out-of-band records but cannot prevent them. Hardening
 organization or branch settings is outside this repository change and needs
 owner authorization.

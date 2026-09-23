@@ -3,7 +3,7 @@
 [ENG-1040](https://linear.app/liftedinit/issue/ENG-1040) replaces the runtime
 `getBalance()` call with one read of the configured REST endpoint's
 `/liftedinit/billing/v1/credit/{tenant}` route. The route and snake-case response
-fields follow the published `@manifest-network/manifestjs@3.0.0` billing LCD
+fields follow the published `@manifest-network/manifestjs@4.0.0` billing LCD
 client and generated `QueryCreditAccountResponseSDKType` / `CreditAccountSDKType`.
 Bank balances and credit estimates are no longer requested separately.
 

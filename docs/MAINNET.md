@@ -41,7 +41,7 @@ The launch CLI's persisted phase remains `awaiting-dns`, its final provider-uplo
 
 Release **0.4.3** replaced the image on the existing lease with one provider update POST, no new lease, and no chain transaction. Provider release **5** reached ready. The original launch receipts and image/hash below remain historical evidence; the current 0.4.6 image and manifest are recorded above, and the update procedure is documented below.
 
-Published SDK 0.22.0 checks and the completed launch confirmed:
+Published SDK 0.22.0 checks and the completed launch confirmed (historical launch evidence; the repository now uses SDK 0.23.0):
 
 | Item | Observed value |
 | --- | --- |
@@ -175,7 +175,7 @@ Public preflight evidence is in `.local/mainnet/public-summary.json`; subsequent
 
 ### Updates, rollback, and restore
 
-Use the published SDK's `updateApp` to replace the manifest on the existing **ACTIVE** lease. Keep the full intended runtime configuration and use an immutable image digest; rollback applies the previously verified manifest and digest through the same update path. An update does not create another lease or change its on-chain metadata hash. A provider error or timeout can follow an applied update: inspect status and releases before deciding whether to reapply that same intended update. The initial launch command deliberately refuses changed configuration and does not perform updates.
+Use the [existing-lease update workflow](#existing-lease-update-workflow), which sends the published SDK's `updateLease` request, to replace the manifest on the existing **ACTIVE** lease. The workflow keeps the active release's runtime configuration and changes the immutable image digest, plus any explicitly reviewed ingress setting. It keeps one journal per target digest, so it moves only to a digest it has not journaled. For a previously deployed digest, such as the `0.4.5` rollback candidate, `prepare` only reprints the old journal and `run` refuses with `another_update_requires_manual_reconciliation`. Rollback therefore needs a separately reviewed and authorized procedure; it has not been exercised. An update does not create another lease or change its on-chain metadata hash. A provider error or timeout can follow an applied update: inspect status and releases before deciding whether to reapply that same intended update. The initial launch command deliberately refuses changed configuration and does not perform updates.
 
 The SDK's `restoreApp` has different semantics: it restores a **closed lease's retained data** into a **new lease**, subject to the provider's retention window. It requires new transaction fees and hosting reserve, and custom domains must be claimed again. It is not an automatic rollback and is not authorized by the initial launch fee cap. Release 0.3.0 had no persisted visit state; the 0.4.1 serving counter introduces aggregate data that should be preserved and backed up. Never close a healthy lease merely to deploy a new image.
 
@@ -233,7 +233,7 @@ To accompany that new image with reviewed ingress trust, append `--trusted-proxy
 
 On later `run`, `status` or repeated `prepare` calls, omitting the flag uses the already reviewed journal unchanged. An explicitly supplied flag must match that journal's normalized proxy setting; a conflict fails before network or wallet access. Editing a journal is not a way to change approved intent. Review the intended image and ingress setting together, then obtain separate authorization for the concrete production update. Public planning configuration and environment overrides do not silently alter an existing-lease update.
 
-Update records live under `.local/mainnet/updates/`. The attempted phase is synced before a single POST with a stable operation identifier; uncertain updates only reconcile the authoritative active release and readiness. Another unresolved update blocks a different image. A timeout is not permission to repeat the POST, create a replacement lease, or erase a journal. Keep `.local/mainnet/launch/state.json` and its original image/hash unchanged as historical launch evidence: the launch resume command is **not** an image-update command. No additional deposit is required.
+Update records live under `.local/mainnet/updates/`. The attempted phase is synced before a single POST that carries the journal's stable operation identifier as its `Idempotency-Key` header. The current provider (Fred v0.13) does not deduplicate commands, so the header does not make a repeated POST safe. Fred's deduplicating contract accepts one canonical lowercase UUIDv4 per logical command, which the journal already supplies. SDK 0.23's `updateLease` sends no key in its default Fred v0.13 mode, so the update transport sets it; uncertain updates only reconcile the authoritative active release and readiness. Another unresolved update blocks a different image. A timeout is not permission to repeat the POST, create a replacement lease, or erase a journal. Keep `.local/mainnet/launch/state.json` and its original image/hash unchanged as historical launch evidence: the launch resume command is **not** an image-update command. No additional deposit is required.
 
 ### Local runtime validation
 

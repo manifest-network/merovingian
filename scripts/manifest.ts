@@ -65,8 +65,8 @@ async function wallet(role: Role, create = false): Promise<WalletRecord> {
 }
 
 async function fred(role: Role = 'deployer') {
-  // Published SDK 0.22.0 predates its source checkout's identity guards.
-  // Verify both transports ourselves before constructing any signing client.
+  // SDK 0.23 verifies REST and RPC chain identity itself; this check also
+  // requires a synced node (catching_up=false) before any signing client exists.
   await assertChainIdentity();
   const record = await wallet(role);
   return createFredClientNode({ config, walletProvider: new MnemonicWalletProvider(config, record.mnemonic) });
@@ -239,7 +239,7 @@ async function deploy(image?: string) {
       ?? result.connection?.services?.refuge?.instances?.[0]?.fqdn
       ?? result.connection?.fqdn
       ?? result.connection?.instances?.[0]?.fqdn;
-    // SDK 0.22.0's fallback `url` can be a bare host:port rather than HTTPS.
+    // The SDK's fallback `url` can be a bare host:port rather than HTTPS.
     // Only a provider-issued FQDN or an explicit HTTPS URL is suitable here.
     const candidate = fqdn ? `https://${fqdn}` : result.url?.startsWith('https://') ? result.url : undefined;
     if (!candidate) throw new Error('Lease ready but no public origin returned; inspect status and set it with origin command');
