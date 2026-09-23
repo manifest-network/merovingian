@@ -1,11 +1,11 @@
 module merovingian.local/keyring-signer
 
-go 1.23.0
+go 1.25.0
 
 require (
 	github.com/cosmos/cosmos-sdk v0.50.14
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0
-	golang.org/x/sys v0.25.0
+	golang.org/x/sys v0.45.0
 )
 
 require (
@@ -97,11 +97,11 @@ require (
 	github.com/zondax/hid v0.9.2 // indirect
 	github.com/zondax/ledger-go v0.14.3 // indirect
 	go.etcd.io/bbolt v1.3.10 // indirect
-	golang.org/x/crypto v0.27.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/exp v0.0.0-20240404231335-c0f41cb1a7a0 // indirect
-	golang.org/x/net v0.29.0 // indirect
-	golang.org/x/term v0.24.0 // indirect
-	golang.org/x/text v0.18.0 // indirect
+	golang.org/x/net v0.54.0 // indirect
+	golang.org/x/term v0.43.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	google.golang.org/genproto v0.0.0-20240227224415-6ceb2ff114de // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240814211410-ddb44dafa142 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240930140551-af27646dc61f // indirect
