@@ -40,6 +40,14 @@ to `main` and pushes to `main`, including registry consistency, typechecking,
 isolated local tests, and the build. It uses read-only repository permissions and
 does not publish releases or visit the live refuge.
 
+The separate [MCP Registry workflow](.github/workflows/publish-mcp-registry.yml)
+is manually dispatched from `main`. Its default `preflight` mode is read-only. It
+verifies the release metadata and existing registry records. For an unpublished
+version, it also runs read-only acceptance with zero servings. `publish` mode also
+waits for approval in the protected `mcp-registry-publish` environment. It then
+publishes with GitHub OIDC, without a PAT, and verifies the exact-version and
+latest records. See the [publication runbook](docs/MCP-REGISTRY.md#github-actions-publication).
+
 `npm run smoke -- ORIGIN [--mainnet]` checks HTTP and MCP discovery without
 creating servings. Explicit `--serve` adds seven visits; live targets also require
 `--live-serve-authorization REFERENCE` naming the user's authorization for that

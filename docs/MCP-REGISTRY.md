@@ -110,38 +110,312 @@ Free visits require no wallet, login, API key, or payment. A successful
 `enjoy_amenity` call increments one aggregate serving count. Contributions require
 separate visitor-controlled wallet authorization.
 
-## Publisher workflow
+## GitHub Actions publication
+
+The manually dispatched
+[`publish-mcp-registry.yml`](../.github/workflows/publish-mcp-registry.yml)
+workflow publishes the registry record for a release that is **already deployed
+and accepted**. It uses official `mcp-publisher` 1.8.1 with
+`login github-oidc`, so no GitHub PAT, local registry login or production wallet
+is involved. It never builds or publishes images, updates the lease, changes DNS,
+visits the refuge or pays. Those remain separate, separately authorized steps.
+There is no push, pull request, tag or schedule trigger.
+
+The decision, reconciliation and classification paths below were validated with
+local fixtures (`tests/registry-publication.test.ts`), including a stand-in
+publisher and registry, and with `actionlint`. The fixtures do not cover job
+cancellation or a real OIDC exchange. On 2026-09-22, a
+[local dry run](#local-dry-run) of the current script in a fresh public clone
+returned `already-published` for `0.4.6`. Its saved snapshot was byte-identical
+to the committed [`mcp-registry-0.4.6.json`](evidence/mcp-registry-0.4.6.json).
+The workflow has not yet run in GitHub Actions. Its first production publication
+needs its own explicit authorization.
+
+### One-time approval environment
+
+Before the first dispatch, a repository administrator creates the
+`mcp-registry-publish` environment (**Settings → Environments**):
+
+- **Required reviewers:** at least one maintainer. Enable *Prevent self-review*
+  only if at least two reviewers can approve each other's dispatches.
+- **Deployment branches and tags:** *Selected branches and tags*, with one
+  **branch** rule named `main` and no tag rules. Do not choose *Protected branches
+  only*. `main` is covered by a ruleset rather than classic branch protection, and
+  when no protection rules exist GitHub lets every branch deploy.
+- **Disable** *Allow administrators to bypass configured protection rules*.
+- No environment secrets. OIDC needs none.
+
+Configuring the environment is an administrative change that needs its own
+authorization. A job that names a missing environment makes GitHub create it
+**without protection**. The unprivileged Preflight job therefore reads the
+environment through the REST API first. In `publish` mode it stops unless
+the environment has required reviewers, no administrator bypass and exactly the
+`main` branch rule. Check the configuration read-only with:
+
+```sh
+gh api repos/manifest-network/merovingian/environments/mcp-registry-publish \
+  --jq '{reviewers: [.protection_rules[] | select(.type == "required_reviewers") | .reviewers | length],
+         can_admins_bypass, deployment_branch_policy}'
+gh api repos/manifest-network/merovingian/environments/mcp-registry-publish/deployment-branch-policies \
+  --jq '[.branch_policies[] | {name, type}]'
+```
+
+### Dispatch
+
+Dispatch only after these steps are complete:
+
+1. The release PR is merged to `main`.
+2. The image is published and the existing lease is updated.
+3. Read-only acceptance has passed.
+4. The user has explicitly authorized publication of that exact version.
+
+Always dispatch from `main`. Inputs:
+
+- `version`: the reviewed `MAJOR.MINOR.PATCH`. It must equal `server.json` and
+  `package.json`.
+- `source_revision`: the full 40-character commit on `main` that contains the
+  reviewed release metadata, normally the release merge commit. Its `server.json`
+  must be byte-identical to the dispatched commit and to `main` as fetched from
+  GitHub at check time. `actions/checkout` rewrites `origin/main` to the dispatched
+  commit, so both jobs fetch the live tip into `refs/merovingian/main`. To publish,
+  dispatch the current release before the next version is prepared.
+  The revision is operator-asserted. Evidence records `releaseCommit: true` only
+  when that commit introduced the version, so it can be matched against the
+  release record.
+- `mode`: `preflight` (the default) runs only read-only checks. `publish` also
+  requests environment approval and then publishes.
+
+```sh
+gh workflow run publish-mcp-registry.yml --ref main \
+  -f version=X.Y.Z -f source_revision=<full commit SHA> -f mode=preflight
+```
+
+Run `preflight` first, review its summary, then dispatch again with
+`mode=publish`. The **Preflight** job has `contents: read` and `actions: read`
+permissions and cannot request OIDC tokens. It checks:
+
+1. **Trusted source:** this repository's `main` workflow, a `workflow_dispatch`
+   event, and a source revision contained in the dispatched commit, which must
+   still be contained in the live `main`, with identical `server.json` at all three.
+2. **Metadata:** `npm run registry:check` and the exact reviewed `server.json`
+   shape (identity, version, website, remote endpoint, repository, printable ASCII).
+   The file's exact-byte SHA-256 is recorded.
+3. **Approval gate:** the environment rules above. Failure is reported in
+   `preflight` mode and stops `publish` mode.
+4. **Existing registry records:** read-only lookups of the exact version
+   (`include_deleted=true`), `latest`, and every recorded version
+   (`include_deleted=true`). The registry server version is also recorded, for
+   information only.
+   - An identical, active exact record is a **verified no-op** (`already-published`).
+     Nothing else runs.
+   - Different metadata, or a deprecated or deleted record, is refused. Published
+     versions are immutable and deleted versions still block reuse, so prepare a new
+     version.
+   - The requested version must be greater than every recorded version, including
+     deleted ones. The registry would let a new version pass a deleted higher one,
+     but a restored deleted version would take `latest` back.
+   - Only the registry's typed `404 Server not found` proves absence. Any other
+     status, a routing or gateway 404, or history that disagrees with `latest`
+     stops the run.
+5. **New versions only:** pinned `mcp-publisher validate`, which calls the
+   unauthenticated validation API and writes nothing. Then the repository's
+   read-only acceptance suite runs against `https://merovingian.manifest.network`
+   (`node --import tsx scripts/smoke.ts https://merovingian.manifest.network --mainnet`,
+   the `npm run smoke` command without npm): at most 21 requests and **zero
+   servings**, enforced by the smoke transport allowlist.
+   The summary must report a passing read-only mainnet run with no serving attempts.
+
+A passing preflight reports one of three outcomes:
+
+- `already-published`: the identical record already exists.
+- `ready-to-publish`: `preflight` mode passed.
+- `awaiting-approval`: `publish` mode passed and the **Publish** job is waiting.
+
+### Approval
+
+Before approving the **Publish** job, the reviewer reads the Preflight job
+summary. Approve only when all of these match the authorized release:
+
+- the version and source revision;
+- the `server.json` SHA-256;
+- an absent exact record and an older `latest`;
+- a protected environment and passing validation;
+- read-only acceptance with zero servings.
+
+Until approval, no Publish step runs and no OIDC token can be requested. Runs are
+named `MCP Registry <mode> <version>`. Reject stale or unexpected runs instead of
+leaving them pending. A waiting run holds
+the single `mcp-registry-publication` concurrency group. A newer dispatch
+replaces any queued run, and unapproved jobs fail after 30 days. Prefer a fresh
+dispatch over re-running an old job. A re-run reuses the original commit and
+inputs.
+
+### Publication and verification
+
+The **Publish** job has only `contents: read` and `id-token: write`. Every step
+and action in it can request an OIDC token, so it installs no npm packages and
+uses no caches. Only these run there:
+
+- the SHA-pinned first-party `checkout`, `setup-node` and `upload-artifact` actions;
+- runner tools (`bash`, `curl`, `tar`, `sha256sum`, `git`);
+- the digest-verified publisher;
+- the dependency-free
+  [`registry-publication.mjs`](../scripts/registry-publication.mjs).
+
+Adding a step or action widens that boundary. Git and the installer's version
+probe run without the OIDC request variables. The script:
+
+1. Rechecks the source, confirms that `server.json` matches the preflight digest,
+   and re-reads registry state. If an identical record appeared in the meantime,
+   the result is a no-op without login.
+2. Rechecks the deployment with two bounded GETs: `/healthz` and
+   `/mcp/server-card` must report the requested version and identity. Nothing is
+   visited or served.
+3. Runs `login github-oidc --registry=https://registry.modelcontextprotocol.io`
+   in a private temporary `HOME`. That child receives only `PATH`, locale and CA
+   settings, and the Actions OIDC request variables. `GODEBUG` and other variables
+   are never passed. The registry login lasts five minutes.
+4. Runs exactly one `publish server.json` without the OIDC variables, then always
+   runs `logout` and removes the temporary `HOME`. A separate `always()` step
+   removes it again.
+5. Enforces hard deadlines on every publisher command: 60 s login, 120 s publish,
+   30 s logout. The publisher itself has no HTTP timeout. There is no automatic
+   retry. The job itself times out after 20 minutes.
+6. Makes up to six read attempts, five seconds apart. The exact version and
+   `latest` must both be active and latest, and parsed-equal to `server.json`.
+   Success comes only from these reads, never from the publisher's exit code.
+   When the reads cannot verify the record, the failure is classified with the
+   publisher's result (see below).
+
+Each job uploads sanitized evidence:
+`mcp-registry-preflight-<run>-<attempt>` or
+`mcp-registry-publication-<run>-<attempt>`.
+
+- **`preflight.json` or `publication.json`** records:
+  - source, dispatched and `main` revisions, the version, and the `server.json`
+    SHA-256 and size;
+  - the run URL, the publisher pin, registry URLs and the registry server version;
+  - the decisive and final exact, latest and history observations, each with its
+    response time;
+  - the environment and deployment checks and the acceptance summary;
+  - command exit codes and time-outs, with redacted one-line messages;
+  - the verification result and outcome.
+- **`mcp-registry-<version>.json`** is the exact-version response, formatted like
+  the committed snapshots.
+
+Neither contains tokens, request headers, environment dumps, local paths or the
+smoke run's `.local` report. On this public repository, run logs, summaries and
+artifacts are readable by any signed-in GitHub user, and artifacts expire after
+90 days. In the release record PR:
+
+- Copy `publication.json` (or, for a no-op, `preflight.json`) to
+  `docs/evidence/registry-publication-X.Y.Z.json`.
+- Copy the snapshot unchanged to `docs/evidence/mcp-registry-X.Y.Z.json`.
+- Index the snapshot in
+  [`mcp-registry-snapshots.json`](evidence/mcp-registry-snapshots.json):
+  - `snapshotFileSha256` from `snapshot.snapshotFileSha256`;
+  - `capturedAt` from `snapshot.capturedAt`;
+  - `sourceArtifact` = `registry-publication-X.Y.Z.json`;
+  - `sourcePointer` = `/snapshot/capturedAt`.
+
+### Outcomes and recovery
+
+| Outcome | Meaning | Next step |
+| --- | --- | --- |
+| `already-published` | An identical active record exists. In the Publish job this includes a duplicate-version rejection whose read-back matches | Nothing to publish; record the evidence |
+| `ready-to-publish` / `awaiting-approval` | Preflight passed | Obtain authorization, then dispatch `publish` or approve |
+| `published` | Exact and latest records verified | Record the evidence. `reconciled: true` means the publish command reported a failure but read-back proved the record |
+| `failed` (Preflight) | A check stopped the run; nothing was published | Fix the named cause and dispatch again. `registry-conflict` and `registry-not-latest` need a new version instead |
+| `not-published` | `publish` was never attempted, or the registry rejected it with HTTP 4xx (including a 1.8.1 validation rejection) and holds no record | Fix the cause, then dispatch again; Preflight rechecks the registry first. A `registry-conflict` or `registry-not-latest` precheck needs a new version; `registry-uncertain` needs a read-only preflight |
+| `uncertain` | Timeout, gateway or 5xx response, unverified read-back, or an unexpected error after the publish attempt | **Do not publish again.** Wait, then dispatch `mode=preflight` to reconcile: an identical record means `already-published`; an absent one needs a fresh `publish` dispatch and approval; anything else needs review |
+| `conflict` | The registry holds different metadata for this version | Never overwrite. Prepare and release a new version |
+| No `publication.json` | The Publish job was cancelled, timed out or lost its runner | Treat as `uncertain` |
+
+Success is established only by read-back. For failures, the publisher's exit
+code, timeout and HTTP status separate `not-published` from `uncertain`.
+`published` with error `cleanup` means verified, but the temporary login was not
+confirmed removed. The runner is discarded after the job, and a separate step
+removes the directory again.
+
+Specific cases:
+
+- **Environment check fails:** configure the environment as described above. Do
+  not remove the check.
+- **`registry-not-latest`:** a higher version is recorded, possibly as deleted.
+- **Deployment recheck fails** (for example, after a rollback during the approval
+  wait): reconcile the deployment before dispatching again.
+- **Login fails:** nothing was published. An `invalid audience` error means the
+  pinned publisher no longer matches the registry. Upgrading it is a reviewed
+  change to the pinned archive and binary digests.
+
+### Trust boundary
+
+Registry `v1.8.1` exchanges any GitHub Actions OIDC token whose
+`repository_owner` is `manifest-network` for publish permission on
+`io.github.manifest-network/*`. It does not check the repository, workflow, ref
+or environment. That permission also allows changing a version's status (for
+example, deprecating or deleting it). The environment approval, main-only
+dispatch and preflight checks therefore protect **this workflow**, not the
+namespace.
+
+A writer who can run an `id-token: write` workflow in any organization repository
+could publish outside this workflow. Direct pushes to `main` are also allowed
+when the required `Check` status passes, without review. The pre-publication
+registry lookup detects out-of-band records but cannot prevent them. Hardening
+organization or branch settings is outside this repository change and needs
+owner authorization.
+
+### Local dry run
+
+The same checks can be run locally in `preflight` mode only. Publication is
+refused outside the approved Actions workflow.
+
+```sh
+node scripts/registry-publication.mjs preflight --version X.Y.Z \
+  --source-revision <full commit SHA> --mode preflight \
+  --publisher .local/tools/mcp-publisher-v1.8.1/mcp-publisher \
+  --output-dir .local/registry-dry-run
+```
+
+It fetches the live `main` into `refs/merovingian/main`. It also reads the
+approval environment from the GitHub API, sending the shell's `GITHUB_TOKEN`
+only if one is set, and reads registry state. For an already published version,
+that is all. For an unpublished version, it also calls the registry validation
+API and runs the read-only production acceptance suite: at most 21 requests and
+zero servings.
+
+## Manual publisher fallback
+
+Use the [GitHub Actions workflow](#github-actions-publication) for normal
+publications. The local flow below needs a dedicated PAT. It remains for cases
+where Actions is unavailable.
 
 Use the published official `mcp-publisher` CLI. For **Linux x86-64**, the exact
 v1.8.1 asset is `mcp-publisher_linux_amd64.tar.gz`. Its SHA-256 is
-`a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc`,
-verified against both the
+`a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc`. That digest
+was verified against both the
 [official release asset metadata](https://api.github.com/repos/modelcontextprotocol/registry/releases/tags/v1.8.1)
 and the upstream
 [`registry_1.8.1_checksums.txt`](https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/registry_1.8.1_checksums.txt)
-on 2026-09-18. Download the pinned archive and check that exact digest before
-extracting or running it. From the repository root, in Bash:
+on 2026-09-18, and again on 2026-09-22. The extracted binary's SHA-256,
+`5e39fe8b6fc3c8b01bed6f1de364b88e9dd10ccbef6d3d3b1a0caa46115bf869`, was computed
+from that verified archive on 2026-09-22.
 
-```bash
-(
-  set -euo pipefail
-  umask 077
-  test "$(uname -s)" = Linux
-  test "$(uname -m)" = x86_64
-  mkdir -p .local/tools/mcp-publisher-v1.8.1
-  cd .local/tools/mcp-publisher-v1.8.1
-  curl --fail --location --proto '=https' --proto-redir '=https' \
-    --output mcp-publisher_linux_amd64.tar.gz \
-    https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/mcp-publisher_linux_amd64.tar.gz
-  printf '%s  %s\n' \
-    a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc \
-    mcp-publisher_linux_amd64.tar.gz | sha256sum --check --strict -
-  tar -xzf mcp-publisher_linux_amd64.tar.gz mcp-publisher
-)
+The installer used by the workflow:
+
+1. Downloads only the pinned archive.
+2. Checks the archive digest before extracting.
+3. Extracts only the binary and checks its digest.
+4. Confirms the `1.8.1` version banner.
+
+From the repository root:
+
+```sh
+bash scripts/install-mcp-publisher.sh .local/tools/mcp-publisher-v1.8.1
 ```
 
 For another platform, select its exact release asset and verify its own upstream
-digest; the hash above applies only to the named archive.
+digest; the hashes above apply only to the named Linux x86-64 archive.
 
 Generate and check the local metadata, then validate it against the registry:
 
@@ -154,7 +428,7 @@ npm run registry:check
 Validation sends this public JSON to the official registry validation API. It does
 not publish and is not an offline check. Do not add credentials or private headers
 to the record. Review the exact namespace, version, description, endpoint, and
-repository URL before publication. The `0.4.3` and `0.4.4` releases completed this workflow
+repository URL before publication. Releases `0.4.3` through `0.4.6` used this manual flow
 after their deployments passed verification. Future publications require review
 and explicit authorization for their own version and metadata.
 
@@ -254,10 +528,8 @@ a local preflight, not cryptographic verification. The registry JWT lasts only
 so complete metadata review and validation before login and publish promptly.
 Successful login alone does not prove organization publishing access.
 
-GitHub Actions OIDC is another supported route: a reviewed workflow in this
-organization's repository can use `mcp-publisher login github-oidc` with
-`id-token: write`, without a PAT. Keep publication an explicitly approved action;
-do not introduce an automatic release trigger as part of this workaround. See the
+The [GitHub Actions workflow](#github-actions-publication) replaces this PAT
+handoff with `login github-oidc`. See the
 [official Actions guidance for v1.8.1](https://github.com/modelcontextprotocol/registry/blob/v1.8.1/docs/modelcontextprotocol-io/github-actions.mdx).
 
 After explicit authorization for the reviewed registry publication:

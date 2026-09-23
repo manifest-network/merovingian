@@ -1,0 +1,147 @@
+name: Publish MCP Registry
+run-name: MCP Registry ${{ inputs.mode }} ${{ inputs.version }}
+
+# Publishes registry metadata for an already deployed and accepted release.
+# Manual dispatch from main only: no push, pull_request, tag or schedule trigger.
+# Image publication and the existing-lease update remain separate operations.
+# See docs/MCP-REGISTRY.md for dispatch, approval and recovery.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Reviewed release version (MAJOR.MINOR.PATCH), matching server.json
+        required: true
+        type: string
+      source_revision:
+        description: Full 40-character commit on main that contains the reviewed release metadata
+        required: true
+        type: string
+      mode:
+        description: preflight runs read-only checks; publish also requests approval, then publishes
+        required: true
+        default: preflight
+        type: choice
+        options:
+          - preflight
+          - publish
+
+permissions: {}
+
+# One publication at a time, across every ref. A run waiting for approval keeps
+# the group; reject stale approvals instead of leaving them pending.
+concurrency:
+  group: mcp-registry-publication
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Preflight
+    if: github.repository == 'manifest-network/merovingian' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      # Read-only check that the approval environment exists and is protected
+      # before the gated job can run (a missing environment would be created
+      # without protection). This job cannot request OIDC tokens.
+      actions: read
+    outputs:
+      decision: ${{ steps.preflight.outputs.decision }}
+      server_json_sha256: ${{ steps.preflight.outputs.server_json_sha256 }}
+    steps:
+      - name: Check out dispatched main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Check committed registry metadata
+        run: npm run registry:check
+      - name: Install pinned mcp-publisher
+        run: bash scripts/install-mcp-publisher.sh "$RUNNER_TEMP/mcp-publisher"
+      - name: Check release, registry state, approval gate and read-only acceptance
+        id: preflight
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+          PUBLICATION_MODE: ${{ inputs.mode }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          node scripts/registry-publication.mjs preflight
+          --version "$RELEASE_VERSION" --source-revision "$SOURCE_REVISION" --mode "$PUBLICATION_MODE"
+          --publisher "$RUNNER_TEMP/mcp-publisher/mcp-publisher" --output-dir "$RUNNER_TEMP/mcp-registry-evidence"
+      - name: Upload sanitized preflight evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mcp-registry-preflight-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/mcp-registry-evidence/preflight.json
+            ${{ runner.temp }}/mcp-registry-evidence/mcp-registry-*.json
+
+  publish:
+    name: Publish
+    needs: preflight
+    if: >-
+      github.repository == 'manifest-network/merovingian' && github.ref == 'refs/heads/main'
+      && inputs.mode == 'publish' && needs.preflight.outputs.decision == 'publish'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # Required reviewers must approve before any step runs or an OIDC token exists.
+    environment: mcp-registry-publish
+    # Every step and action here can request an OIDC token that the registry accepts
+    # for io.github.manifest-network/*. Only the SHA-pinned first-party checkout,
+    # setup-node and upload-artifact actions, runner tools, the digest-verified
+    # publisher and the dependency-free script run here: no npm packages or caches.
+    # Adding any step widens that boundary.
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out dispatched main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install pinned mcp-publisher
+        run: bash scripts/install-mcp-publisher.sh "$RUNNER_TEMP/mcp-publisher"
+      - name: Recheck, log in with GitHub OIDC, publish once and verify
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+          SERVER_JSON_SHA256: ${{ needs.preflight.outputs.server_json_sha256 }}
+        # The script runs `mcp-publisher login github-oidc`, then one `publish`,
+        # then `logout`, with a minimal child environment (no GODEBUG).
+        run: >-
+          node scripts/registry-publication.mjs publish
+          --version "$RELEASE_VERSION" --source-revision "$SOURCE_REVISION" --server-json-sha256 "$SERVER_JSON_SHA256"
+          --publisher "$RUNNER_TEMP/mcp-publisher/mcp-publisher" --publisher-home "$RUNNER_TEMP/mcp-publisher-home"
+          --output-dir "$RUNNER_TEMP/mcp-registry-evidence"
+      - name: Remove any registry login
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/mcp-publisher-home"
+          test ! -e "$RUNNER_TEMP/mcp-publisher-home"
+      - name: Upload sanitized publication evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mcp-registry-publication-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/mcp-registry-evidence/publication.json
+            ${{ runner.temp }}/mcp-registry-evidence/mcp-registry-*.json
