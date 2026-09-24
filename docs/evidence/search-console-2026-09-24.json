@@ -1,0 +1,119 @@
+{
+  "description": "Google Search Console verification and first indexing observations for https://merovingian.manifest.network (ENG-1020). Search Console observations were reported by the operator from the Search Console interface; DNS and HTTP checks were read-only. Verification, sitemap submission and valid metadata do not guarantee indexing, ranking or traffic.",
+  "recordedAt": "2026-09-24T19:10:45Z",
+  "property": {
+    "verified": "Domain property manifest.network",
+    "merovingian": "Domain property merovingian.manifest.network, verified automatically as a child of manifest.network",
+    "scope": "A verified owner of the manifest.network Domain property has Search Console access to every manifest.network host. Owners and full users can, for example, temporarily hide URLs from Google Search results for about six months with the Removals tool.",
+    "owner": "The operator's Google account (identity not recorded).",
+    "method": "DNS TXT record at the manifest.network apex, chosen because the operator administers manifest.network and one apex record covers every host",
+    "earlierTokens": "The three earlier google-site-verification TXT records at the apex did not match the operator's account and were left unchanged. Other owners are not named in this evidence."
+  },
+  "dns": {
+    "zone": "manifest.network (Cloudflare)",
+    "change": "One TXT record added at the apex by the operator",
+    "addedRecord": "manifest.network TXT \"google-site-verification=W6mO9gXmy74lQoejPWaO-BSXOJTsaZ704caaN-hoEE4\"",
+    "keep": "Search Console re-checks the token periodically; deleting the record revokes this ownership.",
+    "snapshotBefore": "2026-09-24T18:46:26Z",
+    "snapshotAfter": "2026-09-24T18:57:32Z",
+    "resolvers": [
+      "uriah.ns.cloudflare.com",
+      "1.1.1.1",
+      "8.8.8.8"
+    ],
+    "onlyDifference": "The added TXT record",
+    "unchanged": [
+      "merovingian.manifest.network CNAME refuge-928a176.barney0.manifest0.net, TTL 300, DNS-only",
+      "The three earlier google-site-verification TXT records at the apex",
+      "The SPF TXT record",
+      "MX records"
+    ],
+    "whyApex": "A TXT record cannot sit at merovingian.manifest.network because it is a CNAME, and DNS allows no other record at a CNAME name. Alternatives not chosen: Search Console's CNAME verification record at a new label (undocumented for this layout) and an HTML tag on a URL-prefix property (requires a release)."
+  },
+  "sitemap": {
+    "url": "https://merovingian.manifest.network/sitemap.xml",
+    "liveUrlInspection": "Live test run by the operator; result wording not recorded",
+    "submitted": "2026-09-24",
+    "status": "Success",
+    "discoveredPages": 2
+  },
+  "urlInspection": [
+    {
+      "url": "https://merovingian.manifest.network/",
+      "indexStatus": "URL is not on Google",
+      "action": "Request indexing submitted on 2026-09-24"
+    },
+    {
+      "url": "https://merovingian.manifest.network/about",
+      "indexStatus": "URL is not on Google",
+      "action": "Request indexing was not available to the operator in this session; the URL is listed in the submitted sitemap"
+    },
+    {
+      "url": "https://merovingian.manifest.network/operator",
+      "liveTest": "Indexing not allowed: noindex detected, as intended"
+    }
+  ],
+  "robotsTxtReport": {
+    "property": "merovingian.manifest.network",
+    "observed": "No robots.txt file",
+    "interpretation": "The robots.txt report shows fetch attempts for the top hosts of a property, and a recrawl can only be requested for a listed file. On 2026-09-24 read-only checker requests sent with Googlebot and Google-InspectionTool user-agent strings (not from Google's crawlers) received 200 text/plain (135 bytes), and http:// redirected to the file with 301."
+  },
+  "readOnlyChecks": {
+    "date": "2026-09-24",
+    "pages": "/ and /about returned 200 with meta robots index, follow, self-referencing canonical URLs and no X-Robots-Tag.",
+    "robotsTxt": "User-agent: *, Allow: /, a Content-Signal line (ignored by Google) and the Sitemap URL.",
+    "https": "http:// redirects to https:// with 301; the TLS certificate is valid until 2026-12-16.",
+    "publicAgentDocuments": {
+      "checked": [
+        "/llms.txt",
+        "/visit.md",
+        "/index.md",
+        "/auth.md",
+        "/openapi.json",
+        "/.well-known/api-catalog",
+        "/.well-known/ai-catalog.json",
+        "/mcp/server-card",
+        "/.well-known/mcp/server-card.json",
+        "/.well-known/agent-skills/index.json",
+        "/.well-known/agent-skills/visit-merovingian/SKILL.md",
+        "/about"
+      ],
+      "status": "All returned 200",
+      "retiredTestnetHostReferences": 0
+    },
+    "servings": "None. Crawling and inspection use GET requests, which never create servings."
+  },
+  "followUp": [
+    {
+      "due": "2026-10-01",
+      "optional": true,
+      "checks": [
+        "robots.txt report on the merovingian.manifest.network property: record the status verbatim; if a file is listed but not fetched, request a recrawl"
+      ]
+    },
+    {
+      "due": "2026-10-15",
+      "optional": true,
+      "checks": [
+        "Page indexing report, filtered on submitted pages",
+        "Google searches for site:merovingian.manifest.network and the page title",
+        "Performance report impressions"
+      ]
+    }
+  ],
+  "limits": [
+    "Search Console observations are reported by the operator; screenshots and account identities are not published.",
+    "Being verified does not make pages indexed. Sitemap submission and indexing requests are hints to Google.",
+    "Only / and /about were inspected on 2026-09-24; other linked documents were not inspected, and the Page indexing report had no data yet."
+  ],
+  "laterObservation": {
+    "reportedAt": "2026-09-24T19:42:40Z",
+    "reportedBy": "operator",
+    "indexed": [
+      "https://merovingian.manifest.network/",
+      "https://merovingian.manifest.network/about"
+    ],
+    "note": "Both pages were reported indexed by Google on the same day as the sitemap submission and the indexing request for /.",
+    "robotsTxtReport": "Still 'No robots.txt file'. Google's crawlers download and parse robots.txt before crawling a site, treat 4xx responses as no file, and stop crawling on 5xx; the live file returns 200, and Google caches robots.txt for up to 24 hours. The report is most likely not yet updated; this is not a blocker."
+  }
+}
