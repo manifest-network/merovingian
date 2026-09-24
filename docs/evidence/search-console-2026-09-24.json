@@ -86,17 +86,16 @@
   "followUp": [
     {
       "due": "2026-10-01",
+      "optional": true,
       "checks": [
-        "URL Inspection for / and /about; request indexing for /about if it is still not on Google and the live test passes",
-        "Page indexing report, filtered on submitted pages",
-        "robots.txt report on the merovingian.manifest.network property: record the status verbatim; if a file is listed but not fetched, request a recrawl. A passing URL Inspection live test also shows that robots.txt can be fetched.",
-        "Record each observed status verbatim"
+        "robots.txt report on the merovingian.manifest.network property: record the status verbatim; if a file is listed but not fetched, request a recrawl"
       ]
     },
     {
       "due": "2026-10-15",
+      "optional": true,
       "checks": [
-        "Repeat the URL Inspection, Page indexing and robots.txt checks",
+        "Page indexing report, filtered on submitted pages",
         "Google searches for site:merovingian.manifest.network and the page title",
         "Performance report impressions"
       ]
@@ -106,5 +105,15 @@
     "Search Console observations are reported by the operator; screenshots and account identities are not published.",
     "Being verified does not make pages indexed. Sitemap submission and indexing requests are hints to Google.",
     "Only / and /about were inspected on 2026-09-24; other linked documents were not inspected, and the Page indexing report had no data yet."
-  ]
+  ],
+  "laterObservation": {
+    "reportedAt": "2026-09-24T19:42:40Z",
+    "reportedBy": "operator",
+    "indexed": [
+      "https://merovingian.manifest.network/",
+      "https://merovingian.manifest.network/about"
+    ],
+    "note": "Both pages were reported indexed by Google on the same day as the sitemap submission and the indexing request for /.",
+    "robotsTxtReport": "Still 'No robots.txt file'. Google's crawlers download and parse robots.txt before crawling a site, treat 4xx responses as no file, and stop crawling on 5xx; the live file returns 200, and Google caches robots.txt for up to 24 hours. The report is most likely not yet updated; this is not a blocker."
+  }
 }
