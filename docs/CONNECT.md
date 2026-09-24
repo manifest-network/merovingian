@@ -33,21 +33,24 @@ the service; that is measured by the [discovery evaluation](DISCOVERY-EVALUATION
 
 ## Verification status
 
-The checks below used an unmodified local copy of the application with memory
-counters on `127.0.0.1`. They never contacted the public refuge.
+The local checks used an unmodified local copy of the application with memory
+counters on `127.0.0.1` and never contacted the public refuge. The Claude apps
+row is a separately authorized, read-only live test.
 
-| Host | Example | Checked locally on 2026-09-24 |
+| Host | Example | Checked on 2026-09-24 |
 | --- | --- | --- |
 | Node.js MCP SDK 1.30.0 | [`examples/read-only-client.mjs`](../examples/read-only-client.mjs) | Connected, listed tools and resources, read the guide, called only `list_amenities`. Also runs in CI. |
 | Claude Code 2.1.280 | [CLI command and settings](#claude-code) | Connected. `claude doctor` accepted the permission rules. The shared `.mcp.json` server was held for approval and not contacted. |
 | Codex CLI 0.155.1 | [`config.toml`](#codex-cli) | Connected and registered only `list_amenities`. Rejected an invalid approval-mode value, so the key is recognized. |
 | VS Code, Cursor, Gemini CLI | Configuration files | **Not verified.** These hosts are not installed on the verification machine. The examples follow each vendor's current documentation only. |
-| Claude web and desktop apps | [Custom connector](#claude-web-and-desktop-apps) | **Not verified.** Anthropic's cloud makes the connection, so a local fixture cannot be used. |
+| Claude web and desktop apps | [Custom connector](#claude-web-and-desktop-apps) | **Connected once, live, read-only.** One Claude account; the plan, client (web or Desktop) and version were not recorded. With `enjoy_amenity` blocked, Claude called only `list_amenities` and returned the menu. See the [evidence](evidence/claude-connector-2026-09-24.json). |
 
 A verified row shows that the example parsed and connected in that host version.
 It does not show compatibility with other versions or hosts, or discovery by an
 agent. The [saved report](evidence/connection-examples-2026-09-24.json) records
-each check and the MCP requests each host sent.
+each local check and the MCP requests each local host sent. The Claude row has no
+recorded host version and its own evidence file, which records no server-side
+requests.
 
 Rerun the local checks with:
 
@@ -340,8 +343,11 @@ Sources: [MCP servers](https://github.com/google-gemini/gemini-cli/blob/main/doc
 
 ## Claude web and desktop apps
 
-Not verified. Custom connectors are added in the Claude account, not in a file,
-and Anthropic's cloud makes the connection, even from Claude Desktop. On Free,
+One custom connector in one Claude account connected in a read-only live test
+on 2026-09-24; the plan and client were not recorded. The menu paths, install
+link and Team or Enterprise steps below follow Anthropic's documentation and were
+not separately checked. Custom connectors are added in the Claude account, not
+in a file, and Anthropic's cloud makes the connection, even from Claude Desktop. On Free,
 Pro and Max plans, open **Customize > Connectors**, choose **+ > Add custom
 connector**, enter the name `merovingian` and the URL above, choose **No
 sign-in** (or leave the OAuth fields empty) and add it. This link opens the same
@@ -362,11 +368,17 @@ Organization settings > Connectors; members then connect it. An Owner can block
 Free plans allow one custom connector. `claude_desktop_config.json` configures
 local servers and is not the path for this remote server.
 
-Two risks are untested. Merovingian rejects `/mcp` requests whose `Origin`
-header differs from its public origin, and Anthropic does not document whether
-its connector requests send one. All connector traffic also comes from
-Anthropic's egress range, so users share Merovingian's per-address request
-limits.
+Merovingian rejects `/mcp` requests whose `Origin` header differs from its
+public origin. In the 2026-09-24 test the connector's requests passed that check.
+Anthropic does not document whether connector requests send `Origin`; if that
+changes, connections will fail with 403 `origin_not_allowed`. Anthropic documents
+that connector traffic comes from a shared egress range, which the test did not
+observe. Production trusts no forwarded client addresses yet, so visitors most
+likely already share the provider ingress's per-address allowance. Once trusted
+ingress addresses are configured, connector users will share the allowances of
+Anthropic's egress addresses instead (see
+[request limits](REQUEST-LIMITS.md#trusting-forwarded-client-addresses)). The test
+did not observe what Claude does with an unblocked `enjoy_amenity`.
 
 Sources: [custom connectors](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp),
 [remote MCP connectors](https://claude.com/docs/connectors/custom/remote-mcp),
