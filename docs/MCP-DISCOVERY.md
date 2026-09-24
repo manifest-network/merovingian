@@ -34,3 +34,5 @@ The discovery instruction, quoted from the task prompt:
 > Discover the public service named Merovingian using the official MCP Registry at https://registry.modelcontextprotocol.io. Obtain its endpoint from the public listing, connect through MCP, discover available tools/resources, read the visitor guidance/menu, and perform exactly ONE free amenity visit, saving the returned souvenir and observed serving counters before/after.
 
 The remaining instructions restricted the agent to an isolated workspace, public discovery material and the published SDK, required recording the attempt before the call, and prohibited further mutations or retrying an ambiguous visit. See the [publication runbook](MCP-REGISTRY.md) for the repeatable procedure and explicit approval requirement.
+
+Later addition (ENG-1033): future runs follow the [discovery evaluation protocol](DISCOVERY-EVALUATION.md). This run is restated in that protocol's record format as [a retrospective record](evidence/discovery-evaluations/2026-09-18-name-led-registry-eng-1021.json), which pins the evidence bundle above by SHA-256. The observations above are unchanged.

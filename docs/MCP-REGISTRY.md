@@ -572,6 +572,9 @@ The [2026-09-18 acceptance report](MCP-DISCOVERY.md) records a successful
 name-led discovery and exactly one authorized free visit: cookies served changed
 from 5 to 6, with sauna and tea unchanged. The following procedure is for future
 explicitly authorized tests; it is not an instruction to repeat that visit.
+Read-only URL-led, name-led and capability-led runs, and how to record them, are
+defined in the [discovery evaluation protocol](DISCOVERY-EVALUATION.md). The
+visit steps below apply only when a serving stage is separately authorized.
 
 Use a new agent context with no conversation history, application source, local
 runbooks, or preloaded refuge endpoint. Give it the official registry as a discovery

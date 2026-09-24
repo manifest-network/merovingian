@@ -1,0 +1,208 @@
+{
+  "description": "Local verification of the docs/CONNECT.md examples (ENG-1033). Hosts ran with temporary configuration directories against an unmodified local copy of the application on 127.0.0.1 with memory counters. The public refuge was not contacted; no model calls were made.",
+  "command": "npm run examples:verify",
+  "repositoryBase": "6533808",
+  "applicationVersion": "0.4.7",
+  "limits": [
+    "Shows that each example parsed and connected in the listed host version; not a compatibility guarantee for other versions.",
+    "Claude Code permission-rule enforcement during a model session was not exercised; claude doctor validated the rules.",
+    "VS Code, Cursor, Gemini CLI and Claude custom connectors were not verified."
+  ],
+  "runId": "4fb2c6f4-b378-4139-b68d-d631a6767099",
+  "checkedAt": "2026-09-24T15:09:32.515Z",
+  "target": "loopback fixture (unmodified application, memory counters)",
+  "hosts": [
+    {
+      "host": "read-only-client",
+      "status": "verified",
+      "checks": [
+        "examples/read-only-client.mjs listed tools and resources, read the guide and called only list_amenities."
+      ],
+      "mcp": [
+        {
+          "method": "POST",
+          "path": "/mcp",
+          "status": 200,
+          "rpc": "initialize"
+        },
+        {
+          "method": "POST",
+          "path": "/mcp",
+          "status": 202,
+          "rpc": "notifications/initialized",
+          "protocolVersion": "2025-11-25"
+        },
+        {
+          "method": "GET",
+          "path": "/mcp",
+          "status": 405,
+          "protocolVersion": "2025-11-25"
+        },
+        {
+          "method": "POST",
+          "path": "/mcp",
+          "status": 200,
+          "rpc": "tools/list",
+          "protocolVersion": "2025-11-25"
+        },
+        {
+          "method": "POST",
+          "path": "/mcp",
+          "status": 200,
+          "rpc": "resources/list",
+          "protocolVersion": "2025-11-25"
+        },
+        {
+          "method": "POST",
+          "path": "/mcp",
+          "status": 200,
+          "rpc": "resources/read",
+          "protocolVersion": "2025-11-25"
+        },
+        {
+          "method": "POST",
+          "path": "/mcp",
+          "status": 200,
+          "rpc": "tools/call",
+          "tool": "list_amenities",
+          "protocolVersion": "2025-11-25"
+        }
+      ],
+      "version": "v24.15.0"
+    },
+    {
+      "host": "claude-code",
+      "status": "verified",
+      "checks": [
+        "The documented `claude mcp add` command registered the server and `claude mcp list` reported it connected.",
+        "`claude doctor` accepted the read-only permission rules without an invalid-settings warning.",
+        "The shared `.mcp.json` server was held as pending approval and not contacted."
+      ],
+      "mcp": [
+        {
+          "method": "POST",
+          "path": "/mcp",
+          "status": 400,
+          "rpc": "server/discover",
+          "protocolVersion": "2026-07-28"
+        },
+        {
+          "method": "POST",
+          "path": "/mcp",
+          "status": 200,
+          "rpc": "initialize"
+        },
+        {
+          "method": "POST",
+          "path": "/mcp",
+          "status": 202,
+          "rpc": "notifications/initialized",
+          "protocolVersion": "2025-11-25"
+        },
+        {
+          "method": "GET",
+          "path": "/mcp",
+          "status": 405,
+          "protocolVersion": "2025-11-25"
+        },
+        {
+          "method": "POST",
+          "path": "/mcp",
+          "status": 200,
+          "rpc": "tools/list",
+          "protocolVersion": "2025-11-25"
+        }
+      ],
+      "version": "2.1.280 (Claude Code)"
+    },
+    {
+      "host": "codex-cli",
+      "status": "verified",
+      "checks": [
+        "Codex rejected an invalid default_tools_approval_mode value, so the documented key is recognized.",
+        "`codex mcp get` parsed the documented config.toml as a streamable HTTP server with enabled_tools = [\"list_amenities\"].",
+        "The Codex app server connected, negotiated the server identity and registered only list_amenities; it reported no OAuth requirement."
+      ],
+      "mcp": [
+        {
+          "method": "GET",
+          "path": "/mcp",
+          "status": 405,
+          "protocolVersion": "2024-11-05"
+        },
+        {
+          "method": "GET",
+          "path": "/.well-known/oauth-protected-resource/mcp",
+          "status": 404,
+          "protocolVersion": "2024-11-05"
+        },
+        {
+          "method": "GET",
+          "path": "/mcp/.well-known/oauth-protected-resource",
+          "status": 404,
+          "protocolVersion": "2024-11-05"
+        },
+        {
+          "method": "GET",
+          "path": "/.well-known/oauth-protected-resource",
+          "status": 404,
+          "protocolVersion": "2024-11-05"
+        },
+        {
+          "method": "GET",
+          "path": "/.well-known/oauth-authorization-server/mcp",
+          "status": 404,
+          "protocolVersion": "2024-11-05"
+        },
+        {
+          "method": "GET",
+          "path": "/.well-known/openid-configuration/mcp",
+          "status": 404,
+          "protocolVersion": "2024-11-05"
+        },
+        {
+          "method": "GET",
+          "path": "/mcp/.well-known/openid-configuration",
+          "status": 404,
+          "protocolVersion": "2024-11-05"
+        },
+        {
+          "method": "GET",
+          "path": "/.well-known/oauth-authorization-server",
+          "status": 404,
+          "protocolVersion": "2024-11-05"
+        },
+        {
+          "method": "POST",
+          "path": "/mcp",
+          "status": 200,
+          "rpc": "initialize"
+        },
+        {
+          "method": "POST",
+          "path": "/mcp",
+          "status": 202,
+          "rpc": "notifications/initialized",
+          "protocolVersion": "2025-06-18"
+        },
+        {
+          "method": "POST",
+          "path": "/mcp",
+          "status": 200,
+          "rpc": "tools/list",
+          "protocolVersion": "2025-06-18"
+        }
+      ],
+      "version": "codex-cli 0.155.1"
+    }
+  ],
+  "toolCalls": [
+    {
+      "phase": "read-only-client",
+      "tool": "list_amenities"
+    }
+  ],
+  "servingCalls": 0,
+  "countsUnchanged": true,
+  "passed": true
+}
