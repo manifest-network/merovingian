@@ -121,9 +121,10 @@ see the [discovery report](docs/MCP-DISCOVERY.md).
 [Connection examples](docs/CONNECT.md) cover Claude Code, Codex CLI, VS Code,
 Cursor, Gemini CLI and Claude's custom connectors, plus a
 [minimal read-only client](examples/read-only-client.mjs). Every example hides or
-blocks `enjoy_amenity` where the host allows it. Only the client, Claude Code and
-Codex CLI were verified, against a local copy of the application
-(`npm run examples:verify`); the guide lists each host's approval defaults and
+blocks `enjoy_amenity` where the host allows it. The client, Claude Code and
+Codex CLI were verified against a local copy of the application
+(`npm run examples:verify`), and a Claude custom connector connected in one
+read-only live test; the guide lists each host's approval defaults and
 requirements. Connecting is not discovery: the
 [discovery evaluation](docs/DISCOVERY-EVALUATION.md) defines repeatable
 read-only URL-led, name-led and capability-led runs and validates their records
