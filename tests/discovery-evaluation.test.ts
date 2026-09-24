@@ -1,12 +1,17 @@
 import assert from 'node:assert/strict';
+import { once } from 'node:events';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import {
-  assertEvaluationRecord, assertEvaluationRecords, CAPABILITY_PHRASE, EVALUATIONS_DIRECTORY, PREAMBLE, PROMPT_VERSION,
+  assertEvaluationRecord, assertEvaluationRecords, CAPABILITY_PHRASE, EVALUATIONS_DIRECTORY, isServingRequest, PREAMBLE, PROMPT_VERSION,
   recordTemplate, sha256, standardPrompt, STANDARD_TASKS,
 } from '../scripts/discovery-evaluation.js';
+import { createApp, type SupportPort } from '../src/app.js';
+import type { Config } from '../src/config.js';
+import { VisitCounter } from '../src/counts.js';
 
 const ENDPOINT = 'https://merovingian.manifest.network/mcp';
 const clone = <T>(value: T): T => structuredClone(value);
@@ -135,6 +140,12 @@ test('record validation rejects leaked hints, inconsistent selection, unauthoriz
     ['name-led/open', r => { r.outcome.toolsCalled.push('enjoy_amenity'); }, /enjoy_amenity created a visit/],
     ['url-led/site', r => { r.outcome.toolsCalled.push('merovingian_visit'); }, /merovingian_visit created a visit/],
     ['url-led/site', r => { r.outcome.httpWrites.push('POST /visit'); }, /POST \/visit created a visit/],
+    ['url-led/site', r => { r.outcome.httpWrites.push('POST /api/v1/visits/'); }, /POST \/api\/v1\/visits\/ created a visit/],
+    ['url-led/site', r => { r.outcome.httpWrites.push('POST /VISIT'); }, /POST \/VISIT created a visit/],
+    ['name-led/open', r => {
+      r.endpointSelection = { ...r.endpointSelection, method: 'not-selected', endpoint: null, canonical: null };
+      r.outcome = { ...r.outcome, connected: false, menuRead: false, negotiated: null };
+    }, /outcome.discovered requires the selected endpoint/],
     ['name-led/open', r => {
       r.outcome.toolsCalled.push('enjoy_amenity');
       r.serving = { performed: true, authorization: { reference: 'fixture', approvedMaxServings: 1 }, servingCalls: 2, counters: { before: {}, after: {} }, label: 'test traffic' };
@@ -168,6 +179,39 @@ test('record validation rejects leaked hints, inconsistent selection, unauthoriz
     mutate(record);
     assert.throws(() => assertEvaluationRecord(record), expected, `${pair}: ${mutate}`);
   }
+});
+
+test('recorded HTTP writes count as visits exactly when the application would serve them', async t => {
+  const config: Config = {
+    network: 'mainnet', chainId: 'manifest-ledger-mainnet', publicOrigin: 'http://127.0.0.1:1', port: 8080,
+    rpcUrl: 'https://unused-rpc.example', gasPrice: '1.1umfx', pwrDenom: 'upwr', tenant: '', trustedProxyCidrs: [],
+  };
+  const unused = async () => { throw new Error('unused'); };
+  const counts = new VisitCounter(config);
+  const server = createApp(config, { getInfo: unused, getHistory: unused, verify: unused } as SupportPort, counts).listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => { server.closeAllConnections(); server.close(); counts.close(); });
+  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const variants = [
+    '/api/v1/visits', '/api/v1/visits/', '/API/V1/VISITS', '/Api/V1/Visits/', '/api/v1/visits?seed=x', '/api/v1/visits#top',
+    '/api/v1/./visits', '/api/v1/visits/.', '/api/v1/visits/%2e', '/api/v1/visits//', '/api//v1/visits', '//api/v1/visits',
+    '/api/v1/visits%2F', '/api/v1/%76isits', '/api/v1/visits;x', '/api/v1/visit', '/visit', '/visit/', '/VISIT', '/Visit/',
+    '/visit?amenity=null-tea', '/visit//', '/%76isit', '/visits',
+  ];
+  for (const method of ['POST', 'PUT', 'DELETE']) {
+    for (const path of variants) {
+      const before = counts.snapshot().total;
+      const api = path.toLowerCase().includes('api');
+      const response = await fetch(origin + path, {
+        method, headers: { 'Content-Type': api ? 'application/json' : 'application/x-www-form-urlencoded' },
+        body: api ? JSON.stringify({ amenity: 'null-tea' }) : 'amenity=null-tea',
+      });
+      await response.arrayBuffer();
+      const served = counts.snapshot().total !== before;
+      assert.equal(isServingRequest(`${method} ${path}`), served, `${method} ${path}: application ${served ? 'served' : 'did not serve'} it`);
+    }
+  }
+  assert.equal(isServingRequest('POST not-a-path'), false);
 });
 
 function evidenceFixture(t: TestContext) {

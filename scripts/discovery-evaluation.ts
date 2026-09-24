@@ -24,6 +24,17 @@ const SERVER_NAMES = [MCP_SERVER_NAME, 'network.manifest.merovingian/merovingian
 // Every action that creates a visit: MCP and WebMCP tools by name, HTTP writes as METHOD /path.
 export const SERVING_TOOLS = Object.freeze(['enjoy_amenity', 'merovingian_visit']);
 export const SERVING_REQUESTS = Object.freeze(['POST /api/v1/visits', 'POST /visit']);
+
+/** Classify a recorded `METHOD /path` write as the application routes it: a
+ * client resolves dot segments and drops the query and fragment, and Express
+ * matches paths case-insensitively with one optional trailing slash. */
+export function isServingRequest(write: string): boolean {
+  const [method = '', target = ''] = write.split(' ', 2);
+  let path: string;
+  try { path = new URL(target, 'http://refuge.invalid').pathname; } catch { return false; }
+  path = path.toLowerCase().replace(/(.)\/$/, '$1');
+  return SERVING_REQUESTS.includes(`${method} ${path}`);
+}
 // The name, the registry namespace or GitHub organization, the brand and the domain.
 const NAME_LEAK = /merovingian|manifest[\s._-]*network/i;
 // Nameless on purpose. A different phrase is a different prompt version.
@@ -165,6 +176,7 @@ export function assertEvaluationRecord(value: unknown, evidenceDirectory = EVIDE
   }
   // A discovery claim needs the route, and a documented selection its naming source and evidence.
   if (outcome.discovered) {
+    assert.notEqual(selection.endpoint, null, 'outcome.discovered requires the selected endpoint');
     assert.ok(source.route.length > 0, 'outcome.discovered requires a non-empty source.route');
     if (selection.method !== 'guessed') {
       assert.ok(source.namingSource, `endpointSelection.method "${selection.method}" requires source.namingSource`);
@@ -174,7 +186,7 @@ export function assertEvaluationRecord(value: unknown, evidenceDirectory = EVIDE
 
   // Any visit, by MCP, WebMCP or HTTP, is a serving. An unauthorized one is an incident, never hidden or dropped.
   const { serving } = record;
-  const visits = [...outcome.toolsCalled.filter(tool => SERVING_TOOLS.includes(tool)), ...outcome.httpWrites.filter(write => SERVING_REQUESTS.includes(write))];
+  const visits = [...outcome.toolsCalled.filter(tool => SERVING_TOOLS.includes(tool)), ...outcome.httpWrites.filter(isServingRequest)];
   if (serving.performed) {
     assert.ok(visits.length > 0, `A performed serving stage must list its visit in outcome.toolsCalled or outcome.httpWrites (${[...SERVING_TOOLS, ...SERVING_REQUESTS].join(', ')})`);
     assert.ok(serving.servingCalls! >= 1, 'A performed serving stage made at least one serving call');

@@ -157,14 +157,17 @@ valid record, so keep failures.
 The validator also checks:
 
 - prompt hashes and the mode-specific hint rules;
-- consecutive route steps, and that a discovery has a route, a naming source
-  and an evidence URL (a guessed endpoint needs only the route);
+- consecutive route steps, and that a discovery has a selected endpoint, a
+  route, a naming source and an evidence URL (a guessed endpoint needs no naming
+  source or evidence URL);
 - that the selection method, endpoint and canonical flag agree, and that a
   supplied endpoint is exactly the hint;
 - that `menuRead` implies `connected`, which implies a discovered or supplied
   endpoint on Merovingian's origin with a Merovingian server identity;
 - that any visit (`enjoy_amenity`, `merovingian_visit`, `POST /api/v1/visits`
-  or `POST /visit`) has an authorized serving stage or a described incident;
+  or `POST /visit`) has an authorized serving stage or a described incident.
+  Recorded paths are matched as the application routes them, so letter case, a
+  trailing slash, dot segments, a query or a fragment do not hide a visit;
 - that new evaluations record the host's MCP servers, permission mode and the
   registry version.
 
