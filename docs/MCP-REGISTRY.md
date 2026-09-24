@@ -174,7 +174,8 @@ gh api repos/manifest-network/merovingian/environments/mcp-registry-publish/depl
 Dispatch only after these steps are complete:
 
 1. The release PR is merged to `main`.
-2. The image is published and the existing lease is updated.
+2. The image is published by the [Release image workflow](IMAGE-RELEASE.md) and
+   the existing lease is updated.
 3. Read-only acceptance has passed.
 4. The user has explicitly authorized publication of that exact version.
 
