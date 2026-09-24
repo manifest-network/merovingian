@@ -61,8 +61,9 @@ The prepared source and squash merge have identical Git trees. Release
 passed Check and Final image. Rebuilding creates a different candidate and
 requires fresh verification.
 
-The previous `0.4.5` digest remains the rollback candidate; rollback requires its
-own authorization.
+At release time the previous `0.4.5` digest was named the rollback candidate. The
+update workflow cannot return to a digest it already applied, so recovery now
+[rolls forward](MAINNET.md#updates-recovery-and-restore) to a new version.
 
 ## Live acceptance
 
