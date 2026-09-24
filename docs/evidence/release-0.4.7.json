@@ -1,0 +1,345 @@
+{
+  "schemaVersion": 1,
+  "version": "0.4.7",
+  "origin": "https://merovingian.manifest.network",
+  "source": {
+    "preparedCommit": "61acac867f57e1e6e413643b4248e0c452d46b3d",
+    "mergedCommit": "e3eee336b8a6d4206c4e686d37d6effc8a4003d9",
+    "gitTree": "13c2dbfcfd60c55d9f481b788ad2778b80810fc2",
+    "preparedAndMergedTreesIdentical": true,
+    "pullRequest": "https://github.com/manifest-network/merovingian/pull/23",
+    "mainCi": "https://github.com/manifest-network/merovingian/actions/runs/36000628520",
+    "ciPassed": true
+  },
+  "preparationEvidence": {
+    "path": "release-0.4.7-preparation.json",
+    "sha256": "50d849e2455ad7b3676cc3efc318e3b84c160a4bb741bbd84cd1acb55ecc2b3d",
+    "testsPassed": 360,
+    "candidateBuiltByReleaseWorkflow": true
+  },
+  "imageRelease": {
+    "workflow": ".github/workflows/release-image.yml",
+    "run": "https://github.com/manifest-network/merovingian/actions/runs/36001827755",
+    "mode": "publish",
+    "sourceRevision": "e3eee336b8a6d4206c4e686d37d6effc8a4003d9",
+    "releaseCommit": true,
+    "tagBefore": "absent",
+    "approval": {
+      "environment": "image-release",
+      "state": "approved",
+      "environmentProtected": true
+    },
+    "jobs": {
+      "build": {
+        "startedAt": "2026-09-24T12:52:19Z",
+        "completedAt": "2026-09-24T12:53:14Z",
+        "conclusion": "success"
+      },
+      "check": {
+        "startedAt": "2026-09-24T12:53:16Z",
+        "completedAt": "2026-09-24T12:55:41Z",
+        "conclusion": "success"
+      },
+      "publish": {
+        "startedAt": "2026-09-24T12:56:33Z",
+        "completedAt": "2026-09-24T12:57:14Z",
+        "conclusion": "success"
+      }
+    },
+    "candidate": {
+      "imageId": "sha256:d3add338de15f7e389dfb8d24e818b5fdf78cd7702747c549655bb3d009dbe16",
+      "configurationDigest": "sha256:d3add338de15f7e389dfb8d24e818b5fdf78cd7702747c549655bb3d009dbe16",
+      "platform": "linux/amd64",
+      "labels": {
+        "revision": "e3eee336b8a6d4206c4e686d37d6effc8a4003d9",
+        "version": "0.4.7",
+        "source": "https://github.com/manifest-network/merovingian"
+      },
+      "archiveSha256": "9c5c5466b440a82f0a2a165d718b5b556faccf10adf12bf13291a5b56ed337ad",
+      "archiveBytes": 264868352
+    },
+    "buildEvidenceSha256": {
+      "preflight.json": "59b164dfc1303472589b914365437387e3c020991817c1cdc19d43d4693b5942",
+      "candidate.json": "8c3f6c8e322373edcc0ebb954b5117930acf6c7df58a0f28db23b4d9a3f4bc1b"
+    },
+    "checks": {
+      "repositoryChecksPassed": true,
+      "runtime": {
+        "checkedAt": "2026-09-24T12:55:00.765Z",
+        "passed": true,
+        "completedChecks": [
+          "image-metadata",
+          "image-inventory",
+          "writable-root-permissions",
+          "healthcheck-behavior",
+          "application-pass-1",
+          "application-pass-2",
+          "application-custom-port"
+        ],
+        "applicationFilesChecked": 9223,
+        "appArmor": "unavailable"
+      },
+      "advisoryPolicy": {
+        "passed": true,
+        "blockedCount": 0,
+        "exceptionCount": 0,
+        "reported": [
+          {
+            "advisory": "CVE-2025-14505",
+            "package": "elliptic",
+            "version": "6.6.1",
+            "target": "Node.js",
+            "path": "app/node_modules/elliptic/package.json",
+            "severity": "LOW",
+            "fixedVersion": ""
+          }
+        ],
+        "scannerVersion": "0.74.0",
+        "databaseUpdatedAt": "2026-09-24T09:10:28.608412934Z"
+      }
+    }
+  },
+  "imagePublication": {
+    "checkedAt": "2026-09-24T12:56:59.312Z",
+    "tag": "ghcr.io/manifest-network/merovingian:0.4.7",
+    "manifestDigest": "sha256:919a95cc9e87fb76fc614a801f3a82e957c6d468c5bd88d0c9217e28106934dc",
+    "configurationDigest": "sha256:d3add338de15f7e389dfb8d24e818b5fdf78cd7702747c549655bb3d009dbe16",
+    "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+    "pushAttempts": 1,
+    "tagAndDigestMatch": true,
+    "anonymousManifestAccess": true,
+    "anonymousConfigurationAccess": true,
+    "layers": [
+      {
+        "digest": "sha256:55afa1ecc21d2bb5e5045f32dafee56272ffd89860bac26f6c32123439af26a4",
+        "size": 3846391,
+        "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
+        "contentVerified": true
+      },
+      {
+        "digest": "sha256:bc66c3ef2ea36d66807b6c1f6de35959de23c4cfd1c5ba60bf261182d939b8a5",
+        "size": 53471948,
+        "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
+        "contentVerified": true
+      },
+      {
+        "digest": "sha256:e2c9c68d0d930075e4653f2c0d8d24af9c0d593836fa1acdac1c86379fcac598",
+        "size": 1262112,
+        "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
+        "contentVerified": true
+      },
+      {
+        "digest": "sha256:c45bfe2a2e422e6636048e397bb5d9f653381282d0063e97a840517dc9b01e54",
+        "size": 448,
+        "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
+        "contentVerified": true
+      },
+      {
+        "digest": "sha256:785226807474449fdaa068d31388f548e1c902d69e815a8d1e955e32b4fb7e44",
+        "size": 93,
+        "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
+        "contentVerified": true
+      },
+      {
+        "digest": "sha256:27fbb6a4be15480193ee9d87bc0a183dfc28c271f40353a61e19d45244cd9dad",
+        "size": 5065673,
+        "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
+        "contentVerified": true
+      },
+      {
+        "digest": "sha256:2a367518050940b7e8575a660c63bd376f6ee4b5d3dc1190a1cea89c58e40e7e",
+        "size": 11386347,
+        "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
+        "contentVerified": true
+      },
+      {
+        "digest": "sha256:93a5c9dda61ceaba9297abf9db225eed0a89b1a3e4fb08446646f7821f7be6ec",
+        "size": 65355,
+        "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
+        "contentVerified": true
+      },
+      {
+        "digest": "sha256:4ff99b75c0d9534b5bfcfc361d425c3c7bed566c686983e4ebfe96529beea027",
+        "size": 744,
+        "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
+        "contentVerified": true
+      },
+      {
+        "digest": "sha256:fc5840f5488f6e7ae83f5eafe0c006099fe1a57a2202aa05e353b7907b336610",
+        "size": 538,
+        "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
+        "contentVerified": true
+      },
+      {
+        "digest": "sha256:033a2359754aa9c68eeeee627b57c340f65b3abddf5d4eba58ccc7810e18a3b9",
+        "size": 594,
+        "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
+        "contentVerified": true
+      }
+    ],
+    "layerCount": 11,
+    "registryLoginRemoved": true,
+    "passed": true,
+    "independentChecks": {
+      "anonymousContentVerification": true,
+      "coldPullWithoutCredentials": true
+    }
+  },
+  "attestation": {
+    "predicateType": "https://slsa.dev/provenance/v1",
+    "subject": "ghcr.io/manifest-network/merovingian@sha256:919a95cc9e87fb76fc614a801f3a82e957c6d468c5bd88d0c9217e28106934dc",
+    "signerWorkflow": "https://github.com/manifest-network/merovingian/.github/workflows/release-image.yml@refs/heads/main",
+    "sourceRepositoryRef": "refs/heads/main",
+    "sourceRepositoryDigest": "e3eee336b8a6d4206c4e686d37d6effc8a4003d9",
+    "runInvocation": "https://github.com/manifest-network/merovingian/actions/runs/36001827755/attempts/1",
+    "runnerEnvironment": "github-hosted",
+    "storedIn": "GitHub attestation store (not pushed to the registry)",
+    "verifiedWith": "gh attestation verify --repo manifest-network/merovingian --signer-workflow manifest-network/merovingian/.github/workflows/release-image.yml --source-ref refs/heads/main --deny-self-hosted-runners",
+    "verified": true
+  },
+  "deployment": {
+    "leaseUuid": "01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd",
+    "providerRelease": 9,
+    "status": "ready",
+    "beforeImage": "ghcr.io/manifest-network/merovingian@sha256:5de7cb4be48c89b059e515d414d0a247721e5a72e017a0992b4138ac2c08edeb",
+    "beforeManifestHash": "65e5310485168fc90150a36a6ff6a6621c7a092db262261d1a24d7557c9756d2",
+    "manifestHash": "2bea31fdfc2e270870fd9fc2cae73d3b003116745df13d7fe4bbdd5da214a81d",
+    "activeImage": "ghcr.io/manifest-network/merovingian@sha256:919a95cc9e87fb76fc614a801f3a82e957c6d468c5bd88d0c9217e28106934dc",
+    "readyRecordedAt": "2026-09-24T13:13:26.105Z",
+    "timingNote": "Recorded after observing the provider release ready; not the exact provider transition time.",
+    "imageOnlyChange": true,
+    "runtimeEnvironmentPreserved": true,
+    "counterPath": "/data/visits.sqlite",
+    "runtimeUser": "1000:1000",
+    "proxyTrust": "empty",
+    "updatePostAttempts": 1,
+    "newLease": false,
+    "chainTransaction": false,
+    "additionalFunding": false,
+    "dnsChange": false,
+    "recoveryGapAccepted": "Before the update, the operator accepted that a failed, rolled-back update could not be reconciled by the update tool (RELEASE-0.4.7.md, Recovery)."
+  },
+  "liveBaseline": {
+    "checkedAt": "2026-09-24T13:03:58.204Z",
+    "suiteCommit": "6cbce452e89fbff410c40d245c7da63d77c1e238",
+    "mode": "read-only",
+    "passed": true,
+    "healthVersion": "0.4.6",
+    "requestsAttempted": 20,
+    "servingRequestsAttempted": 0,
+    "counts": {
+      "network": "mainnet",
+      "chainId": "manifest-ledger-mainnet",
+      "status": "available",
+      "since": "2026-09-17T20:29:18.301Z",
+      "counts": {
+        "byte-chip-cookie": "13",
+        "rgb-sauna": "8",
+        "null-tea": "10"
+      },
+      "total": "31",
+      "storage": "persistent"
+    },
+    "countsUnchangedDuringRun": true
+  },
+  "liveAcceptance": {
+    "checkedAt": "2026-09-24T13:13:56.540Z",
+    "origin": "https://merovingian.manifest.network",
+    "network": "mainnet",
+    "mode": "read-only",
+    "passed": true,
+    "health": {
+      "status": "ok",
+      "network": "mainnet",
+      "chainId": "manifest-ledger-mainnet",
+      "retired": false,
+      "version": "0.4.7"
+    },
+    "budget": {
+      "maxRequests": 21,
+      "maxServingRequests": 0,
+      "servings": {
+        "byte-chip-cookie": 0,
+        "rgb-sauna": 0,
+        "null-tea": 0
+      }
+    },
+    "requestsAttempted": 20,
+    "servingRequestsAttempted": 0,
+    "timeoutMs": 15000,
+    "expectUnchangedCounts": true,
+    "discoveryVerified": true,
+    "menuHttpAndMcpEquivalent": true,
+    "servingChecks": "not-run",
+    "httpAndMcpEquivalent": null,
+    "indexingVerified": true,
+    "servings": {
+      "before": {
+        "network": "mainnet",
+        "chainId": "manifest-ledger-mainnet",
+        "status": "available",
+        "since": "2026-09-17T20:29:18.301Z",
+        "counts": {
+          "byte-chip-cookie": "13",
+          "rgb-sauna": "8",
+          "null-tea": "10"
+        },
+        "total": "31",
+        "storage": "persistent"
+      },
+      "after": {
+        "network": "mainnet",
+        "chainId": "manifest-ledger-mainnet",
+        "status": "available",
+        "since": "2026-09-17T20:29:18.301Z",
+        "counts": {
+          "byte-chip-cookie": "13",
+          "rgb-sauna": "8",
+          "null-tea": "10"
+        },
+        "total": "31",
+        "storage": "persistent"
+      },
+      "unchanged": true
+    },
+    "suiteCommit": "e3eee336b8a6d4206c4e686d37d6effc8a4003d9",
+    "preUpdateCountersPreserved": true
+  },
+  "registry": {
+    "status": "published",
+    "registry": "https://registry.modelcontextprotocol.io",
+    "name": "io.github.manifest-network/merovingian",
+    "version": "0.4.7",
+    "publisherVersion": "1.8.1",
+    "publishedWith": "GitHub Actions OIDC through .github/workflows/publish-mcp-registry.yml",
+    "preflightRun": "https://github.com/manifest-network/merovingian/actions/runs/36004311428",
+    "publicationRun": "https://github.com/manifest-network/merovingian/actions/runs/36004427244",
+    "approval": {
+      "environment": "mcp-registry-publish",
+      "state": "approved"
+    },
+    "publishedAt": "2026-09-24T13:16:15.382776Z",
+    "exactVersionObservedAt": "2026-09-24T13:16:16.605Z",
+    "latestObservedAt": "2026-09-24T13:16:16.689Z",
+    "verifiedAt": "2026-09-24T13:16:16.689Z",
+    "exactVersionActive": true,
+    "latestVersionActive": true,
+    "metadataMatchesApprovedServerJson": true,
+    "serverJsonSha256": "ae262d0cf32da7df7e775a417f59e1fff9bc1cf19cd9a7de7eaed220ab5f0a6a",
+    "snapshot": "mcp-registry-0.4.7.json",
+    "snapshotSha256": "d90bb619a12dcd8e2aceb7fd4c3448782beb76984152f04486ec059da032a38b",
+    "snapshotCapturedAt": "2026-09-24T13:16:16.605Z",
+    "temporaryLoginRemoved": true,
+    "deploymentRecheckReadRequests": 2
+  },
+  "scope": {
+    "preUpdateReadRequests": 20,
+    "smokeReadRequests": 20,
+    "registryAcceptanceReadRequests": 40,
+    "registryDeploymentRecheckReadRequests": 2,
+    "totalApplicationReadRequests": 82,
+    "servingRequestsAttempted": 0,
+    "servingAcceptance": "not-run",
+    "providerConfinementAndAppArmor": "Not verified; tracked in ENG-1038 and ENG-1041."
+  }
+}

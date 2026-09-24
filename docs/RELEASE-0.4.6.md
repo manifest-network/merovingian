@@ -1,5 +1,8 @@
 # Release 0.4.6 — live
 
+This dated record describes the `0.4.6` publication. The current release is
+[0.4.7](RELEASE-0.4.7.md); the observations and digests below are historical.
+
 `0.4.6` packages the merged ENG-1031 response contracts and ENG-1032 read-only
 smoke checks for an update to the existing mainnet lease. Package, lockfile and
 generated registry metadata use the same version. Dependency versions, network

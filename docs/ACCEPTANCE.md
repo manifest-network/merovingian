@@ -1,4 +1,4 @@
-# Acceptance — 2026-09-22
+# Acceptance — 2026-09-24
 
 ## Repeatable smoke checks (ENG-1032)
 
@@ -115,9 +115,51 @@ script. Keep reports and operational state in ignored local storage. ENG-1032
 validation uses isolated local fixtures only; the release records below remain
 historical evidence, not new production checks.
 
+## Release 0.4.7 publication and verification
+
+Release **0.4.7 is live on the original mainnet lease**. Each production step was
+explicitly authorized, and the user performed the privileged ones. It is the first
+release built, published and attested by the [Release image workflow](IMAGE-RELEASE.md)
+and published to the MCP Registry through its workflow.
+[PR #23](https://github.com/manifest-network/merovingian/pull/23) merged as
+`e3eee336b8a6d4206c4e686d37d6effc8a4003d9`; its source tree matches the prepared
+release, and [main CI](https://github.com/manifest-network/merovingian/actions/runs/36000628520)
+passed.
+
+The [image run](https://github.com/manifest-network/merovingian/actions/runs/36001827755)
+built and checked the candidate: all runtime checks, the advisory policy with zero
+blockers and `npm run check`. After approval it pushed image
+`sha256:919a95cc9e87fb76fc614a801f3a82e957c6d468c5bd88d0c9217e28106934dc`
+(configuration `sha256:d3add338de15f7e389dfb8d24e818b5fdf78cd7702747c549655bb3d009dbe16`).
+Anonymous checks verified the tag, digest, configuration and the content of all
+eleven layers, and `gh attestation verify` accepted its SLSA provenance. Provider
+release **9** was observed ready at **2026-09-24T13:13:26.105Z** with manifest hash
+`2bea31fdfc2e270870fd9fc2cae73d3b003116745df13d7fe4bbdd5da214a81d`. Only the image
+changed.
+
+A pre-update baseline with the `0.4.6` smoke suite at **2026-09-24T13:03:58.204Z**
+and the `0.4.7` smoke suite at **2026-09-24T13:13:56.540Z** each passed in read-only
+mode with 20 requests and zero serving requests. Health reports `0.4.7`, and
+discovery, HTTP/MCP menus, indexing and the dashboard agree. Persistent counts
+matched: **13 cookies, 8 sauna sessions, 10 teas** (31 total), with the original start
+date **2026-09-17T20:29:18.301Z**.
+
+The MCP Registry workflow's preflight and publication runs each repeated read-only
+acceptance (20 requests, zero servings), and the publication rechecked the
+deployment with two reads. The official `mcp-publisher` 1.8.1 published `0.4.7` with
+GitHub OIDC at **2026-09-24T13:16:15.382776Z**. Exact-version and latest records were
+verified active and matching `server.json` by **2026-09-24T13:16:16.689Z**, and the
+registry login was removed. Application read requests totalled 82, with no live
+servings, payments, new lease, chain transaction, funding deposit or DNS change.
+
+Provider ingress/confinement and named AppArmor evidence remain separate work in
+ENG-1038/ENG-1041. See the [release notes](RELEASE-0.4.7.md),
+[sanitized evidence](evidence/release-0.4.7.json) and
+[registry snapshot](evidence/mcp-registry-0.4.7.json).
+
 ## Release 0.4.6 publication and verification
 
-Release **0.4.6 is live on the original mainnet lease** following explicit
+Release **0.4.6 went live on the original mainnet lease** following explicit
 authorization for the reviewed image, existing-lease update, read-only acceptance
 and matching MCP Registry publication. [PR #10](https://github.com/manifest-network/merovingian/pull/10)
 merged as `6cbce452e89fbff410c40d245c7da63d77c1e238`; its source tree matches
@@ -270,7 +312,7 @@ The [sanitized release evidence](evidence/release-0.4.3.json) records these obse
 
 ## Release 0.4.2 publication and verification
 
-The historical **0.4.2** update completed on the original mainnet lease without a new lease, chain transaction, or funding deposit. Provider release **4** reached ready, with manifest hash `b632797e7a79ee0cda6f7126d28f89576f8529e7df73e97c705f5d6feea357cb`. Final public HTTP/MCP acceptance passed at **2026-09-17T20:50:40.854Z** using normal DNS and TLS verification. The following observations describe that historical release; current `0.4.6` acceptance is recorded above.
+The historical **0.4.2** update completed on the original mainnet lease without a new lease, chain transaction, or funding deposit. Provider release **4** reached ready, with manifest hash `b632797e7a79ee0cda6f7126d28f89576f8529e7df73e97c705f5d6feea357cb`. Final public HTTP/MCP acceptance passed at **2026-09-17T20:50:40.854Z** using normal DNS and TLS verification. The following observations describe that historical release; current `0.4.7` acceptance is recorded above.
 
 - Public source: [manifest-network/merovingian](https://github.com/manifest-network/merovingian), runtime source commit [`b5ea795`](https://github.com/manifest-network/merovingian/commit/b5ea795).
 - Image at acceptance: `ghcr.io/manifest-network/merovingian@sha256:d82e4891c3f871c33d0e115706878193e1154559d11f43111a8e376b337c44be`; exact digest, configuration, and all ten layers verified anonymously.
@@ -289,7 +331,7 @@ The original lease remains `01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd`, and its launc
 
 ## Historical mainnet launch, release 0.3.0
 
-The initial mainnet launch passed full public acceptance at **2026-09-17T20:00:07.935Z** using release 0.3.0 and published SDK dependencies. The same lease and public domain now run 0.4.6 as verified above.
+The initial mainnet launch passed full public acceptance at **2026-09-17T20:00:07.935Z** using release 0.3.0 and published SDK dependencies. The same lease and public domain now run 0.4.7 as verified above.
 
 - Homepage: [merovingian.manifest.network](https://merovingian.manifest.network)
 - Agent instructions: [visit.md](https://merovingian.manifest.network/visit.md)
@@ -299,7 +341,7 @@ The initial mainnet launch passed full public acceptance at **2026-09-17T20:00:0
 - Tenant: `manifest1hkmrmsc6zjr7gm2wgtrtce7vgxeq9e402x5rf5`
 - Lease: `01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd`, ACTIVE / provider ready
 - Provider: `019e6a0d-e141-7000-9e79-e94ac1bd333e`
-- Historical 0.3.0 image (nine layers): `ghcr.io/fmorency/merovingian@sha256:1020117aa543cbddcdbe0b49a671b09ddabb285a1f3af819d15ed3394d89f53b`. The current 0.4.6 organization image has eleven layers and is recorded above.
+- Historical 0.3.0 image (nine layers): `ghcr.io/fmorency/merovingian@sha256:1020117aa543cbddcdbe0b49a671b09ddabb285a1f3af819d15ed3394d89f53b`. The current 0.4.7 organization image has eleven layers and is recorded above.
 
 ### DNS, HTTPS, and live application checks
 
