@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "runId": "2026-09-18-name-led-registry-eng-1021",
+  "kind": "retrospective",
+  "retrospectiveOf": {
+    "issue": "ENG-1021",
+    "report": "docs/MCP-DISCOVERY.md",
+    "sourceEvidence": [
+      { "file": "mcp-discovery-2026-09-18.json", "sha256": "555508030e6e6db411879fa0e51c5ac7bb4d5980c657ce5ba7550d2156e1028c" }
+    ],
+    "note": "Restated on 2026-09-24 from the committed ENG-1021 report and evidence, without contacting any service. The original report and evidence are unchanged and remain authoritative. This is not a new run."
+  },
+  "recordedAt": "2026-09-24T14:37:16Z",
+  "mode": "name-led",
+  "variant": "registry",
+  "prompt": {
+    "version": "eng-1021-original",
+    "sha256": null,
+    "text": null,
+    "privateNote": "The exact prompt stays in the ignored .local directory because it contains a personal filesystem path. docs/MCP-DISCOVERY.md quotes its discovery instruction. It also authorized one visit, unlike the read-only discovery-v1 prompts."
+  },
+  "suppliedHints": [
+    { "kind": "service-name", "value": "Merovingian" },
+    { "kind": "surface-url", "value": "https://registry.modelcontextprotocol.io" }
+  ],
+  "environment": {
+    "host": { "product": "not recorded", "version": "not recorded" },
+    "model": null,
+    "agentTools": ["Node.js scripts in an isolated scratch workspace"],
+    "network": "Restricted sandbox; six network-escalated executions succeeded",
+    "preinstalled": ["@modelcontextprotocol/sdk 1.30.0"],
+    "freshContext": true,
+    "preconfiguredMcpServers": null
+  },
+  "source": {
+    "route": [
+      { "step": 1, "surface": "official MCP Registry", "url": "https://registry.modelcontextprotocol.io", "query": null, "observation": "Search field says Search servers by name; API Reference links to /docs." },
+      { "step": 2, "surface": "official MCP Registry", "url": "https://registry.modelcontextprotocol.io/docs", "query": null, "observation": "The reference links to /openapi.yaml.", "at": "2026-09-18T13:44:11.831Z" },
+      { "step": 3, "surface": "official MCP Registry", "url": "https://registry.modelcontextprotocol.io/openapi.yaml", "query": null, "observation": "GET /v0.1/servers supports name substring search and latest-version filtering.", "at": "2026-09-18T13:44:31.694Z" },
+      { "step": 4, "surface": "official MCP Registry", "url": "https://registry.modelcontextprotocol.io/v0.1/servers?search=merovingian&version=latest", "query": "merovingian", "observation": "One active, latest listing: io.github.manifest-network/merovingian version 0.4.2.", "at": "2026-09-18T13:44:56.009Z" }
+    ],
+    "namingSource": {
+      "surface": "official MCP Registry",
+      "url": "https://registry.modelcontextprotocol.io/v0.1/servers?search=merovingian&version=latest",
+      "field": "servers[0].server.remotes[0].url"
+    }
+  },
+  "endpointSelection": {
+    "method": "registry-remotes",
+    "endpoint": "https://merovingian.manifest.network/mcp",
+    "evidenceUrl": "https://registry.modelcontextprotocol.io/v0.1/servers?search=merovingian&version=latest",
+    "canonical": true,
+    "alternatives": [],
+    "note": "The listing supplied the Streamable HTTP endpoint; the endpoint was not guessed."
+  },
+  "friction": [
+    { "stage": "discovery", "category": "sandbox-network", "blocking": false, "description": "The first unprivileged request to the registry API reference failed with EAI_AGAIN; a network-capable execution succeeded afterward.", "evidence": "mcp-discovery-2026-09-18.json /failuresAndCompatibility/networkFailures" },
+    { "stage": "host-approval", "category": "sandbox-network", "blocking": false, "description": "Six network-escalated executions succeeded. The agent observed no separate human approval interaction; escalation results were not treated as user authorization.", "evidence": "mcp-discovery-2026-09-18.json /authorization/networkEscalations" },
+    { "stage": "connection", "category": "protocol", "blocking": false, "description": "Optional MCP GET streaming returned HTTP 405 on each of three client connections; the SDK continued with JSON POST responses.", "evidence": "mcp-discovery-2026-09-18.json /failuresAndCompatibility/unsupportedGetStreaming" },
+    { "stage": "connection", "category": "ambiguity", "blocking": false, "description": "The registry name io.github.manifest-network/merovingian differed from the negotiated server name network.manifest.merovingian/merovingian. Release 0.4.3 later aligned them.", "evidence": "mcp-discovery-2026-09-18.json /negotiated/server" },
+    { "stage": "discovery", "category": "operator-intervention", "blocking": false, "description": "During the run the supervising agent reported publication complete and asked for focused evidence. It did not supply the endpoint or menu.", "evidence": "mcp-discovery-2026-09-18.json /scope/supervisingMessages" }
+  ],
+  "outcome": {
+    "discovered": true,
+    "connected": true,
+    "menuRead": true,
+    "interface": "mcp",
+    "negotiated": { "serverName": "network.manifest.merovingian/merovingian", "serverVersion": "0.4.2", "protocolVersion": "2025-11-25" },
+    "toolsListed": ["list_amenities", "enjoy_amenity", "hosting_support", "verify_contribution"],
+    "toolsCalled": ["list_amenities", "enjoy_amenity"],
+    "httpWrites": [],
+    "stoppedAt": "After the one authorized enjoy_amenity visit and the after-visit counter snapshot."
+  },
+  "serving": {
+    "performed": true,
+    "authorization": {
+      "reference": "Direct user reply \"Approve publication and one test visit\", recorded in docs/MCP-DISCOVERY.md",
+      "approvedMaxServings": 1
+    },
+    "servingCalls": 1,
+    "counters": {
+      "before": { "byte-chip-cookie": "5", "rgb-sauna": "4", "null-tea": "6", "total": "15" },
+      "after": { "byte-chip-cookie": "6", "rgb-sauna": "4", "null-tea": "6", "total": "16" }
+    },
+    "label": "test traffic"
+  },
+  "claims": { "organicDiscovery": false },
+  "limitations": [
+    "Name-led registry discovery with the registry URL supplied; not organic or capability-led discovery.",
+    "The host product and version were not recorded.",
+    "The host's MCP server configuration was not recorded.",
+    "Shared aggregate counters support the single serving without independently excluding concurrent traffic.",
+    "The attempt marker was not fsynced; the run does not demonstrate crash-safe durability."
+  ]
+}
