@@ -3,7 +3,9 @@
 Runtime images are built, verified and published by the manually dispatched
 [Release image workflow](../.github/workflows/release-image.yml). Nothing is
 built or pushed from a workstation. Releases up to `0.4.6` were built locally and
-pushed with personal registry credentials; their records stay as written.
+pushed with personal registry credentials; their records stay as written. `0.4.7`
+was the first release through the workflow
+([run 36001827755](https://github.com/manifest-network/merovingian/actions/runs/36001827755)).
 
 Publishing an image is a production action. Dispatch `publish` mode only after
 the user has authorized publication of that exact version. The existing-lease

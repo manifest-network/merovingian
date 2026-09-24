@@ -1,15 +1,18 @@
-# Release 0.4.7 — prepared for review
+# Release 0.4.7 — live
 
-`0.4.7` packages the merged Manifest SDK `0.23.0` and manifestjs `4.0.0`
-dependency upgrade ([PR #21](https://github.com/manifest-network/merovingian/pull/21))
-for an update to the existing mainnet lease. Application behavior, network
-identity and the remote MCP endpoint are unchanged. Package, lockfile and
-generated registry metadata use the same version.
+`0.4.7` updates the existing mainnet lease to the merged Manifest SDK `0.23.0` and
+manifestjs `4.0.0` dependency upgrade
+([PR #21](https://github.com/manifest-network/merovingian/pull/21)). Application
+behavior, network identity and the remote MCP endpoint are unchanged. Package,
+lockfile and generated registry metadata use the same version.
 
-Nothing has been published or deployed. Each of the following needs its own
-explicit authorization: image publication, the existing-lease update, read-only
-live acceptance and registry publication. The live release and the published
-registry record remain `0.4.6` until then.
+The user authorized each production step on 2026-09-24 and performed the
+privileged ones: the Release image dispatch and its `image-release` approval, the
+existing-lease update with the protected OS keyring, and the MCP Registry
+dispatches and their `mcp-registry-publish` approval. The read-only baseline and
+acceptance were separately authorized. The image is published and attested,
+provider release **9** is ready, and `0.4.7` is active and latest in the official
+MCP Registry. See the [release evidence](evidence/release-0.4.7.json).
 
 ## Changes
 
@@ -50,44 +53,85 @@ when it can, rolls back to `0.4.6`. The update tool cannot reconcile that case:
 including a retry or a roll-forward, until a separately reviewed reconciliation
 procedure exists. If Fred's own rollback also fails, the lease ends `Failed`,
 `0.4.6` is not serving, and `prepare` refuses any update
-(`update_requires_ready_active_release`). Decide before authorizing the update
-whether to accept this gap or to add reconciliation first.
+(`update_requires_ready_active_release`). The user accepted this gap before
+authorizing the update.
 
-## Publication and deployment plan
+## Publication and deployment
 
-Each step needs its own authorization:
+Release [PR #23](https://github.com/manifest-network/merovingian/pull/23) merged as
+`e3eee336b8a6d4206c4e686d37d6effc8a4003d9`, with a Git tree identical to the
+prepared branch; [main CI](https://github.com/manifest-network/merovingian/actions/runs/36000628520)
+passed Check, Final image and Keyring helper.
 
-1. After this PR merges, dispatch the [Release image workflow](IMAGE-RELEASE.md)
-   from `main` in `publish` mode, with version `0.4.7` and the release merge commit
-   as `source_revision`. Build and Check produce and check the candidate. Review
-   their job summaries against these notes, then approve the `image-release`
-   deployment. Publish pushes exactly that candidate as `0.4.7`, verifies it
-   anonymously and attests its provenance.
-2. Take a read-only baseline of live `0.4.6` with the `0.4.6` release commit's own
-   smoke suite: a separate checkout of `6cbce45` with `npm ci`, then
-   `npm run smoke -- https://merovingian.manifest.network --mainnet`. The suite
-   requires the live version to match its checkout, so `main`'s `0.4.7` suite would
-   refuse. Keep its counter snapshot (`servings.before`).
-3. Run the [existing-lease update workflow](MAINNET.md#existing-lease-update-workflow)'s
-   `prepare` with the published digest, review the exact manifest, then `run`
-   lease `01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd`. Only the image may change.
-4. Run the read-only smoke suite from `main` against `0.4.7` and confirm the
-   counts match the baseline, with zero servings.
-5. Dispatch the MCP Registry workflow for `0.4.7` in `preflight` mode, then in
-   `publish` mode through the `mcp-registry-publish` environment approval.
+The [Release image workflow run](https://github.com/manifest-network/merovingian/actions/runs/36001827755)
+built that commit, the first release through the workflow:
 
-## Candidate
+- **Build** confirmed the release commit on the live `main`, an absent `0.4.7` tag
+  and a protected approval environment. It recorded image ID and configuration
+  digest `sha256:d3add338de15f7e389dfb8d24e818b5fdf78cd7702747c549655bb3d009dbe16`
+  and archive SHA-256
+  `9c5c5466b440a82f0a2a165d718b5b556faccf10adf12bf13291a5b56ed337ad`.
+- **Check** loaded that archive and passed `npm run check`, all seven isolated
+  runtime checks (9,223 application files) and the advisory policy with zero
+  blockers and zero exceptions. The low, unfixed `elliptic@6.6.1` advisory remains
+  reported.
+- After approval, **Publish** pushed the candidate once as `0.4.7`:
 
-The candidate does not exist yet. The Release image workflow builds it from the
-release merge commit. The Build job records its image ID, configuration digest
-and archive SHA-256; the published digest is recorded after publication. Builds
-are not reproducible, so a local build, including the one used to prepare these
-notes, is not the release candidate.
+```text
+ghcr.io/manifest-network/merovingian@sha256:919a95cc9e87fb76fc614a801f3a82e957c6d468c5bd88d0c9217e28106934dc
+```
+
+It verified anonymously that the tag and digest reference serve that manifest,
+that the configuration is the approved one, and that all eleven layers' bytes and
+uncompressed content match. It attested SLSA build provenance, which
+`gh attestation verify` accepts for `release-image.yml` on `refs/heads/main` at
+`e3eee33`. An independent anonymous verification and a cold pull without
+credentials also passed.
+
+A read-only baseline of live `0.4.6`, taken with the `0.4.6` commit's own smoke
+suite at **2026-09-24T13:03:58.204Z**, made 20 requests and no servings. Counts were
+**13 cookies, 8 sauna sessions and 10 teas** (31 total) since
+`2026-09-17T20:29:18.301Z`.
+
+The [existing-lease update workflow](MAINNET.md#existing-lease-update-workflow)
+then updated lease `01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd`. The prepared manifest
+differed from the active `0.4.6` manifest only in the image. It preserved
+`/data/visits.sqlite`, UID/GID `1000:1000`, the public configuration and empty proxy
+trust. One journaled update POST applied it. Provider release **9** was observed
+ready with manifest hash
+`2bea31fdfc2e270870fd9fc2cae73d3b003116745df13d7fe4bbdd5da214a81d` at
+**2026-09-24T13:13:26.105Z**. No new lease, funding deposit, chain transaction or
+DNS change was performed.
+
+## Live acceptance
+
+The read-only smoke suite from the release commit passed against `0.4.7` at
+**2026-09-24T13:13:56.540Z**, with 20 requests, zero serving requests and counters
+unchanged during the run. Health reports `0.4.7`. Discovery, HTTP/MCP menu
+agreement, indexing and the dashboard passed. Counts matched the pre-update
+baseline exactly: **13 cookies, 8 sauna sessions and 10 teas** (31 total), with the
+original start date.
+
+## MCP Registry
+
+The [MCP Registry workflow](MCP-REGISTRY.md#github-actions-publication) published
+`0.4.7`, its first real publication. A
+[preflight run](https://github.com/manifest-network/merovingian/actions/runs/36004311428)
+and the [publication run](https://github.com/manifest-network/merovingian/actions/runs/36004427244)
+each passed official validation and read-only acceptance (20 requests, zero
+servings). The publication rechecked the deployment with two reads. After approval
+it logged in with GitHub OIDC and published once at
+**2026-09-24T13:16:15.382776Z**. Exact-version and latest records were verified
+active, latest and matching `server.json` (SHA-256
+`ae262d0cf32da7df7e775a417f59e1fff9bc1cf19cd9a7de7eaed220ab5f0a6a`) by
+**2026-09-24T13:16:16.689Z**. The registry login was removed. The
+[saved response](evidence/mcp-registry-0.4.7.json) preserves that record.
 
 ## Validation
 
 The [sanitized preparation evidence](evidence/release-0.4.7-preparation.json)
-records the checks made while preparing the release:
+records the checks made while preparing the release, before the workflow built
+the candidate:
 
 - `npm run check`: all tests, registry consistency, typechecking and build passed
   on the rebased release branch. Historical registry snapshots are unchanged.
@@ -102,8 +146,9 @@ records the checks made while preparing the release:
   workspace build, it binds the candidate to its source by building the verified
   release commit and labelling the image with it.
 
-No live requests were made during preparation. The live baseline is deferred to
-the authorized update so its counter snapshot is current.
+No live requests were made during preparation. The live baseline was deferred to
+the authorized update and taken at **2026-09-24T13:03:58.204Z** (see
+[Publication and deployment](#publication-and-deployment)).
 
 Provider ingress/confinement evidence and named AppArmor verification remain
 separate work in ENG-1038 and ENG-1041. This release does not alter provider policy.

@@ -46,6 +46,15 @@
       "sourceArtifact": "release-0.4.6.json",
       "sourcePointer": "/registry/verifiedAt",
       "timingNote": "The exact-version response was saved before the publication verification timestamp. capturedByAt is an upper bound, not the exact fetch time."
+    },
+    {
+      "artifact": "mcp-registry-0.4.7.json",
+      "snapshotFileSha256": "d90bb619a12dcd8e2aceb7fd4c3448782beb76984152f04486ec059da032a38b",
+      "version": "0.4.7",
+      "capturedAt": "2026-09-24T13:16:16.605Z",
+      "sourceArtifact": "release-0.4.7.json",
+      "sourcePointer": "/registry/snapshotCapturedAt",
+      "timingNote": "Saved by the MCP Registry workflow from the verification response; capturedAt is that response's observation time."
     }
   ]
 }

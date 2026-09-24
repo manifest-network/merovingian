@@ -1,27 +1,29 @@
 # MCP Registry publication and discovery
 
-The workspace's `server.json` is prepared for **0.4.7**, pending publication
-after an authorized deployment and successful live acceptance. It is the first
-release to be published through the [GitHub Actions workflow](#github-actions-publication).
-The existing `0.4.6` records below retain their historical metadata and publication evidence.
-
-Version `0.4.6` is deployed on mainnet and published as the latest version in the
+Version `0.4.7` is deployed on mainnet and published as the latest version in the
 official MCP Registry. The generated `server.json` uses the registry identity
 `io.github.manifest-network/merovingian` and Streamable HTTP at
 `https://merovingian.manifest.network/mcp`.
 
-Version `0.4.6` was published at **2026-09-22T14:12:57.663135Z** using official
-`mcp-publisher` 1.8.1, after explicit production authorization, successful
-read-only live acceptance and a fresh local login. The
-[exact-version record](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.6)
+Version `0.4.7` is the first published through the
+[GitHub Actions workflow](#github-actions-publication), after explicit production
+authorization, the deployment and successful read-only live acceptance. The
+[preflight run](https://github.com/manifest-network/merovingian/actions/runs/36004311428)
+and [publication run](https://github.com/manifest-network/merovingian/actions/runs/36004427244)
+each passed official validation and read-only acceptance. After approval in
+`mcp-registry-publish`, official `mcp-publisher` 1.8.1 logged in with GitHub OIDC
+and published once at **2026-09-24T13:16:15.382776Z**. The
+[exact-version record](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/0.4.7)
 and [latest record](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.manifest-network%2Fmerovingian/versions/latest)
 returned `active`, `isLatest: true`, and metadata matching the committed
-`server.json`, verified at **2026-09-22T14:15:35.158984Z**. Its exact file SHA-256
-is `eae1bf05864b13c6f5a88a674d2f7dd2306dac52f2ea18c4aaac6fe64d9dcf63`.
-A timed-out public lookup was reconciled with read-only requests, without
-repeating publication. The temporary registry login was removed after verification.
-See the [release record](RELEASE-0.4.6.md),
-[publication evidence](evidence/release-0.4.6.json) and
+`server.json`, verified by **2026-09-24T13:16:16.689Z**. Its exact file SHA-256 is
+`ae262d0cf32da7df7e775a417f59e1fff9bc1cf19cd9a7de7eaed220ab5f0a6a`. The registry
+login was removed. See the [release record](RELEASE-0.4.7.md),
+[publication evidence](evidence/release-0.4.7.json) and
+[saved registry response](evidence/mcp-registry-0.4.7.json).
+
+Version `0.4.6` was published at **2026-09-22T14:12:57.663135Z** with the manual
+publisher flow; see its [release record](RELEASE-0.4.6.md) and
 [saved registry response](evidence/mcp-registry-0.4.6.json).
 
 The records below retain their historical metadata and publication evidence.
@@ -51,7 +53,7 @@ The temporary registry login was removed after verification. See the
 [publication evidence](evidence/release-0.4.4.json).
 
 The dated metadata matches and saved responses below describe their original
-release files. They remain historical records after the `0.4.6` publication.
+release files. They remain historical records after the `0.4.7` publication.
 
 Version `0.4.3` was published after explicit approval at
 **2026-09-18T15:13:34.27966Z** using official `mcp-publisher` 1.8.1. The
@@ -69,7 +71,7 @@ both returned the approved metadata with status `active` and `isLatest: true` at
 the publication check.
 Publication used the official `mcp-publisher` 1.8.1 release after explicit user
 approval. Those publication checks describe the historical `0.4.2` release;
-the live application has since advanced through `0.4.3`, `0.4.4` and `0.4.5` to `0.4.6`.
+the live application has since advanced through `0.4.3` to `0.4.7`.
 The [saved `0.4.2` registry response](evidence/mcp-registry-0.4.2.json) preserves
 the exact published metadata; do not regenerate or overwrite that historical record.
 
@@ -102,8 +104,8 @@ git show 300ac773f28dd61bd804d376cbddcd6ffbd5e82a:server.json | sha256sum
 The GitHub namespace is controlled through an owner of the `manifest-network`
 organization. Release `0.4.3` aligned the registry, server card, and MCP initialization
 names to `io.github.manifest-network/merovingian`; read-only acceptance verified
-the change on 2026-09-18. Releases `0.4.4` through `0.4.6` preserve that identity, verified again
-on 2026-09-21 and 2026-09-22. The earlier `0.4.2` card and runtime returned
+the change on 2026-09-18. Releases `0.4.4` through `0.4.7` preserve that identity, verified again
+on 2026-09-21, 2026-09-22 and 2026-09-24. The earlier `0.4.2` card and runtime returned
 `network.manifest.merovingian/merovingian`, as preserved in the historical
 [discovery report](MCP-DISCOVERY.md). The HTTPS origin and remote endpoint stay
 the same.
@@ -140,9 +142,12 @@ and [`mode=publish`](https://github.com/manifest-network/merovingian/actions/run
 Both Preflight jobs passed the approval-environment check, fetched the live
 `main`, and returned a verified `already-published` no-op. Their snapshots were
 byte-identical to the committed record. Both Publish jobs were skipped, so the
-approval, OIDC login and publish path has not yet run. The next release's
-publication will be its first real use and needs its own explicit authorization.
-The manual PAT fallback remains available if that login fails.
+approval, OIDC login and publish path had not yet run. Its first real use was the
+`0.4.7` publication on 2026-09-24
+([preflight](https://github.com/manifest-network/merovingian/actions/runs/36004311428),
+[publication](https://github.com/manifest-network/merovingian/actions/runs/36004427244)):
+approval, OIDC login, one publish, verification and logout all passed. The manual
+PAT fallback remains available if that login fails.
 
 ### Approval environment
 
@@ -447,7 +452,7 @@ Validation sends this public JSON to the official registry validation API. It do
 not publish and is not an offline check. Do not add credentials or private headers
 to the record. Review the exact namespace, version, description, endpoint, and
 repository URL before publication. Releases `0.4.3` through `0.4.6` used this manual flow
-after their deployments passed verification. Future publications require review
+after their deployments passed verification; `0.4.7` and later use the workflow. Future publications require review
 and explicit authorization for their own version and metadata.
 
 As checked on 2026-09-18, the interactive device flow cannot grant our organization

@@ -1,7 +1,7 @@
 # Merovingian v1
 
-Status: mainnet 0.4.6 is live at https://merovingian.manifest.network and published in the official MCP Registry; the testnet lease is closed. Publication of 0.4.2 and one fresh-agent visit passed earlier on 2026-09-18. Registry publication is intended to run through the approval-gated GitHub Actions workflow ([ENG-1046](https://linear.app/liftedinit/issue/ENG-1046)); its preflight has run, and its first real publication will be the next release. See the [discovery report](docs/MCP-DISCOVERY.md), [mainnet operations](docs/MAINNET.md) and [release 0.4.6](docs/RELEASE-0.4.6.md) for evidence and current status.
-Updated: 2026-09-23.
+Status: mainnet 0.4.7 is live at https://merovingian.manifest.network and published in the official MCP Registry; the testnet lease is closed. Publication of 0.4.2 and one fresh-agent visit passed earlier on 2026-09-18. Images and registry records are published by approval-gated GitHub Actions workflows ([ENG-1046](https://linear.app/liftedinit/issue/ENG-1046) for the registry); `0.4.7` was the first release through both. See the [discovery report](docs/MCP-DISCOVERY.md), [mainnet operations](docs/MAINNET.md) and [release 0.4.7](docs/RELEASE-0.4.7.md) for evidence and current status.
+Updated: 2026-09-24.
 
 ## Agreed direction
 
@@ -34,9 +34,9 @@ need to update it. The `/mcp` endpoint is unchanged. Live acceptance was read-on
 and preserved the serving totals; the full `scripts/smoke.ts` and serving paths
 were not rerun because the release authorization excluded live visits. The
 immutable `0.4.2` listing and its discovery visit remain historical evidence.
-Releases `0.4.4` through `0.4.6` followed on the same lease. They added runtime
-image hardening, a healthcheck fix, complete API contracts and read-only smoke
-checks; see the [0.4.6 release record](docs/RELEASE-0.4.6.md).
+Releases `0.4.4` through `0.4.7` followed on the same lease. They added runtime
+image hardening, a healthcheck fix, complete API contracts, read-only smoke checks
+and the SDK 0.23 upgrade; see the [0.4.7 release record](docs/RELEASE-0.4.7.md).
 
 Counter backups remain deferred. The user prefers discovery work first and relies
 on the provider's retained-data restore capability for now. This decision does not

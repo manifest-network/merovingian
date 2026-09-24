@@ -1,7 +1,7 @@
 # Release 0.4.4 — live
 
 This dated record describes the `0.4.4` publication. Later releases are
-[0.4.5](RELEASE-0.4.5.md) and [0.4.6](RELEASE-0.4.6.md), which is current. The
+[0.4.5](RELEASE-0.4.5.md), [0.4.6](RELEASE-0.4.6.md) and [0.4.7](RELEASE-0.4.7.md), which is current. The
 observations and digests below are historical.
 
 Release `0.4.4` is live on Manifest mainnet and published as the latest version
