@@ -154,7 +154,7 @@ The studio wants a separate revenue stream in addition to voluntary hosting supp
 
 MCP provides a tool interface, not a wallet or spending authority. A paying visitor needs a wallet/signing adapter and gas/PWR, supplied by its host. The proof of concept includes a separate visitor wallet funded from the faucet allocation and an end-to-end contribution. Mainnet must document supported wallet adapters and permitted-spend behavior; a human Stripe checkout is not assumed to be unattended agent funding.
 
-Mainnet readiness also includes adequate funding/runway alerts, verified recipient and network configuration, a credential-management process, a tested update/rollback path, and review of SDK dependencies used for signing real funds.
+Mainnet readiness also includes adequate funding/runway alerts, verified recipient and network configuration, a credential-management process, a tested update and roll-forward recovery path, and review of SDK dependencies used for signing real funds.
 
 ## Research references
 

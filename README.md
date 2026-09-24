@@ -14,6 +14,12 @@ See the [release notes](docs/RELEASE-0.4.6.md) and
 the remaining provider/AppArmor acceptance work. The official MCP Registry lists
 `0.4.6` as active and latest, matching the deployed release.
 
+Release **0.4.7 is prepared for review**. It moves the runtime to Manifest SDK
+`0.23.0` and manifestjs `4.0.0` without changing application behavior, and is the
+first image built and published by the Release image workflow. See the
+[candidate release notes](docs/RELEASE-0.4.7.md). The live release and published
+registry record remain `0.4.6` until the production update is authorized and verified.
+
 **MCP compatibility:** `0.4.3` changed the runtime/server-card name from
 `network.manifest.merovingian/merovingian` to
 `io.github.manifest-network/merovingian`, with no compatibility alias. This may

@@ -1,5 +1,10 @@
 # MCP Registry publication and discovery
 
+The workspace's `server.json` is prepared for **0.4.7**, pending publication
+after an authorized deployment and successful live acceptance. It is the first
+release to be published through the [GitHub Actions workflow](#github-actions-publication).
+The existing `0.4.6` records below retain their historical metadata and publication evidence.
+
 Version `0.4.6` is deployed on mainnet and published as the latest version in the
 official MCP Registry. The generated `server.json` uses the registry identity
 `io.github.manifest-network/merovingian` and Streamable HTTP at
@@ -354,8 +359,8 @@ Specific cases:
 - **Environment check fails:** configure the environment as described above. Do
   not remove the check.
 - **`registry-not-latest`:** a higher version is recorded, possibly as deleted.
-- **Deployment recheck fails** (for example, after a rollback during the approval
-  wait): reconcile the deployment before dispatching again.
+- **Deployment recheck fails** (for example, after a recovery release during the
+  approval wait): reconcile the deployment before dispatching again.
 - **Login fails:** nothing was published. An `invalid audience` error means the
   pinned publisher no longer matches the registry. Upgrading it is a reviewed
   change to the pinned archive and binary digests.

@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-09-24T12:23:55Z",
+  "version": "0.4.7",
+  "scope": "Release preparation only. The release candidate is built, checked, published and attested by the Release image workflow after this release commit merges; no image publication, provider update, registry publication, live requests or live servings happened during preparation.",
+  "sourceBaseCommit": "d7f32842d89cb3d9c210bf8b54b4e1bd50a70a2f",
+  "metadata": {
+    "registryName": "io.github.manifest-network/merovingian",
+    "serverJsonSha256": "ae262d0cf32da7df7e775a417f59e1fff9bc1cf19cd9a7de7eaed220ab5f0a6a",
+    "localConsistencyPassed": true,
+    "officialRegistryValidationPassed": true,
+    "publisherVersion": "1.8.1",
+    "historicalSnapshotsUnchanged": true
+  },
+  "applicationChanges": {
+    "sourceChangedSince046": false,
+    "compiledOutputIdenticalTo046": true,
+    "compiledFiles": 28,
+    "compiler": {
+      "previous": "typescript@5.9.3",
+      "current": "typescript@6.0.3"
+    },
+    "runtimeDependencies": {
+      "@manifest-network/manifest-sdk": {
+        "previous": "0.22.0",
+        "current": "0.23.0"
+      },
+      "@manifest-network/manifestjs": {
+        "previous": "3.0.0",
+        "current": "4.0.0"
+      },
+      "overridesRemoved": [
+        "axios",
+        "protobufjs"
+      ],
+      "imageResolved": {
+        "axios": [
+          "1.20.0"
+        ],
+        "protobufjs": [
+          "7.6.6"
+        ],
+        "elliptic": [
+          "6.6.1"
+        ]
+      }
+    }
+  },
+  "repositoryChecks": {
+    "command": "npm run check",
+    "metadataPassed": true,
+    "typecheckPassed": true,
+    "testsPassed": 360,
+    "testsFailed": 0,
+    "buildPassed": true,
+    "dependencyGraphChanged": true
+  },
+  "candidate": {
+    "status": "not-built",
+    "producedBy": ".github/workflows/release-image.yml",
+    "note": "Builds are not reproducible. The Build job of the publish-mode dispatch records the candidate's image ID, configuration digest and archive SHA-256; the published digest is recorded after publication."
+  },
+  "localTrialBuild": {
+    "status": "discarded",
+    "checkedAt": "2026-09-23T19:02:19.520Z",
+    "purpose": "Pre-merge confidence that the same image inputs pass the runtime checks and advisory policy; not a release candidate.",
+    "runtimeChecksPassed": true,
+    "completedChecks": [
+      "image-metadata",
+      "image-inventory",
+      "writable-root-permissions",
+      "healthcheck-behavior",
+      "application-pass-1",
+      "application-pass-2",
+      "application-custom-port"
+    ],
+    "sourceBindingFiles": 30,
+    "sourceBindingMatches": true,
+    "advisoryPolicyPassed": true,
+    "blockedCount": 0,
+    "exceptionCount": 0,
+    "reported": [
+      {
+        "advisory": "CVE-2025-14505",
+        "package": "elliptic",
+        "version": "6.6.1",
+        "target": "Node.js",
+        "path": "app/node_modules/elliptic/package.json",
+        "severity": "LOW",
+        "fixedVersion": ""
+      }
+    ],
+    "scannerVersion": "0.74.0",
+    "appArmor": {
+      "status": "unavailable",
+      "reason": "Named profile enforcement/denial attribution requires a separately reviewed profile and isolated capable runner. This check does not load host policy."
+    }
+  },
+  "proposedUpdate": {
+    "leaseUuid": "01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd",
+    "origin": "https://merovingian.manifest.network",
+    "beforeImage": "ghcr.io/manifest-network/merovingian@sha256:5de7cb4be48c89b059e515d414d0a247721e5a72e017a0992b4138ac2c08edeb",
+    "beforeManifestHash": "65e5310485168fc90150a36a6ff6a6621c7a092db262261d1a24d7557c9756d2",
+    "recovery": "roll-forward",
+    "candidateImage": "The digest published by the Release image workflow; prepare shows the exact manifest and its hash for review."
+  },
+  "liveBaseline": {
+    "status": "deferred",
+    "reason": "The read-only baseline and counter snapshot are taken immediately before the authorized update."
+  }
+}
