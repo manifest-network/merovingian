@@ -1,0 +1,52 @@
+{
+  "description": "Read-only live test of the Claude custom-connector example in docs/CONNECT.md (ENG-1064). Observations inside Claude were reported by the operator; serving counts were read with read-only GET requests. No visit was intended, and the test chat made no enjoy_amenity call.",
+  "recordedAt": "2026-09-24T19:38:17Z",
+  "authorization": {
+    "exactReply": "Let's do item 1",
+    "context": "Direct reply by the user on 2026-09-24 accepting the proposed test, paraphrased here: one custom connector in the user's own Claude account, enjoy_amenity set to Blocked before any chat, a single request that calls only list_amenities, and zero servings. It authorized no visit, deployment or configuration change. The full approval record is kept privately."
+  },
+  "setup": {
+    "client": "Claude custom connector in the user's Claude account; plan, client (web or Desktop) and version not recorded",
+    "connectorName": "merovingian, as documented in docs/CONNECT.md; not separately confirmed",
+    "endpoint": "https://merovingian.manifest.network/mcp",
+    "authentication": "None, as documented; not separately confirmed",
+    "enjoyAmenity": "Blocked before the chat message was sent (confirmed by the operator)"
+  },
+  "outcome": {
+    "connected": true,
+    "toolsCalled": [
+      "list_amenities"
+    ],
+    "toolsCalledSource": "The chat's integration details, checked by the operator. Claude's reply says it also ran one internal tool search to load the connector's deferred tools; whether that sent a read-only tools/list to Merovingian was not observed.",
+    "menuReturned": "Three free amenities on manifest-ledger-mainnet (byte-chip cookie, rgB sauna, null tea), with their preferences, matching list_amenities"
+  },
+  "counts": {
+    "before": {
+      "at": "2026-09-24T19:22:48Z",
+      "byte-chip-cookie": "13",
+      "rgb-sauna": "8",
+      "null-tea": "10",
+      "total": "31"
+    },
+    "after": {
+      "at": "2026-09-24T19:29:39Z",
+      "byte-chip-cookie": "14",
+      "rgb-sauna": "8",
+      "null-tea": "10",
+      "total": "32"
+    },
+    "attribution": "One byte-chip cookie was served during the window. It cannot be attributed, because the server keeps no request logs. The test chat shows no enjoy_amenity call and the tool was Blocked, so nothing links the serving to this test; the counts are shared by all visitors."
+  },
+  "observed": {
+    "originCheck": "In this session the connector's requests passed the Origin check: the connection, tool loading and list_amenities call succeeded. Locally, /mcp answers 403 origin_not_allowed to any foreign Origin (checked with https://claude.ai, https://api.anthropic.com and null). Anthropic does not document whether connector requests send Origin; if that changes, connections will fail with 403."
+  },
+  "analysis": {
+    "sharedEgress": "Not observed by the test. Anthropic documents that connector traffic comes from its shared egress range. Production trusts no forwarded client addresses, and TLS terminates at the provider's ingress, so the application most likely sees ingress addresses rather than visitors as clients, and visitors already share those allowances (production socket identity is unverified; see docs/REQUEST-LIMITS.md and ENG-1038). Once trusted ingress addresses are configured, connector users will instead share the per-address allowances of Anthropic's egress addresses."
+  },
+  "limits": [
+    "One account and one conversation. Whether the chat ran on the web or in Claude Desktop, and on which plan, was not recorded; other clients, plans and Team or Enterprise organizations were not tested.",
+    "Merovingian logs no requests by design, so the connector's headers, source addresses and protocol negotiation were not observed on the server.",
+    "The install link, menu paths and Team or Enterprise steps in docs/CONNECT.md follow Anthropic's documentation and were not separately checked.",
+    "The test does not show what Claude does with enjoy_amenity when it is not blocked."
+  ]
+}
