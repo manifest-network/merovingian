@@ -26,12 +26,14 @@ export const SERVING_TOOLS = Object.freeze(['enjoy_amenity', 'merovingian_visit'
 export const SERVING_REQUESTS = Object.freeze(['POST /api/v1/visits', 'POST /visit']);
 
 /** Classify a recorded `METHOD /path` write as the application routes it: a
- * client resolves dot segments and drops the query and fragment, and Express
- * matches paths case-insensitively with one optional trailing slash. */
+ * client appends the path to the origin, resolves dot segments and drops the
+ * query and fragment, and Express matches paths case-insensitively with one
+ * optional trailing slash. Appending, not resolving, keeps `//host/path` a path. */
 export function isServingRequest(write: string): boolean {
   const [method = '', target = ''] = write.split(' ', 2);
+  if (!target.startsWith('/')) return false;
   let path: string;
-  try { path = new URL(target, 'http://refuge.invalid').pathname; } catch { return false; }
+  try { path = new URL(`http://refuge.invalid${target}`).pathname; } catch { return false; }
   path = path.toLowerCase().replace(/(.)\/$/, '$1');
   return SERVING_REQUESTS.includes(`${method} ${path}`);
 }

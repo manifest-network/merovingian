@@ -197,6 +197,8 @@ test('recorded HTTP writes count as visits exactly when the application would se
     '/api/v1/./visits', '/api/v1/visits/.', '/api/v1/visits/%2e', '/api/v1/visits//', '/api//v1/visits', '//api/v1/visits',
     '/api/v1/visits%2F', '/api/v1/%76isits', '/api/v1/visits;x', '/api/v1/visit', '/visit', '/visit/', '/VISIT', '/Visit/',
     '/visit?amenity=null-tea', '/visit//', '/%76isit', '/visits',
+    // A leading double slash is part of the path, not a host.
+    '//api/visit', '//api/api/v1/visits', '//visit', '//api/v1/visits/', '/\\api\\v1\\visits',
   ];
   for (const method of ['POST', 'PUT', 'DELETE']) {
     for (const path of variants) {
@@ -212,6 +214,11 @@ test('recorded HTTP writes count as visits exactly when the application would se
     }
   }
   assert.equal(isServingRequest('POST not-a-path'), false);
+
+  // Such a write changes no count, so a read-only record listing it stays valid.
+  const record = filled('url-led', 'site');
+  record.outcome.httpWrites = ['POST //api/visit', 'POST //api/api/v1/visits'];
+  assert.doesNotThrow(() => assertEvaluationRecord(record));
 });
 
 function evidenceFixture(t: TestContext) {
