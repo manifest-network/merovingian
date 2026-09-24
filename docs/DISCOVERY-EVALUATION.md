@@ -60,8 +60,9 @@ visitors either.
   OpenAI connector directories; both require submission and review.
 - **Web search.** Results depend on the engine, date and ranking and cannot be
   repeated exactly. Record the engine, exact query, date and the rank of each
-  result the agent opened. Search Console setup and indexing are tracked
-  separately in ENG-1020.
+  result the agent opened. The sitemap was submitted to Google Search Console
+  on 2026-09-24, when `/` and `/about` were not yet indexed; indexing is
+  tracked in ENG-1020.
 - **The site itself.** For `url-led/site`, the homepage, `/llms.txt`,
   `/visit.md`, the `Link` response header, `/.well-known/api-catalog`,
   `/.well-known/ai-catalog.json` and `/mcp/server-card` each lead to the
