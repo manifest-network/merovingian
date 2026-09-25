@@ -230,6 +230,9 @@ registry login was removed after verification. Provider CPU and alert behavior
 for ENG-1044, ingress/confinement evidence for ENG-1038 and AppArmor enforcement
 for ENG-1041 remain outside this acceptance. See the
 [release record](RELEASE-0.4.5.md) and [sanitized evidence](evidence/release-0.4.5.json).
+A later read-only check, on 2026-09-25, confirmed the provider CPU and alert
+behavior for ENG-1044: 0 firing evaluations in a 91-hour window starting 17 minutes
+after the release went live ([evidence](evidence/provider-cpu-2026-09-25.json)).
 
 ## Release 0.4.4 publication and verification
 

@@ -326,7 +326,7 @@ export async function runRuntimeImageCheck(image, output, options = {}) {
   const report = {
     checkedAt: new Date().toISOString(), passed: false, completedChecks: [], executions: [],
     scope: 'Local isolated fixture; at most two intentional local MCP servings; no live visits or production configuration.',
-    appArmor: {status:'unavailable', reason:'Named profile enforcement/denial attribution requires a separately reviewed profile and isolated capable runner. This check does not load host policy.'},
+    appArmor: {status:'unavailable', reason:'This local check does not load or verify AppArmor policy. Provider enforcement of docker-default on the running lease is tracked in ENG-1038.'},
     cleanup: {containersAttempted:0, volumesAttempted:0, failures:[]},
   };
   const execute = options.execute ?? (args => execFileSync('docker', ['--host', 'unix:///var/run/docker.sock', ...args], {

@@ -104,7 +104,7 @@ jobs:
       - name: Record confinement verification gap
         if: always()
         run: |
-          printf '%s\n' 'AppArmor: unavailable. Named-profile enforcement and attributed denial tests require a separately reviewed profile and isolated capable runner (ENG-1038/ENG-1041).' >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' 'AppArmor: unavailable. This job does not load or verify AppArmor policy; provider enforcement of docker-default is tracked in ENG-1038.' >> "$GITHUB_STEP_SUMMARY"
       - name: Record image job outcome
         # The status step uses runner Python, so failed checkout/setup/install/build
         # still leave evidence without requiring repository code or dependencies.

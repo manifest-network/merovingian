@@ -152,3 +152,8 @@ the authorized update and taken at **2026-09-24T13:03:58.204Z** (see
 
 Provider ingress/confinement evidence and named AppArmor verification remain
 separate work in ENG-1038 and ENG-1041. This release does not alter provider policy.
+
+**Later follow-up, 2026-09-25:** the planned Merovingian-specific AppArmor
+profile and its ENG-1041 runner tests were dropped. Provider enforcement of
+`docker-default` is tracked in ENG-1038 (see
+[image verification](IMAGE-SECURITY.md#remaining-confinement-acceptance)).

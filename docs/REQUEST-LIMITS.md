@@ -97,6 +97,15 @@ Local tests establish the behavior of a specifically configured proxy, not the
 provider's topology. Changing production configuration still requires explicit
 authorization under [AGENTS.md](../AGENTS.md).
 
+Hosted MCP clients connect from their operators' egress addresses, not from each
+user's address. For example, Anthropic documents a shared egress range for Claude
+custom connectors. Once trusted ingress is configured, all users of one hosted
+client share the per-address allowances of those egress addresses: 120 requests
+per minute and 4 active requests each. Reassess these limits in the release that
+configures trusted ingress, for example with a higher limit or a separate budget
+for documented connector ranges. See
+[connecting agents](CONNECT.md#claude-web-and-desktop-apps) and ENG-1038.
+
 ## Local verification
 
 Run `node --import tsx --test tests/app.test.ts tests/config.test.ts` with loopback
