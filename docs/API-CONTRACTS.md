@@ -39,7 +39,7 @@ response and examples.
 | `GET /api/v1/support` | 200, `SupportInfo` | `available` includes instructions and `checkedAt`; `hostingCredit` is null when the verified chain reports no credit account. Missing REST configuration or failed queries yield `unavailable`. `unavailable` and `unconfigured` require all three readings to be null. |
 | `GET /api/v1/contributions` | 200, `ContributionHistory` | `available` includes entries, totals, a check time and scan counts. `complete: false` means totals cover only returned entries. `unavailable`/`unconfigured` have empty entries, null totals/time/indexed count, zero scanned count and `complete: false`. |
 | `POST /api/v1/support/verify` | 200, `VerificationResult` | `confirmed` includes a receipt. `pending`, `failed`, `not_a_contribution`, `unavailable` and `unconfigured` include a message and omit the receipt. |
-| `GET /healthz` | 200, `Health` | `status: ok`, network, chain, version, retirement flag and `counter` (`available` or `unavailable`). This route stays HTTP 200 during chain or storage outages and retirement; `counter: unavailable` means visits return 503 until serving storage recovers. |
+| `GET /healthz` | 200, `Health` | `status: ok`, network, chain, version, retirement flag and `counter` (`available` or `unavailable`). This route stays HTTP 200 during chain or storage outages and retirement. `counter: unavailable` means HTTP visits return 503 and the MCP `enjoy_amenity` tool returns a tool error until serving storage recovers. |
 
 All listed fields are required within their variant. Omission and null are
 distinct: null readings mean unknown data, not zero. Monetary amounts and chain

@@ -97,8 +97,9 @@ function bounded(handler: RequestHandler): RequestHandler {
 
 /**
  * Honor parser client errors only at this boundary; never expose parser messages or bodies.
- * A body still arriving after the deadline gets 408 and a closed connection, which releases
- * its request slot: a trickled upload must not hold a shared concurrency slot for long.
+ * A body still arriving after the deadline gets 408 (413 if its declared length is already
+ * over the limit) and a closed connection, which releases its request slot: a trickled
+ * upload must not hold a shared concurrency slot for long.
  */
 function parseBody(parser: RequestHandler, timeoutMs: number): RequestHandler {
   return (req, res, next) => {
@@ -106,7 +107,12 @@ function parseBody(parser: RequestHandler, timeoutMs: number): RequestHandler {
     const timer = setTimeout(() => {
       if (settled || res.headersSent) return;
       settled = true;
-      res.set('Connection', 'close').status(408).json({ error: API_MESSAGES.bodyTimeout });
+      // body-parser rejects a declared length over the limit at once, but drains
+      // the body before answering; a compressed body's length says nothing.
+      const encoding = (req.headers['content-encoding'] ?? 'identity').toLowerCase();
+      const oversize = encoding === 'identity' && Number(req.headers['content-length']) > MAX_INPUT_BYTES;
+      res.set('Connection', 'close').status(oversize ? 413 : 408)
+        .json({ error: oversize ? API_MESSAGES.inputLimit : API_MESSAGES.bodyTimeout });
     }, timeoutMs);
     timer.unref();
     parser(req, res, error => {

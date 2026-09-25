@@ -64,7 +64,8 @@ in-memory budgets; multiple replicas do not coordinate them.
 
 A JSON or form body must finish arriving within 5 seconds of its parser
 starting. A slower body gets HTTP 408 with `Connection: close`, and its slot is
-released when that response ends. Without this deadline, four trickled uploads
+released when that response ends. A slow body whose declared `Content-Length` is
+already over the input limit gets 413 instead, also with `Connection: close`. Without this deadline, four trickled uploads
 could hold every slot of a shared per-client allowance for the length of Node's
 request timeout. Node checks its 15-second request timeout and 10-second header
 timeout every second rather than every 30 seconds, so neither can be outlived by

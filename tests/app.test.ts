@@ -14,7 +14,7 @@ import { createApp, createHttpServer, REQUEST_LIMITS, type SupportPort } from '.
 import type { Config } from '../src/config.js';
 import type { ContributionHistory, SupportInfo } from '../src/support.js';
 import { VisitCounter } from '../src/counts.js';
-import { API_MESSAGES } from '../src/protocol.js';
+import { API_MESSAGES, MAX_INPUT_BYTES } from '../src/protocol.js';
 import { APP_VERSION } from '../src/identity.js';
 
 const config: Config = {
@@ -589,6 +589,25 @@ test('a body still arriving at the parse deadline gets 408 and releases its conc
   assert.equal((await request('/api/v1/amenities')).status, 200, 'Slots are released after the 408');
   const complete = await request('/api/v1/visits', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amenity: 'null-tea' }) });
   assert.equal(complete.status, 200, 'A complete body is unaffected');
+});
+
+test('a slow body already declared over the input limit gets 413 at the deadline, not a retry hint', async t => {
+  const { base } = await fixture(t, {}, unavailableSupport(), { bodyTimeoutMs: 300 });
+  const result = await new Promise<{ status: number; connection?: string; body: string }>((resolve, reject) => {
+    const req = httpRequest(new URL('/api/v1/visits', base), { method: 'POST', headers: {
+      'Content-Type': 'application/json', 'Content-Length': String(MAX_INPUT_BYTES + 1),
+    } }, res => {
+      let body = '';
+      res.setEncoding('utf8').on('data', chunk => { body += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode!, connection: res.headers.connection, body }));
+    });
+    req.on('error', reject);
+    t.after(() => req.destroy());
+    req.write('{');
+  });
+  assert.equal(result.status, 413);
+  assert.equal(result.connection, 'close');
+  assert.deepEqual(JSON.parse(result.body), { error: API_MESSAGES.inputLimit });
 });
 
 test('the HTTP server checks request and header timeouts every second', () => {

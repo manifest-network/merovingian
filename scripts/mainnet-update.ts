@@ -17,9 +17,12 @@ import { normalizeTrustedProxyCidrs, trustedProxyCidrsSchema, withTrustedProxyCi
 
 export const MAINNET_UPDATE_LEASE = '01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd';
 /**
- * Fred v0.13 closes an ACTIVE lease on chain once its provision fail count reaches
- * this limit, and never resets the count. Container exits (including after a host
- * reboot) and failed updates, even rolled back ones, each add one (ENG-799).
+ * Fred v0.13 closes an ACTIVE lease on chain when a failure leaves its provision
+ * failed with at least this many failures. Container exits (including after a
+ * host reboot), failed (re-)provisions and failed updates or restarts, even rolled
+ * back ones, each add one, and nothing resets the count while the lease lives
+ * (ENG-799). At the limit, a rolled-back failure leaves the lease running, but its
+ * next failure of any kind closes it.
  */
 export const PROVIDER_STRIKE_LIMIT = 3;
 const pinnedImage = z.string().regex(/^ghcr\.io\/(?:manifest-network|fmorency)\/merovingian@sha256:[a-f0-9]{64}$/);
@@ -321,7 +324,8 @@ async function main() {
         await durableJson(statePath, state, true);
       }
       const result = command === 'prepare' ? state : await advanceMainnetUpdate(state, { ...provider, save: value => durableJson(statePath, value) }, command === 'run');
-      const failCount = result.observed?.failCount ?? preparedFrom?.failCount ?? null;
+      // A repeated prepare only reprints its journal, so print a count only when this run observed it.
+      const failCount = command === 'prepare' ? preparedFrom?.failCount ?? null : result.observed?.failCount ?? null;
       console.log(JSON.stringify({ phase: result.phase, leaseUuid: result.leaseUuid, image: result.image, manifestHash: result.manifestHash, observed: result.observed ?? null,
         providerFailCount: failCount, providerStrikesRemaining: failCount === null ? null : Math.max(0, PROVIDER_STRIKE_LIMIT - failCount),
         newLeaseCreated: false, chainTransactionSent: false, cloudflareProxyAllowed: false, savedTo: statePath }, null, 2));

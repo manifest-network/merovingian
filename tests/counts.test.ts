@@ -82,10 +82,10 @@ test('storage faults leave the process serving, log once and recover without a r
   const events: CounterEvent[] = [];
   const counter = new VisitCounter(environment, path, { retryMs: 60_000, now: () => now, log: event => events.push(event) });
   assertUnavailable(counter, 'storage');
-  now = 59_999;
-  assertUnavailable(counter, 'storage');
   assert.deepEqual(events, [{ event: 'counter_unavailable', reason: 'storage' }], 'Repeated failures log once');
   rmSync(path);
+  now = 59_999;
+  assertUnavailable(counter, 'storage'); // No reopen before the retry interval, even once storage is repaired.
   now = 60_000;
   counter.record('null-tea');
   assert.equal(counter.fault, null);
@@ -100,16 +100,47 @@ test('unwritable or read-only storage degrades instead of exiting', { skip: proc
   const path = join(directory, 'visits.sqlite');
   const seeded = new VisitCounter(environment, path);
   seeded.close();
-  // Startup always writes, so a read-only database cannot open.
+  // A read-only file fails the first write statement.
   chmodSync(path, 0o444);
   const readOnly = new VisitCounter(environment, path, quiet);
   assertUnavailable(readOnly, 'storage');
   readOnly.close();
+  // A writable file in a directory that cannot hold the journal, as on a reused
+  // volume, changes no page while opening and fails only the write probe.
+  chmodSync(path, 0o600);
+  chmodSync(directory, 0o500);
+  const events: CounterEvent[] = [];
+  const existing = new VisitCounter(environment, path, { log: event => events.push(event) });
+  assertUnavailable(existing, 'storage');
+  assert.deepEqual(events, [{ event: 'counter_unavailable', reason: 'storage' }]);
+  existing.close();
+  chmodSync(directory, 0o700);
   const blocked = join(directory, 'blocked');
   mkdirSync(blocked, { mode: 0o500 });
   const unwritable = new VisitCounter(environment, join(blocked, 'visits.sqlite'), quiet);
   assertUnavailable(unwritable, 'storage');
   unwritable.close();
+});
+
+test('storage that fails after opening becomes a logged fault and reopens after the retry interval', { skip: process.getuid?.() === 0 && 'root ignores file permissions' }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'merovingian-counts-'));
+  t.after(async () => { chmodSync(directory, 0o700); await rm(directory, { recursive: true, force: true }); });
+  const path = join(directory, 'visits.sqlite');
+  let now = 0;
+  const events: CounterEvent[] = [];
+  const counter = new VisitCounter(environment, path, { retryMs: 60_000, now: () => now, log: event => events.push(event) });
+  counter.record('rgb-sauna');
+  chmodSync(directory, 0o500);
+  assert.equal(counter.snapshot().status, 'available', 'Reads alone still work');
+  assert.throws(() => counter.record('rgb-sauna'), VisitCountUnavailable);
+  assertUnavailable(counter, 'storage');
+  assert.deepEqual(events, [{ event: 'counter_unavailable', reason: 'storage' }]);
+  chmodSync(directory, 0o700);
+  now = 60_000;
+  counter.record('rgb-sauna');
+  assert.equal(counter.snapshot().counts?.['rgb-sauna'], '2');
+  assert.deepEqual(events.at(-1), { event: 'counter_recovered' });
+  counter.close();
 });
 
 test('counter unavailability is explicit and is never presented as zero servings', () => {

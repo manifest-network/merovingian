@@ -199,20 +199,23 @@ The SDK's `restoreApp` has different semantics: it restores a **closed lease's r
 
 #### Provider strikes
 
-Fred v0.13 closes an ACTIVE lease on chain once its provision fail count reaches **3**, with no human involved, and the count never resets for the life of the lease (ENG-799). Each of these adds one:
+Fred v0.13 closes an ACTIVE lease on chain, with no human involved, when a failure leaves its provision failed with a fail count of **3** or more (ENG-799). Each of these adds one:
 
 - the container exiting for any reason, including a backend host reboot, since tenant containers have no restart policy;
+- a provision or re-provision that fails, including a container that exits or reports unhealthy while starting;
 - an update that fails, even when Fred rolls back to the previous release;
 - a restart that fails.
 
-Only a new lease starts a fresh count. `status` and `prepare` print `providerFailCount` and `providerStrikesRemaining` from the provider's authenticated status. The update tool refuses to prepare or send an update while one strike remains (`update_blocked_last_provider_strike`), because a failed update could then close the lease. Read `status` before planning each update.
+When Fred recovers a failed update or restart, the lease keeps running even at 3, but its next failure of any kind closes it without a retry. Nothing resets the count while the lease lives; only a new lease starts a fresh one. A provider backend restart rebuilds the count from container labels and can leave out rolled-back failures, so treat the printed count as a lower bound.
 
-The application source no longer exits when it cannot open its serving counter (ENG-1080). Before that change, which the live `0.4.7` release predates, a corrupt, read-only or unwritable counter volume failed every re-provision, because each one reuses the same volume, and would use all three strikes within minutes. Instead the application:
+`status`, `run` and a first `prepare` read `providerFailCount` and `providerStrikesRemaining` from the provider's authenticated status. A repeated `prepare` reads no provider state and prints `null`. The update tool refuses to prepare or send an update while one strike remains (`update_blocked_last_provider_strike`), and `run` rereads the count before its POST, because a failed update could then close the lease. Before planning each update, run `status` with the active release's image, as in the [existing-lease update workflow](#existing-lease-update-workflow); `status` needs an existing journal for its `--image`.
 
-- keeps serving pages, discovery and the MCP menu, and returns 503 for visits;
+The application source no longer exits when it cannot open its serving counter (ENG-1080). Before that change, which the live `0.4.7` release predates, a corrupt, read-only or unwritable counter volume failed every re-provision, because each one reuses the same volume, and would use all three strikes within minutes. Instead, whether the counter fails to open or its storage fails later, the application:
+
+- keeps serving pages, discovery and the MCP menu; HTTP and form visits and `/api/v1/stats` return 503, and the MCP `enjoy_amenity` tool returns a tool error;
 - reports `counter: unavailable` on `/healthz`, which stays HTTP 200 because Fred fails a provision whose container reports unhealthy while starting;
-- logs one `counter_unavailable` event with a `storage` or `identity` reason;
-- retries opening the counter once a minute.
+- logs one `counter_unavailable` event with a `storage` or `identity` reason, and one `counter_recovered` event when the counter reopens;
+- retries opening the counter at most once a minute, when a request or the container healthcheck next reads it (about 60 to 90 seconds with the 30-second healthcheck).
 
 #### Custom domain on any lease change
 

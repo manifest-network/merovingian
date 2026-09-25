@@ -23,6 +23,15 @@ export interface VisitCounterOptions { retryMs?: number; now?: () => number; log
 
 class CounterIdentityMismatch extends Error {}
 
+// SQLite primary result codes for unusable storage: PERM, READONLY, IOERR,
+// CORRUPT, FULL, CANTOPEN and NOTADB. BUSY and LOCKED mean another release holds
+// the lock, and are not storage faults.
+const STORAGE_ERRORS = new Set([3, 8, 10, 11, 13, 14, 26]);
+function isStorageError(error: unknown) {
+  const { code, errcode } = error as { code?: unknown; errcode?: unknown };
+  return code === 'ERR_SQLITE_ERROR' && typeof errcode === 'number' && STORAGE_ERRORS.has(errcode & 0xff);
+}
+
 interface CounterStore { db: DatabaseSync; increment: StatementSync; totals: StatementSync; since: string }
 
 function openStore(environment: VisitEnvironment, path: string): CounterStore {
@@ -52,6 +61,10 @@ function openStore(environment: VisitEnvironment, path: string): CounterStore {
     for (const amenity of getAmenities()) {
       db.prepare('INSERT OR IGNORE INTO amenity_counts VALUES (?,0)').run(amenity.id);
     }
+    // An existing database changes no page above, so SQLite never creates its
+    // journal. Change one and roll it back to prove the directory is writable.
+    const { user_version: version } = db.prepare('PRAGMA user_version').get() as { user_version: number };
+    db.exec(`SAVEPOINT probe; PRAGMA user_version=${version + 1}; ROLLBACK TO probe; RELEASE probe`);
     db.exec('COMMIT');
     const increment = db.prepare('UPDATE amenity_counts SET served=served+1 WHERE amenity=? AND served<9223372036854775807');
     const totals = db.prepare('SELECT amenity, served FROM amenity_counts');
@@ -68,11 +81,12 @@ function openStore(environment: VisitEnvironment, path: string): CounterStore {
  * Only three aggregate totals and their start date; never visitor data.
  *
  * Opening never throws. Fred v0.13 closes a lease on chain after its third
- * container exit, and every re-provision reuses the same volume, so exiting on
- * a storage fault would close the lease within minutes. An unopened counter
- * instead serves 503 on visits and reports itself unavailable; persistent
- * storage is retried at most once per retry interval. Every attempt repeats the
- * network-identity check, so another network's data is never counted into.
+ * failure, and every re-provision reuses the same volume, so exiting on a
+ * storage fault would close the lease within minutes. A counter that cannot
+ * open, or whose storage fails later, instead serves 503 on visits and reports
+ * itself unavailable; persistent storage is retried at most once per retry
+ * interval. Every attempt repeats the network-identity check, so another
+ * network's data is never counted into.
  */
 export class VisitCounter {
   private readonly environment: VisitEnvironment;
@@ -97,6 +111,20 @@ export class VisitCounter {
     this.open();
   }
 
+  private fail(fault: CounterFault) {
+    if (!this.fault) this.log({ event: 'counter_unavailable', reason: fault });
+    this.fault = fault;
+    this.retryAt = this.now() + this.retryMs;
+  }
+
+  /** Storage that fails after opening is reopened like storage that failed to open. */
+  private storageFailed(error: unknown) {
+    if (this.storage === 'memory' || !this.store || !isStorageError(error)) return;
+    try { this.store.db.close(); } catch { /* The handle is already unusable. */ }
+    this.store = null;
+    this.fail('storage');
+  }
+
   private open(): CounterStore | null {
     if (this.store || this.closed) return this.store;
     // Reopening memory storage would silently reset its counts.
@@ -106,10 +134,7 @@ export class VisitCounter {
       if (this.fault) this.log({ event: 'counter_recovered' });
       this.fault = null;
     } catch (error) {
-      const fault: CounterFault = error instanceof CounterIdentityMismatch ? 'identity' : 'storage';
-      if (!this.fault) this.log({ event: 'counter_unavailable', reason: fault });
-      this.fault = fault;
-      this.retryAt = this.now() + this.retryMs;
+      this.fail(error instanceof CounterIdentityMismatch ? 'identity' : 'storage');
     }
     return this.store;
   }
@@ -119,7 +144,10 @@ export class VisitCounter {
     if (!store) throw new VisitCountUnavailable();
     try {
       if (store.increment.run(amenity).changes !== 1) throw new Error('Counter not incremented');
-    } catch { throw new VisitCountUnavailable(); }
+    } catch (error) {
+      this.storageFailed(error);
+      throw new VisitCountUnavailable();
+    }
   }
 
   snapshot(): VisitCounts {
@@ -137,7 +165,8 @@ export class VisitCounter {
         total += value;
       }
       return { ...this.environment, status: 'available', since: store.since, counts, total: total.toString(), storage: this.storage };
-    } catch {
+    } catch (error) {
+      this.storageFailed(error);
       return unavailable;
     }
   }
