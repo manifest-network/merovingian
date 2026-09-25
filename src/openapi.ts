@@ -2,7 +2,7 @@ import type { Config } from './config.js';
 import { getAmenities } from './amenities.js';
 import { APP_VERSION } from './identity.js';
 import { responseExamples } from './openapi-examples.js';
-import { API_MESSAGES, FUND_CREDIT_TYPE, FUNDING_PLACEHOLDERS, HISTORY_LIMIT, MAX_INPUT_BYTES, MAX_VISIT_OUTPUT_BYTES, MAX_FORM_PARAMETERS } from './protocol.js';
+import { API_MESSAGES, BODY_TIMEOUT_MS, FUND_CREDIT_TYPE, FUNDING_PLACEHOLDERS, HISTORY_LIMIT, MAX_INPUT_BYTES, MAX_VISIT_OUTPUT_BYTES, MAX_FORM_PARAMETERS } from './protocol.js';
 
 type Schema = Record<string, unknown>;
 const ref = (name: string): Schema => ({ $ref: `#/components/schemas/${name}` });
@@ -189,8 +189,9 @@ export function httpApiDocument(config: Config, description: string) {
     }) } : {}),
     Health: object({
       status: { type: 'string', const: 'ok' }, ...environment,
-      retired: { type: 'boolean', description: 'True when this deployment has retired. Health remains HTTP 200; it does not check the chain or serving storage.' },
+      retired: { type: 'boolean', description: 'True when this deployment has retired. Health remains HTTP 200; it does not check the chain.' },
       version: nonempty,
+      counter: { type: 'string', enum: ['available', 'unavailable'], description: 'Serving storage. When unavailable, visits return 503 and stats are unavailable; health still returns HTTP 200.' },
     }),
   };
 
@@ -203,6 +204,7 @@ export function httpApiDocument(config: Config, description: string) {
     InvalidVisit: jsonResponse('Malformed request body or invalid amenity, preference, seed or extra input fields.', ref('Error'), examples.invalidVisits),
     Forbidden: jsonResponse('A supplied browser Origin does not match the configured public origin.', ref('Error'), { rejectedOrigin: { error: API_MESSAGES.originNotAllowed } }),
     ...(config.network === 'testnet' ? { Retired: jsonResponse('Retired testnet. Explicit client and wallet reconfiguration is required.', ref('Retired'), { retired: examples.retired }) } : {}),
+    BodyTimeout: jsonResponse(`The request body did not arrive within ${BODY_TIMEOUT_MS / 1000} seconds of parsing. The connection is closed; retry with the complete body.`, ref('Error'), { bodyTimeout: { error: API_MESSAGES.bodyTimeout } }),
     TooLarge: jsonResponse(`Parsed body exceeds ${MAX_INPUT_BYTES} bytes or a URL-encoded body exceeds ${MAX_FORM_PARAMETERS} parameters.`, ref('Error'), { tooLarge: { error: API_MESSAGES.inputLimit } }),
     UnsupportedEncoding: jsonResponse('Unsupported Content-Encoding or charset on a parsed request body.', ref('Error'), { encoding: { error: API_MESSAGES.unsupportedEncoding } }),
     UnsupportedMediaType: jsonResponse('Use Content-Type: application/json with a supported charset and Content-Encoding.', ref('Error'), {
@@ -223,7 +225,7 @@ export function httpApiDocument(config: Config, description: string) {
   const apiErrors = {
     '400': responseRef('BadRequest'), '403': responseRef('Forbidden'),
     ...(config.network === 'testnet' ? { '410': responseRef('Retired') } : {}),
-    '413': responseRef('TooLarge'), '415': responseRef('UnsupportedEncoding'),
+    '408': responseRef('BodyTimeout'), '413': responseRef('TooLarge'), '415': responseRef('UnsupportedEncoding'),
     '429': responseRef('RateLimited'), '500': responseRef('InternalError'), default: responseRef('OtherError'),
   };
   const operationResponses = <T extends Record<string, unknown>>(responses: T) => config.mainnetOrigin
@@ -271,7 +273,7 @@ export function httpApiDocument(config: Config, description: string) {
       } },
       '/healthz': { get: {
         operationId: 'health', summary: 'Application health (independent of chain availability)',
-        responses: { '200': jsonResponse('Application is running, including when retired. This GET bypasses API body parsing, origin checks and rate limits.', ref('Health'), examples.health) },
+        responses: { '200': jsonResponse('Application is running, including when retired or when serving storage is unavailable. This GET bypasses API body parsing, origin checks and rate limits.', ref('Health'), examples.health) },
       } },
     },
     components: { schemas, responses },

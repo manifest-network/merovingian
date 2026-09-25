@@ -99,7 +99,7 @@ export function responseExamples(config: Config, amenities = getAmenities()) {
     retired: { error: 'testnet_retired', ...environment,
       mainnetOrigin: config.mainnetOrigin || 'https://mainnet.example', message: API_MESSAGES.retired },
     health: {
-      current: { status: 'ok', ...environment, retired: Boolean(config.mainnetOrigin), version: APP_VERSION },
+      current: { status: 'ok', ...environment, retired: Boolean(config.mainnetOrigin), version: APP_VERSION, counter: 'available' },
     },
   };
 }

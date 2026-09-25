@@ -1,16 +1,21 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createServer, request as httpRequest } from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { AddressInfo } from 'node:net';
 import test, { type TestContext } from 'node:test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { createApp, REQUEST_LIMITS, type SupportPort } from '../src/app.js';
+import { createApp, createHttpServer, REQUEST_LIMITS, type SupportPort } from '../src/app.js';
 import type { Config } from '../src/config.js';
 import type { ContributionHistory, SupportInfo } from '../src/support.js';
 import { VisitCounter } from '../src/counts.js';
+import { API_MESSAGES, MAX_INPUT_BYTES } from '../src/protocol.js';
+import { APP_VERSION } from '../src/identity.js';
 
 const config: Config = {
   network: 'testnet',
@@ -40,10 +45,10 @@ function unavailableSupport(): SupportPort {
   };
 }
 
-async function fixture(t: TestContext, overrides: Partial<Config> = {}, support = unavailableSupport()) {
+async function fixture(t: TestContext, overrides: Partial<Config> = {}, support = unavailableSupport(), options: { counts?: VisitCounter; bodyTimeoutMs?: number } = {}) {
   const effectiveConfig = { ...config, ...overrides };
-  const counts = new VisitCounter(effectiveConfig, effectiveConfig.visitCountsPath);
-  const app = createApp(effectiveConfig, support, counts);
+  const counts = options.counts ?? new VisitCounter(effectiveConfig, effectiveConfig.visitCountsPath);
+  const app = createApp(effectiveConfig, support, counts, { bodyTimeoutMs: options.bodyTimeoutMs });
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const address = server.address() as AddressInfo;
@@ -550,6 +555,90 @@ test('unfinished bodies on unknown routes share concurrency slots and release th
   uploads.forEach(({ req, remainder }) => req.end(remainder));
   assert.deepEqual(await Promise.all(uploads.map(upload => upload.response)), Array(REQUEST_LIMITS.perClientConcurrent).fill(404));
   assert.equal((await request('/another-upload', { method: 'POST' })).status, 404);
+});
+
+test('a body still arriving at the parse deadline gets 408 and releases its concurrency slot', async t => {
+  const { base, request, server } = await fixture(t, {}, unavailableSupport(), { bodyTimeoutMs: 300 });
+  let arrived = 0;
+  server.on('request', () => { arrived++; });
+  const started = Date.now();
+  const uploads = Array.from({ length: REQUEST_LIMITS.perClientConcurrent }, (_, i) => {
+    const req = httpRequest(new URL(i % 2 ? '/mcp' : '/visit', base), { method: 'POST', headers: {
+      'Content-Type': i % 2 ? 'application/json' : 'application/x-www-form-urlencoded', 'Content-Length': '200',
+    } });
+    const response = new Promise<{ status: number; connection?: string; body: string }>((resolve, reject) => {
+      req.on('error', reject);
+      req.on('response', res => {
+        let body = '';
+        res.setEncoding('utf8').on('data', chunk => { body += chunk; });
+        res.on('end', () => resolve({ status: res.statusCode!, connection: res.headers.connection, body }));
+      });
+    });
+    t.after(() => req.destroy());
+    req.write('{');
+    return response;
+  });
+  await waitFor(() => arrived === REQUEST_LIMITS.perClientConcurrent);
+  assert.equal((await request('/api/v1/amenities')).status, 429, 'The trickled uploads hold every slot');
+  for (const result of await Promise.all(uploads)) {
+    assert.equal(result.status, 408);
+    assert.equal(result.connection, 'close');
+    assert.deepEqual(JSON.parse(result.body), { error: API_MESSAGES.bodyTimeout });
+  }
+  assert.ok(Date.now() - started < 2000, 'The deadline, not the 15 s request timeout, ended the uploads');
+  assert.equal((await request('/api/v1/amenities')).status, 200, 'Slots are released after the 408');
+  const complete = await request('/api/v1/visits', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amenity: 'null-tea' }) });
+  assert.equal(complete.status, 200, 'A complete body is unaffected');
+});
+
+test('a slow body already declared over the input limit gets 413 at the deadline, not a retry hint', async t => {
+  const { base } = await fixture(t, {}, unavailableSupport(), { bodyTimeoutMs: 300 });
+  const result = await new Promise<{ status: number; connection?: string; body: string }>((resolve, reject) => {
+    const req = httpRequest(new URL('/api/v1/visits', base), { method: 'POST', headers: {
+      'Content-Type': 'application/json', 'Content-Length': String(MAX_INPUT_BYTES + 1),
+    } }, res => {
+      let body = '';
+      res.setEncoding('utf8').on('data', chunk => { body += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode!, connection: res.headers.connection, body }));
+    });
+    req.on('error', reject);
+    t.after(() => req.destroy());
+    req.write('{');
+  });
+  assert.equal(result.status, 413);
+  assert.equal(result.connection, 'close');
+  assert.deepEqual(JSON.parse(result.body), { error: API_MESSAGES.inputLimit });
+});
+
+test('the HTTP server checks request and header timeouts every second', () => {
+  const server = createHttpServer(createApp(config, unavailableSupport(), new VisitCounter(config)));
+  assert.equal(server.requestTimeout, 15_000);
+  assert.equal(server.headersTimeout, 10_000);
+  assert.equal(server.keepAliveTimeout, 5_000);
+  assert.equal((server as unknown as { connectionsCheckingInterval: number }).connectionsCheckingInterval, 1_000);
+});
+
+test('a counter that cannot open keeps health, pages, discovery and the MCP menu available', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'merovingian-app-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const path = join(directory, 'visits.sqlite');
+  writeFileSync(path, 'not a database'.repeat(300));
+  const counts = new VisitCounter(config, path, { log: () => {} });
+  const { base, request, json } = await fixture(t, {}, unavailableSupport(), { counts });
+  const health = await request('/healthz');
+  assert.equal(health.status, 200, 'Fred must not see an unhealthy container');
+  assert.deepEqual(await health.json(), { status: 'ok', network: config.network, chainId: config.chainId, retired: false, version: APP_VERSION, counter: 'unavailable' });
+  for (const path of ['/', '/about', '/llms.txt', '/openapi.json', '/api/v1/amenities']) assert.equal((await request(path)).status, 200, path);
+  assert.equal((await request('/api/v1/stats')).status, 503);
+  const visit = await json('/api/v1/visits', { amenity: 'null-tea' });
+  assert.equal(visit.status, 503);
+  assert.deepEqual(await visit.json(), { error: API_MESSAGES.counterUnavailable });
+  const client = await mcpClient(t, base);
+  assert.equal((await client.listTools()).tools.length, 4);
+  const menu = await client.callTool({ name: 'list_amenities', arguments: {} });
+  assert.notEqual(menu.isError, true);
+  const served = await client.callTool({ name: 'enjoy_amenity', arguments: { amenity: 'null-tea' } });
+  assert.equal(served.isError, true);
 });
 
 const dashboardTenant = 'manifest1am058pdux3hyulcmfgj4m3hhrlfn8nzmx97smg';

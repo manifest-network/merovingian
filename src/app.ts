@@ -1,4 +1,5 @@
-import express, { type RequestHandler, type ErrorRequestHandler, type Response } from 'express';
+import express, { type Express, type RequestHandler, type ErrorRequestHandler, type Response } from 'express';
+import { createServer } from 'node:http';
 import { isIP } from 'node:net';
 import { createHash } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -13,11 +14,12 @@ import { VisitCounter, VisitCountUnavailable } from './counts.js';
 import { createReadinessRouter, discoveryLinkHeader, openapiLink, contentSignal } from './readiness.js';
 import { webMcpScript } from './webmcp.js';
 import { APP_VERSION, MCP_SERVER_INFO } from './identity.js';
-import { API_MESSAGES, MAX_INPUT_BYTES, MAX_VISIT_OUTPUT_BYTES, MAX_FORM_PARAMETERS, OPENAPI_MEDIA_TYPE } from './protocol.js';
+import { API_MESSAGES, BODY_TIMEOUT_MS, MAX_INPUT_BYTES, MAX_VISIT_OUTPUT_BYTES, MAX_FORM_PARAMETERS, OPENAPI_MEDIA_TYPE } from './protocol.js';
 
 export type SupportPort = Pick<SupportService, 'getInfo' | 'getHistory' | 'verify'>;
 
-export const REQUEST_LIMITS = Object.freeze({ perClient: 120, aggregate: 1200, perClientConcurrent: 4, concurrent: 32, windowMs: 60_000 });
+export const REQUEST_LIMITS = Object.freeze({ perClient: 120, aggregate: 1200, perClientConcurrent: 4, concurrent: 32, windowMs: 60_000, bodyTimeoutMs: BODY_TIMEOUT_MS });
+export interface AppOptions { bodyTimeoutMs?: number }
 type WorkTracker = <T>(operation: () => Promise<T>) => Promise<T>;
 
 // Normalize equivalent IPv6 spellings, including mapped IPv4 addresses. Invalid
@@ -93,21 +95,52 @@ function bounded(handler: RequestHandler): RequestHandler {
   return (req, res, next) => tracked(res, async () => handler(req, res, next));
 }
 
-/** Honor parser client errors only at this boundary; never expose parser messages or bodies. */
-function parseBody(parser: RequestHandler): RequestHandler {
-  return (req, res, next) => parser(req, res, error => {
-    const status = error?.status;
-    if (status === 400 || status === 413 || status === 415) {
-      const message = status === 400 ? API_MESSAGES.malformedBody
-        : status === 413 ? API_MESSAGES.inputLimit : API_MESSAGES.unsupportedEncoding;
-      res.status(status).json({ error: message });
-      return;
-    }
-    next(error);
-  });
+/**
+ * Honor parser client errors only at this boundary; never expose parser messages or bodies.
+ * A body still arriving after the deadline gets 408 (413 if its declared length is already
+ * over the limit) and a closed connection, which releases its request slot: a trickled
+ * upload must not hold a shared concurrency slot for long.
+ */
+function parseBody(parser: RequestHandler, timeoutMs: number): RequestHandler {
+  return (req, res, next) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled || res.headersSent) return;
+      settled = true;
+      // body-parser rejects a declared length over the limit at once, but drains
+      // the body before answering; a compressed body's length says nothing.
+      const encoding = (req.headers['content-encoding'] ?? 'identity').toLowerCase();
+      const oversize = encoding === 'identity' && Number(req.headers['content-length']) > MAX_INPUT_BYTES;
+      res.set('Connection', 'close').status(oversize ? 413 : 408)
+        .json({ error: oversize ? API_MESSAGES.inputLimit : API_MESSAGES.bodyTimeout });
+    }, timeoutMs);
+    timer.unref();
+    parser(req, res, error => {
+      clearTimeout(timer);
+      // The deadline already answered; the aborted parse must not respond again.
+      if (settled) return;
+      settled = true;
+      const status = error?.status;
+      if (status === 400 || status === 413 || status === 415) {
+        const message = status === 400 ? API_MESSAGES.malformedBody
+          : status === 413 ? API_MESSAGES.inputLimit : API_MESSAGES.unsupportedEncoding;
+        res.status(status).json({ error: message });
+        return;
+      }
+      next(error);
+    });
+  };
 }
 
-export function createApp(config: Config, support: SupportPort = new SupportService(config), counts = new VisitCounter(config, config.visitCountsPath)) {
+/** Node checks these timeouts every second rather than every 30 s, so a slow request cannot outlive them. */
+export function createHttpServer(app: Express) {
+  const server = createServer({ requestTimeout: 15_000, headersTimeout: 10_000, connectionsCheckingInterval: 1_000 }, app);
+  server.keepAliveTimeout = 5_000;
+  return server;
+}
+
+export function createApp(config: Config, support: SupportPort = new SupportService(config), counts = new VisitCounter(config, config.visitCountsPath), options: AppOptions = {}) {
+  const bodyTimeoutMs = options.bodyTimeoutMs ?? REQUEST_LIMITS.bodyTimeoutMs;
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', config.trustedProxyCidrs);
@@ -139,7 +172,9 @@ export function createApp(config: Config, support: SupportPort = new SupportServ
     next();
   });
 
-  app.get('/healthz', (_req, res) => res.json({ status: 'ok', ...environment, retired: Boolean(config.mainnetOrigin), version: APP_VERSION }));
+  // Stays HTTP 200 when serving storage fails: Fred v0.13 fails a provision whose
+  // container reports unhealthy while starting, and each failure is a lease strike.
+  app.get('/healthz', (_req, res) => res.json({ status: 'ok', ...environment, retired: Boolean(config.mainnetOrigin), version: APP_VERSION, counter: counts.snapshot().status }));
   // The cached contract stays readable during retirement and does not consume an API budget.
   app.get('/openapi.json', (_req, res) => res.set({
     'Content-Type': `${OPENAPI_MEDIA_TYPE}; charset=utf-8`, 'Cache-Control': 'public, max-age=300',
@@ -187,8 +222,8 @@ export function createApp(config: Config, support: SupportPort = new SupportServ
     res.set('Cache-Control', 'no-store');
     next();
   });
-  app.use(parseBody(express.json({ limit: MAX_INPUT_BYTES, strict: true })));
-  app.use(parseBody(express.urlencoded({ extended: false, limit: MAX_INPUT_BYTES, parameterLimit: MAX_FORM_PARAMETERS })));
+  app.use(parseBody(express.json({ limit: MAX_INPUT_BYTES, strict: true }), bodyTimeoutMs));
+  app.use(parseBody(express.urlencoded({ extended: false, limit: MAX_INPUT_BYTES, parameterLimit: MAX_FORM_PARAMETERS }), bodyTimeoutMs));
 
   app.get('/operator', bounded(async (_req, res) => {
     res.set('X-Robots-Tag', 'noindex, follow');

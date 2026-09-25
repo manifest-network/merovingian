@@ -6,7 +6,7 @@ import { updateLease } from '@manifest-network/manifest-sdk/deploy';
 import { MAINNET } from '../scripts/mainnet-config.js';
 import type { LaunchBinding } from '../scripts/mainnet-launch-plan.js';
 import { MAINNET_PROVIDER } from '../scripts/mainnet-provider.js';
-import { MAINNET_UPDATE_LEASE, advanceMainnetUpdate, assertMainnetUpdateIntent, assertUpdateHistoryCanProceed, decodeReleaseManifest, mainnetUpdateFetch, parseMainnetUpdateArguments, prepareMainnetUpdate, type MainnetUpdateState, type UpdateObservation } from '../scripts/mainnet-update.js';
+import { MAINNET_UPDATE_LEASE, PROVIDER_STRIKE_LIMIT, advanceMainnetUpdate, assertMainnetUpdateIntent, assertUpdateHistoryCanProceed, decodeReleaseManifest, mainnetUpdateFetch, parseMainnetUpdateArguments, prepareMainnetUpdate, type MainnetUpdateState, type UpdateObservation } from '../scripts/mainnet-update.js';
 
 const tenant = 'manifest1hkmrmsc6zjr7gm2wgtrtce7vgxeq9e402x5rf5';
 const denom = 'factory/manifest1afk9zr2hn2jsac63h4hm60vl9z3e5u69gndzf7c99cqge3vzwjzsfmy9qj/upwr';
@@ -21,7 +21,7 @@ function fixture() {
     skuUuid: '019e6f08-a59a-7001-9f12-3a0963d3f193', denom, priceBasePerHour: '3600', monthlyBudgetBase: '5000000', gasPrice: `0.5${denom}`, metaHashHex: hash(manifestJson), inputHash: 'b'.repeat(64) };
   const lease = Lease.fromPartial({ uuid: MAINNET_UPDATE_LEASE, tenant, providerUuid: binding.providerUuid, state: LeaseState.LEASE_STATE_ACTIVE,
     metaHash: Buffer.from(binding.metaHashHex, 'hex'), items: [{ skuUuid: binding.skuUuid, quantity: 1n, serviceName: 'refuge', customDomain: MAINNET.domain, lockedPrice: { amount: '1', denom } }] });
-  const current: UpdateObservation = { lease, ready: true, active: { image: image('a'), manifestJson, manifestHash: hash(manifestJson), version: 1 } };
+  const current: UpdateObservation = { lease, ready: true, failCount: 0, active: { image: image('a'), manifestJson, manifestHash: hash(manifestJson), version: 1 } };
   const state = prepareMainnetUpdate(binding, current, image('b'));
   return { binding, current, state };
 }
@@ -148,6 +148,33 @@ test('ambiguous update never repeats its POST on resume and can reconcile a late
   assert.throws(() => assertUpdateHistoryCanProceed([unknown], image('c')), /another_unresolved_update/);
   assert.doesNotThrow(() => assertUpdateHistoryCanProceed([unknown], unknown.image));
   assert.doesNotThrow(() => assertUpdateHistoryCanProceed([done], image('c')));
+});
+
+test('updates stop while a failed update could use the last provider strike', async () => {
+  const { binding, current, state } = fixture();
+  assert.equal(PROVIDER_STRIKE_LIMIT, 3);
+  assert.doesNotThrow(() => prepareMainnetUpdate(binding, { ...current, failCount: 1 }, image('b')));
+  for (const failCount of [2, 3]) {
+    assert.throws(() => prepareMainnetUpdate(binding, { ...current, failCount }, image('b')), /update_blocked_last_provider_strike/);
+  }
+  // A journal prepared earlier re-checks the fresh count before its only POST.
+  let posts = 0;
+  const deps = { observe: async () => ({ ...current, failCount: 2 }), save: async (_: MainnetUpdateState) => {}, post: async () => { posts++; } };
+  await assert.rejects(() => advanceMainnetUpdate(state, deps, true, 10), /update_blocked_last_provider_strike/);
+  assert.equal(posts, 0);
+  // Status still observes and records the count without posting.
+  const observed = await advanceMainnetUpdate(state, deps, false, 10);
+  assert.equal(observed.phase, 'prepared'); assert.equal(observed.observed?.failCount, 2); assert.equal(posts, 0);
+});
+
+test('journals written before the fail count was recorded still reconcile', async () => {
+  const { current, state } = fixture();
+  const legacy = { ...state, phase: 'uncertain' as const, observed: { activeImage: current.active!.image, activeManifestHash: current.active!.manifestHash, activeReleaseVersion: 1, ready: true } };
+  const done = await advanceMainnetUpdate(legacy, {
+    observe: async () => ({ ...current, active: { image: state.image, manifestJson: state.manifestJson, manifestHash: state.manifestHash, version: 2 } }),
+    save: async () => {}, post: async () => { assert.fail('reconciliation must not post'); },
+  }, false, 10);
+  assert.equal(done.phase, 'ready'); assert.equal(done.observed?.failCount, 0);
 });
 
 test('a competing active manifest or changed persisted intent requires manual reconciliation', async () => {

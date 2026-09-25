@@ -195,7 +195,37 @@ Use the [existing-lease update workflow](#existing-lease-update-workflow), which
 
 Roll-forward needs a ready active release and no unresolved update journal. It covers a release that became ready but misbehaves. An update that never becomes ready ends `uncertain`. Fred marks the failed release and, when it can, rolls back to the previous release. `status` resolves a journal only when its target becomes active and ready, so after such a rollback the journal stays `uncertain` and blocks every other image (`another_unresolved_update_requires_reconciliation`), including a roll-forward, until a separately reviewed and authorized reconciliation procedure exists. If Fred's rollback also fails, the lease ends `Failed` and `prepare` refuses any update (`update_requires_ready_active_release`). Never edit or delete the journal to unblock an update.
 
-The SDK's `restoreApp` has different semantics: it restores a **closed lease's retained data** into a **new lease**, subject to the provider's retention window. It requires new transaction fees and hosting reserve, and custom domains must be claimed again. It is not an automatic rollback and is not authorized by the initial launch fee cap. Release 0.3.0 had no persisted visit state; the 0.4.1 serving counter introduces aggregate data that should be preserved and backed up. Never close a healthy lease merely to deploy a new image.
+The SDK's `restoreApp` has different semantics: it restores a **closed lease's retained data** into a **new lease**, subject to the provider's retention window. It requires new transaction fees and hosting reserve, and custom domains must be claimed again (see [the domain rule](#custom-domain-on-any-lease-change)). It is not an automatic rollback and is not authorized by the initial launch fee cap. Release 0.3.0 had no persisted visit state; the 0.4.1 serving counter introduces aggregate data that should be preserved and backed up. Never close a healthy lease merely to deploy a new image.
+
+#### Provider strikes
+
+Fred v0.13 closes an ACTIVE lease on chain, with no human involved, when a failure leaves its provision failed with a fail count of **3** or more (ENG-799). Each of these adds one:
+
+- the container exiting for any reason, including a backend host reboot, since tenant containers have no restart policy;
+- a provision or re-provision that fails, including a container that exits or reports unhealthy while starting;
+- an update that fails, even when Fred rolls back to the previous release;
+- a restart that fails.
+
+When Fred recovers a failed update or restart, the lease keeps running even at 3, but its next failure of any kind closes it without a retry. Nothing resets the count while the lease lives; only a new lease starts a fresh one. A provider backend restart rebuilds the count from container labels and can leave out rolled-back failures, so treat the printed count as a lower bound.
+
+`status`, `run` and a first `prepare` read `providerFailCount` and `providerStrikesRemaining` from the provider's authenticated status. A repeated `prepare` reads no provider state and prints `null`. The update tool refuses to prepare or send an update while one strike remains (`update_blocked_last_provider_strike`), and `run` rereads the count before its POST, because a failed update could then close the lease. Before planning each update, run `status` with the active release's image, as in the [existing-lease update workflow](#existing-lease-update-workflow); `status` needs an existing journal for its `--image`.
+
+The application source no longer exits when it cannot open its serving counter (ENG-1080). Before that change, which the live `0.4.7` release predates, a corrupt, read-only or unwritable counter volume failed every re-provision, because each one reuses the same volume, and would use all three strikes within minutes. Instead, whether the counter fails to open or its storage fails later, the application:
+
+- keeps serving pages, discovery and the MCP menu; HTTP and form visits and `/api/v1/stats` return 503, and the MCP `enjoy_amenity` tool returns a tool error;
+- reports `counter: unavailable` on `/healthz`, which stays HTTP 200 because Fred fails a provision whose container reports unhealthy while starting;
+- logs one `counter_unavailable` event with a `storage` or `identity` reason, and one `counter_recovered` event when the counter reopens;
+- retries opening the counter at most once a minute, when a request or the container healthcheck next reads it (about 60 to 90 seconds with the 30-second healthcheck).
+
+#### Custom domain on any lease change
+
+The `merovingian.manifest.network` claim belongs to the lease and is released when the lease leaves PENDING or ACTIVE. The Cloudflare record is a DNS-only CNAME into the provider's wildcard zone, and the chain requires no proof of DNS control. After a close, any tenant placed on the same backend could claim the domain, pass the provider's DNS check and obtain a valid certificate. They would then serve the registry-listed `/mcp` endpoint and the contribution instructions under this name.
+
+- **Remove DNS first.** Before any deliberate close, `restoreApp` or move to another lease, delete or repoint the Cloudflare CNAME. Do the same as the first response to the lease leaving ACTIVE or failing. The DNS change still needs explicit authorization under [AGENTS.md](../AGENTS.md); in an incident it is the first step to request.
+- **Never leave the name unclaimed.** To move to a new lease, create and verify the new lease first. Then clear the claim on the old lease and claim the domain on the new one in a single transaction. The current tooling signs one message per transaction, so this needs a reviewed tooling change and a testnet rehearsal before use.
+- **Consider the registry.** If an outage will last, consider deprecating the published registry version.
+
+Detecting lease-state and domain-claim changes is tracked in ENG-1068.
 
 ### Release 0.4.3
 
@@ -245,7 +275,7 @@ node --import tsx scripts/mainnet-update.ts status \
   --key-name merovingian
 ```
 
-For a separately reviewed new image, use the same argument structure with **`prepare`**, inspect its exact manifest, then **`run`**. **`status`** reconciles an existing journal. All three commands need the verified protected OS keyring for short-lived ADR-036 provider authentication. `status` makes authenticated reads and never sends the update POST or a chain transaction. No provider token or signature is retained.
+For a separately reviewed new image, use the same argument structure with **`prepare`**, inspect its exact manifest, then **`run`**. **`status`** reconciles an existing journal. All three commands need the verified protected OS keyring for short-lived ADR-036 provider authentication. `status` makes authenticated reads and never sends the update POST or a chain transaction. No provider token or signature is retained. When a command observes the provider, its output includes the lease's `providerFailCount` and `providerStrikesRemaining` (see [provider strikes](#provider-strikes)).
 
 To accompany that new image with reviewed ingress trust, append `--trusted-proxy-cidrs 'VERIFIED_IP_OR_CIDR_LIST'` to `prepare`. The flag accepts the same comma-separated IP/CIDR syntax as the application. Omit it to preserve the active release's setting, or pass `--trusted-proxy-cidrs ''` to remove trusted proxies explicitly. The selected value is included in the exact manifest bytes and recorded manifest hash. Configuration-only changes using an already active image remain unsupported by this workflow.
 

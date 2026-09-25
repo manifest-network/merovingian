@@ -16,6 +16,15 @@ import { MAINNET_PROVIDER } from './mainnet-provider.js';
 import { normalizeTrustedProxyCidrs, trustedProxyCidrsSchema, withTrustedProxyCidrs } from './runtime-proxy.js';
 
 export const MAINNET_UPDATE_LEASE = '01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd';
+/**
+ * Fred v0.13 closes an ACTIVE lease on chain when a failure leaves its provision
+ * failed with at least this many failures. Container exits (including after a
+ * host reboot), failed (re-)provisions and failed updates or restarts, even rolled
+ * back ones, each add one, and nothing resets the count while the lease lives
+ * (ENG-799). At the limit, a rolled-back failure leaves the lease running, but its
+ * next failure of any kind closes it.
+ */
+export const PROVIDER_STRIKE_LIMIT = 3;
 const pinnedImage = z.string().regex(/^ghcr\.io\/(?:manifest-network|fmorency)\/merovingian@sha256:[a-f0-9]{64}$/);
 const sha = z.string().regex(/^[a-f0-9]{64}$/);
 const digest = (text: string) => createHash('sha256').update(text).digest('hex');
@@ -32,12 +41,16 @@ const bindingSchema = z.object({ chainId: z.literal(MAINNET.chainId), tenant: z.
 const stateSchema = z.object({ version: z.literal(1), operationId: z.string().uuid(), leaseUuid: z.literal(MAINNET_UPDATE_LEASE), binding: bindingSchema,
   image: pinnedImage, beforeImage: pinnedImage, beforeManifestHash: sha, manifestHash: sha, manifestJson: z.string().max(65536),
   phase: z.enum(['prepared', 'attempted', 'accepted', 'uncertain', 'ready']), createdAt: z.string().datetime(), updatedAt: z.string().datetime(),
-  observed: z.object({ activeImage: pinnedImage.nullable(), activeManifestHash: sha.nullable(), activeReleaseVersion: z.number().int().positive().nullable(), ready: z.boolean() }).strict().optional(),
+  observed: z.object({ activeImage: pinnedImage.nullable(), activeManifestHash: sha.nullable(), activeReleaseVersion: z.number().int().positive().nullable(), ready: z.boolean(), failCount: z.number().int().nonnegative().optional() }).strict().optional(),
 }).strict();
 export type MainnetUpdateState = z.infer<typeof stateSchema>;
-export interface UpdateObservation { lease: Lease; ready: boolean; active: { image: string; manifestJson: string; manifestHash: string; version: number } | null }
+export interface UpdateObservation { lease: Lease; ready: boolean; failCount: number; active: { image: string; manifestJson: string; manifestHash: string; version: number } | null }
 export class MainnetUpdateError extends Error { constructor(readonly code: string) { super(code); this.name = 'MainnetUpdateError'; } }
 function fail(code: string): never { throw new MainnetUpdateError(code); }
+/** A failed update could use the last strike and close the lease, so refuse it. */
+function assertStrikeRemains(failCount: number) {
+  if (failCount >= PROVIDER_STRIKE_LIMIT - 1) fail('update_blocked_last_provider_strike');
+}
 
 function publicManifest(text: string, binding: LaunchBinding) {
   try {
@@ -78,6 +91,7 @@ export function prepareMainnetUpdate(bindingInput: LaunchBinding, current: Updat
   const old = publicManifest(current.active.manifestJson, binding);
   if (old.services.refuge.image !== current.active.image) fail('provider_active_image_mismatch');
   if (current.active.image === nextImage) fail('requested_image_already_active');
+  assertStrikeRemains(current.failCount);
   const service = old.services.refuge;
   const env = withTrustedProxyCidrs({ ...service.env, VISIT_COUNTS_PATH: '/data/visits.sqlite' }, options.trustedProxyCidrs);
   const manifest = { services: { refuge: buildManifest({ ...service, image: nextImage, user: '1000:1000', env }) } };
@@ -138,7 +152,7 @@ export async function advanceMainnetUpdate(rawState: MainnetUpdateState, deps: U
       const manifest = publicManifest(current.active.manifestJson, state.binding);
       if (current.active.manifestHash !== digest(current.active.manifestJson) || current.active.image !== manifest.services.refuge.image) fail('provider_active_manifest_mismatch');
     }
-    state.observed = { activeImage: current.active?.image ?? null, activeManifestHash: current.active?.manifestHash ?? null, activeReleaseVersion: current.active?.version ?? null, ready: current.ready };
+    state.observed = { activeImage: current.active?.image ?? null, activeManifestHash: current.active?.manifestHash ?? null, activeReleaseVersion: current.active?.version ?? null, ready: current.ready, failCount: current.failCount };
     if (current.ready && current.active?.manifestHash === state.manifestHash) { state.phase = 'ready'; await persist(); return true; }
     if (current.active && ![state.beforeManifestHash, state.manifestHash].includes(current.active.manifestHash)) fail('another_update_requires_manual_reconciliation');
     return false;
@@ -148,6 +162,7 @@ export async function advanceMainnetUpdate(rawState: MainnetUpdateState, deps: U
   if (state.phase === 'prepared') {
     if (!allowPost) return state;
     if (!state.observed?.ready || state.observed.activeManifestHash !== state.beforeManifestHash) fail('update_base_release_changed');
+    assertStrikeRemains(state.observed.failCount ?? PROVIDER_STRIKE_LIMIT);
     state.phase = 'attempted'; await persist();
     try { await deps.post({ leaseUuid: state.leaseUuid, operationId: state.operationId, manifestJson: state.manifestJson }); state.phase = 'accepted'; }
     catch { state.phase = 'uncertain'; }
@@ -198,7 +213,8 @@ async function durableJson(path: string, value: unknown, exclusive = false) {
 function updateProvider(binding: LaunchBinding, wallet: WalletProvider, operationId: string, lease: () => Promise<Lease>) {
   const transport = mainnetUpdateFetch(operationId);
   const auth = createProviderAuth(createSignerAdapter(wallet), { chainId: MAINNET.chainId });
-  const statusSchema = z.object({ state: z.string(), provision_status: z.string().optional() });
+  // Fred v0.13 omits fail_count when it is zero.
+  const statusSchema = z.object({ state: z.string(), provision_status: z.string().optional(), fail_count: z.number().int().nonnegative().optional() });
   const fetchUntil = (signal?: AbortSignal): typeof fetch => (input, init = {}) => transport(input, { ...init, ...(signal ? { signal: AbortSignal.any([signal, ...(init.signal ? [init.signal] : [])]) } : {}) });
   const verified = async (fetcher: typeof fetch) => {
     if (await wallet.getAddress() !== binding.tenant) fail('update_wallet_mismatch');
@@ -225,7 +241,7 @@ function updateProvider(binding: LaunchBinding, wallet: WalletProvider, operatio
           const manifest = publicManifest(manifestJson, binding);
           release = { image: manifest.services.refuge.image, manifestJson, manifestHash: digest(manifestJson), version: active[0].version };
         }
-        return { lease: currentLease, ready: status.state === 'LEASE_STATE_ACTIVE' && status.provision_status === 'ready', active: release };
+        return { lease: currentLease, ready: status.state === 'LEASE_STATE_ACTIVE' && status.provision_status === 'ready', failCount: status.fail_count ?? 0, active: release };
       } catch (error) { if (error instanceof MainnetUpdateError) throw error; throw new MainnetUpdateError('provider_observation_unconfirmed'); }
     },
     async post(input: { leaseUuid: string; operationId: string; manifestJson: string }) {
@@ -301,12 +317,18 @@ async function main() {
         const value = await client.getLease(parseLeaseUuid(MAINNET_UPDATE_LEASE));
         if (!value) fail('existing_update_lease_not_found'); return value;
       });
+      let preparedFrom: UpdateObservation | undefined;
       if (!state) {
-        state = prepareMainnetUpdate(binding, await provider.observe(), image, { trustedProxyCidrs }); state.operationId = operationId;
+        preparedFrom = await provider.observe();
+        state = prepareMainnetUpdate(binding, preparedFrom, image, { trustedProxyCidrs }); state.operationId = operationId;
         await durableJson(statePath, state, true);
       }
       const result = command === 'prepare' ? state : await advanceMainnetUpdate(state, { ...provider, save: value => durableJson(statePath, value) }, command === 'run');
-      console.log(JSON.stringify({ phase: result.phase, leaseUuid: result.leaseUuid, image: result.image, manifestHash: result.manifestHash, observed: result.observed ?? null, newLeaseCreated: false, chainTransactionSent: false, cloudflareProxyAllowed: false, savedTo: statePath }, null, 2));
+      // A repeated prepare only reprints its journal, so print a count only when this run observed it.
+      const failCount = command === 'prepare' ? preparedFrom?.failCount ?? null : result.observed?.failCount ?? null;
+      console.log(JSON.stringify({ phase: result.phase, leaseUuid: result.leaseUuid, image: result.image, manifestHash: result.manifestHash, observed: result.observed ?? null,
+        providerFailCount: failCount, providerStrikesRemaining: failCount === null ? null : Math.max(0, PROVIDER_STRIKE_LIMIT - failCount),
+        newLeaseCreated: false, chainTransactionSent: false, cloudflareProxyAllowed: false, savedTo: statePath }, null, 2));
     } finally { client.dispose(); await wallet?.disconnect(); }
   } finally {
     try { if (JSON.parse(await readFile(lockPath, 'utf8')).id === lockId) await unlink(lockPath); } catch { /* Stale locks require local review. */ }
