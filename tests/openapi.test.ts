@@ -15,7 +15,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { liftedinit } from '@manifest-network/manifestjs';
 import { parseAddress } from '@manifest-network/manifest-sdk';
 import { TxBody, TxRaw } from 'cosmjs-types/cosmos/tx/v1beta1/tx.js';
-import { createApp, REQUEST_LIMITS } from '../src/app.js';
+import { createApp, REQUEST_LIMITS, type AppOptions } from '../src/app.js';
 import { loadConfig, type Config } from '../src/config.js';
 import { VisitCounter } from '../src/counts.js';
 import { FUND_CREDIT_TYPE, SupportService, type ChainGateway, type ChainTransaction, type FundingHistoryPage, type SupportInfo, type ContributionHistory, type VerificationResult } from '../src/support.js';
@@ -60,7 +60,7 @@ function historyPage(total = '1'): FundingHistoryPage {
   }] };
 }
 
-async function fixture(t: TestContext, overrides: Partial<Config> = {}, gatewayOverrides: Partial<ChainGateway> | null = {}) {
+async function fixture(t: TestContext, overrides: Partial<Config> = {}, gatewayOverrides: Partial<ChainGateway> | null = {}, appOptions: AppOptions = {}) {
   const effectiveConfig = { ...config, ...overrides };
   const gateway: ChainGateway = {
     getChainId: async () => effectiveConfig.chainId, getTransaction: async () => transaction(),
@@ -72,7 +72,7 @@ async function fixture(t: TestContext, overrides: Partial<Config> = {}, gatewayO
   const counts = new VisitCounter(effectiveConfig, effectiveConfig.visitCountsPath);
   let countsClosed = false;
   const closeCounts = () => { if (!countsClosed) { counts.close(); countsClosed = true; } };
-  const server = createApp(effectiveConfig, support, counts).listen(0, '127.0.0.1');
+  const server = createApp(effectiveConfig, support, counts, appOptions).listen(0, '127.0.0.1');
   await once(server, 'listening');
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   t.after(async () => {
@@ -448,6 +448,28 @@ test('all API operations publish the origin and body-parser errors their middlew
     await c.response(path, method, await f.request(path, { method: method.toUpperCase(), headers: { Origin: 'https://untrusted.example' } }), 403);
     await c.response(path, method, await withBody(f.base, path, method, '{'), 400);
     await c.response(path, method, await withBody(f.base, path, method, JSON.stringify({ excess: 'x'.repeat(8192) })), 413);
+  }
+});
+
+/** Send only the first byte of a declared body, as a stalled or deliberately slow upload would. */
+function trickled(base: string, path: string, method: string): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const req = httpRequest(new URL(path, base), { method: method.toUpperCase(), headers: { 'Content-Type': 'application/json', 'Content-Length': '100' } }, res => {
+      const chunks: Buffer[] = [];
+      res.on('data', chunk => chunks.push(chunk));
+      res.on('error', reject);
+      res.on('end', () => resolve(new Response(Buffer.concat(chunks), { status: res.statusCode, headers: res.headers as Record<string, string> })));
+    });
+    req.on('error', reject); req.write('{');
+  });
+}
+
+test('bodies that stop arriving match the published 408 contract on every API operation', async t => {
+  const f = await fixture(t, {}, {}, { bodyTimeoutMs: 200 });
+  const c = await contracts(f);
+  for (const [path, method] of apiOperations) {
+    const body = await c.response(path, method, await trickled(f.base, path, method), 408);
+    assert.deepEqual(body, { error: API_MESSAGES.bodyTimeout });
   }
 });
 

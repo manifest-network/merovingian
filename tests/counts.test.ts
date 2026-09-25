@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
-import { VisitCounter, VisitCountUnavailable } from '../src/counts.js';
+import { VisitCounter, VisitCountUnavailable, type CounterEvent, type CounterFault } from '../src/counts.js';
 
 const environment = { network: 'mainnet' as const, chainId: 'manifest-ledger-mainnet' };
 
@@ -34,6 +36,16 @@ test('aggregate counts survive reopening and independent writers without storing
   db.close();
 });
 
+const quiet = { log: () => {} };
+const fileBytes = (path: string) => readFileSync(path).toString('base64');
+
+function assertUnavailable(counter: VisitCounter, fault: CounterFault) {
+  assert.equal(counter.fault, fault);
+  assert.equal(counter.snapshot().status, 'unavailable');
+  assert.deepEqual(counter.snapshot().counts, null);
+  assert.throws(() => counter.record('rgb-sauna'), VisitCountUnavailable);
+}
+
 test('counter state cannot silently cross networks or reset an unreadable database', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'merovingian-counts-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -41,20 +53,70 @@ test('counter state cannot silently cross networks or reset an unreadable databa
   const mainnet = new VisitCounter(environment, path);
   mainnet.record('rgb-sauna');
   mainnet.close();
-  assert.throws(() => new VisitCounter({ network: 'testnet', chainId: 'manifest-ledger-testnet' }, path), /Cannot open the serving counter/);
+  const before = fileBytes(path);
+  const testnet = new VisitCounter({ network: 'testnet', chainId: 'manifest-ledger-testnet' }, path, { ...quiet, retryMs: 0 });
+  assertUnavailable(testnet, 'identity');
+  assertUnavailable(testnet, 'identity'); // Every retry repeats the identity check.
+  testnet.close();
+  assert.equal(fileBytes(path), before, 'Another network never writes to this database');
   const reopened = new VisitCounter(environment, path);
   assert.equal(reopened.snapshot().counts?.['rgb-sauna'], '1');
   reopened.close();
   const db = new DatabaseSync(path);
   db.exec('DROP TABLE refuge_metadata; CREATE TABLE refuge_metadata (unrecognized TEXT)');
   db.close();
-  assert.throws(() => new VisitCounter(environment, path), /Cannot open the serving counter/);
+  const unrecognized = new VisitCounter(environment, path, quiet);
+  assertUnavailable(unrecognized, 'storage');
+  unrecognized.close();
+  const check = new DatabaseSync(path);
+  assert.equal(check.prepare('SELECT COUNT(*) AS n FROM refuge_metadata').get()?.n, 0);
+  check.close();
+});
+
+test('storage faults leave the process serving, log once and recover without a restart', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'merovingian-counts-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const path = join(directory, 'visits.sqlite');
+  writeFileSync(path, randomBytes(4096));
+  let now = 0;
+  const events: CounterEvent[] = [];
+  const counter = new VisitCounter(environment, path, { retryMs: 60_000, now: () => now, log: event => events.push(event) });
+  assertUnavailable(counter, 'storage');
+  now = 59_999;
+  assertUnavailable(counter, 'storage');
+  assert.deepEqual(events, [{ event: 'counter_unavailable', reason: 'storage' }], 'Repeated failures log once');
+  rmSync(path);
+  now = 60_000;
+  counter.record('null-tea');
+  assert.equal(counter.fault, null);
+  assert.equal(counter.snapshot().counts?.['null-tea'], '1');
+  assert.deepEqual(events.at(-1), { event: 'counter_recovered' });
+  counter.close();
+});
+
+test('unwritable or read-only storage degrades instead of exiting', { skip: process.getuid?.() === 0 && 'root ignores file permissions' }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'merovingian-counts-'));
+  t.after(async () => { chmodSync(directory, 0o700); await rm(directory, { recursive: true, force: true }); });
+  const path = join(directory, 'visits.sqlite');
+  const seeded = new VisitCounter(environment, path);
+  seeded.close();
+  // Startup always writes, so a read-only database cannot open.
+  chmodSync(path, 0o444);
+  const readOnly = new VisitCounter(environment, path, quiet);
+  assertUnavailable(readOnly, 'storage');
+  readOnly.close();
+  const blocked = join(directory, 'blocked');
+  mkdirSync(blocked, { mode: 0o500 });
+  const unwritable = new VisitCounter(environment, join(blocked, 'visits.sqlite'), quiet);
+  assertUnavailable(unwritable, 'storage');
+  unwritable.close();
 });
 
 test('counter unavailability is explicit and is never presented as zero servings', () => {
-  const counter = new VisitCounter(environment);
+  const counter = new VisitCounter(environment, ':memory:', { retryMs: 0 });
   counter.record('null-tea');
   counter.close();
+  // A closed counter never reopens, which for memory storage would reset its counts.
   assert.throws(() => counter.record('null-tea'), VisitCountUnavailable);
   assert.deepEqual(counter.snapshot(), { ...environment, status: 'unavailable', since: null, counts: null, total: null, storage: 'memory' });
 });

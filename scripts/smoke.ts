@@ -128,6 +128,7 @@ export async function runSmoke(options: SmokeOptions) {
     assert.equal(health.network, network);
     assert.equal(health.chainId, chainId);
     assert.equal(health.retired, false);
+    assert.equal(health.counter, 'available', 'Serving storage must be open');
     assert.equal(health.version, APP_VERSION);
     const card = await json('/mcp/server-card');
     assert.deepEqual({ name: card.name, version: card.version }, MCP_SERVER_INFO);

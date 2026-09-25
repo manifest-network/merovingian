@@ -2,6 +2,8 @@
 export const MAX_INPUT_BYTES = 8192;
 export const MAX_VISIT_OUTPUT_BYTES = 8192;
 export const MAX_FORM_PARAMETERS = 5;
+/** A parsed request body must finish arriving within this many milliseconds. */
+export const BODY_TIMEOUT_MS = 5_000;
 export const HISTORY_LIMIT = 100;
 export const FUND_CREDIT_TYPE = '/liftedinit.billing.v1.MsgFundCredit';
 export const OPENAPI_MEDIA_TYPE = 'application/vnd.oai.openapi+json';
@@ -18,6 +20,7 @@ export const API_MESSAGES = Object.freeze({
   invalidVerification: 'Expected only transactionHash.',
   inputLimit: 'Request exceeds the refuge input limit.',
   malformedBody: 'Malformed request body.',
+  bodyTimeout: 'The request body did not arrive in time. Please retry.',
   unsupportedEncoding: 'Unsupported request content encoding or charset.',
   internalError: 'The refuge could not complete this request.',
   counterUnavailable: 'The serving counter is temporarily unavailable. Please try again later.',

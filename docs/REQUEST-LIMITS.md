@@ -62,6 +62,15 @@ its own transport bounds and concurrency budget. These limits do not replace
 provider connection, resource, and ingress controls. Process restarts reset the
 in-memory budgets; multiple replicas do not coordinate them.
 
+A JSON or form body must finish arriving within 5 seconds of its parser
+starting. A slower body gets HTTP 408 with `Connection: close`, and its slot is
+released when that response ends. Without this deadline, four trickled uploads
+could hold every slot of a shared per-client allowance for the length of Node's
+request timeout. Node checks its 15-second request timeout and 10-second header
+timeout every second rather than every 30 seconds, so neither can be outlived by
+up to half a minute. Bodies that no parser reads are not held to the deadline;
+their requests end with the handler's response.
+
 ## Trusting forwarded client addresses
 
 `TRUSTED_PROXY_CIDRS` is a comma-separated list of explicit IPv4/IPv6 addresses or
