@@ -4,6 +4,16 @@ The application has useful security controls, but **the current deployment shoul
 
 Audit tracker: [ENG-1036](https://linear.app/liftedinit/issue/ENG-1036). Remediation and provider verification remain open. No production configuration, image, DNS, monitoring or wallet changes were made.
 
+> **Status, 2026-09-25.** This report keeps its original findings and dates; this note records what has changed since.
+> - **Shipped in `0.4.4` (live since 2026-09-21):**
+>   - image remediation (ENG-1037);
+>   - MCP operation and client limits (ENG-1039);
+>   - bounded credit transport (ENG-1040).
+> - **CI:** the final-image job (ENG-1041) runs on every pull request and push to `main`.
+> - **Healthcheck:** since `0.4.5`, the healthcheck is an exec-form curl wrapper (ENG-1044).
+> - **AppArmor:** the Merovingian-specific profile proposed under [AppArmor follow-up](#apparmor-follow-up) was dropped on 2026-09-25. `docker-default` in enforce mode is sufficient.
+> - **Still open: [ENG-1038](https://linear.app/liftedinit/issue/ENG-1038).** It needs provider runtime evidence tied to the running image digest, including `docker-default (enforce)` on the application process. It also needs provider evidence of the effective runtime controls and the trusted-ingress topology. Until then, the deployment is still **not attested as fully hardened**.
+
 ## Audit plan and acceptance status
 
 This pass completes the audit package and local verification. The existing remediation tickets remain separate work. The original scan and public HTTP/TLS observations were already present when this review began; they retain their original timestamps. Fresh local results are recorded separately so they do not imply a new live audit or vulnerability scan.
@@ -94,6 +104,8 @@ Live TLS checks accepted TLS 1.2/1.3 with certificate validation and received pr
 **AppArmor enforcement was not verified in this audit**, either on the provider or in the earlier local container check. A seccomp result does not establish AppArmor confinement. The provider must support and attach the policy at the host/container-runtime boundary; adding a profile to the Docker image alone does not activate it. Docker normally uses `docker-default` when AppArmor is available, but this must be checked for the actual running container. [Docker AppArmor documentation](https://docs.docker.com/engine/security/apparmor/)
 
 The least disruptive first step in [ENG-1038](https://linear.app/liftedinit/issue/ENG-1038) is to obtain sanitized evidence of host support, the container's attached profile and the application's effective **enforce** mode. A loaded profile or a configuration value alone is insufficient; complain mode is not acceptable as the production enforcement result. If the provider uses another Linux security module, record its actual confinement and the AppArmor availability gap rather than assuming AppArmor exists.
+
+*Superseded on 2026-09-25: no Merovingian-specific profile is planned, and `docker-default` in enforce mode is sufficient. The proposal below, and the ENG-1041 runner tests, are kept as originally written for the record.*
 
 After confirming support, prepare a named Merovingian-specific profile in this repository, attached only to this service. Its proposed scope is:
 

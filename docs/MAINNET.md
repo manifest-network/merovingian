@@ -26,7 +26,11 @@ confirmed active `0.4.7` metadata matching the committed `server.json`.
 
 No live visits, payments, new lease, additional funding, chain transaction, or
 DNS change were part of this update. **ENG-1038** provider ingress/confinement
-evidence and **ENG-1041** named AppArmor verification remain open. The update
+evidence remains open. On 2026-09-25 the planned Merovingian-specific AppArmor
+profile and its **ENG-1041** verification were dropped (ENG-1041 closed). Docker's
+`docker-default` profile in enforce mode is sufficient, and confirming that
+enforcement on the provider is part of ENG-1038 (see
+[image verification](IMAGE-SECURITY.md#remaining-confinement-acceptance)). The update
 tool's recovery gap for a failed, rolled-back update was accepted for this release
 (see [Updates, recovery, and restore](#updates-recovery-and-restore)). See
 [release acceptance](ACCEPTANCE.md#release-047-publication-and-verification) and
@@ -73,7 +77,7 @@ ghcr.io/fmorency/merovingian@sha256:1020117aa543cbddcdbe0b49a671b09ddabb285a1f3a
 
 At the **0.3.0 launch**, anonymous registry checks verified this exact manifest digest, the Linux/amd64 configuration, and access to its **nine** image layers without local registry credentials. Historical image publication and resource-test evidence are recorded in `.local/mainnet/resource-smoke.json`.
 
-The user approved a **0.5 PWR aggregate launch-fee cap**; the completed creation and domain transactions cost **0.158206 PWR total**. No additional hosting deposit was made after the authorized initial 15 PWR. The status observation at **2026-09-17 19:55:42 UTC** showed **34.786741 PWR in the wallet** and **14.996400 PWR available hosting credit**. Credit continues to accrue hosting charges, so these are timestamped observations. The lease locks **2.592 PWR per 30 days**, within the unchanged 5 PWR monthly ceiling. Paid studio extras remain a separate implementation item below.
+The user approved a **0.5 PWR aggregate launch-fee cap**; the completed creation and domain transactions cost **0.158206 PWR total**. No additional hosting deposit was made at launch after the authorized initial 15 PWR; a separately authorized [30 PWR deposit](#completed-additional-credit-deposit) followed on 2026-09-18. The launch-time status observation at **2026-09-17 19:55:42 UTC** showed **34.786741 PWR in the wallet** and **14.996400 PWR available hosting credit**. Credit continues to accrue hosting charges, so these are timestamped observations. The lease locks **2.592 PWR per 30 days**, within the unchanged 5 PWR monthly ceiling. Paid studio extras remain a separate implementation item below.
 
 ### Completed mainnet launch
 
@@ -97,6 +101,16 @@ The user authorized `manifestd` to use the local `merovingian` key for a **15 PW
 ```
 
 The committed message, `credit_funded` event, credited balance, fee, and remaining wallet balance were checked. Public records are saved as `.local/mainnet/credit-funding-20260917-15pwr.{intent,broadcast,committed}.json`. The 15 PWR is prepaid credit; the 5 PWR monthly hosting ceiling is unchanged. This deposit is complete and must not be repeated as a launch prerequisite. Approval placeholders in the read-only deployment plan do not authorize additional spending.
+
+### Completed additional credit deposit
+
+On 2026-09-18 the user requested and authorized a further **30 PWR** from the same tenant wallet into hosting credit. The transaction was broadcast once and committed successfully at height **8571668**, **2026-09-18 12:25:28 UTC**, with a **0.067755 PWR** fee:
+
+```text
+D95A887CE2C5B8FA904E8F4B7FEAE1F2971E3EAC898A34364E14253300FF4F9E
+```
+
+Credit before the deposit was 15 PWR, and it was verified at 45 PWR afterwards. The public records are saved as `.local/mainnet/credit-funding-20260918-30pwr.{intent,broadcast,committed}.json`. Hosting credit cannot be withdrawn, and the 5 PWR monthly hosting ceiling is unchanged. The public support endpoint reported **44.502741 PWR** of available hosting credit at **2026-09-25T14:17:33Z**. At the lease's 2.592 PWR per 30 days, that covers roughly 500 days (about 17 months) without another deposit. The figure is a timestamped observation and may not yet reflect every accrued charge, so re-read the current value from `/api/v1/support` rather than relying on this snapshot. This deposit is complete; any further deposit needs its own authorization.
 
 Both networks currently use the same PWR denomination, verified independently on mainnet with six decimals and enabled sends:
 
@@ -165,7 +179,7 @@ A process crash can leave `launch/run.lock` or `launch/transactions/*.lock`. Ins
 ### Cloudflare and launch sequence
 
 1. Completed: verified the OS-keyring path, refreshed the unsigned proposal, and obtained the 0.5 PWR total transaction-fee authorization. Use `mainnet:launch -- status` to inspect the existing deployment.
-2. Completed: funded 15 PWR hosting credit. Do not repeat that deposit; additional deposits require separate authorization. No mainnet faucet is used.
+2. Completed: funded 15 PWR hosting credit. Do not repeat that deposit; additional deposits require separate authorization. A separately authorized 30 PWR deposit followed on 2026-09-18 ([record](#completed-additional-credit-deposit)). No mainnet faucet is used.
 3. Completed in SDK order: created one pinned nano lease, claimed the domain for `refuge`, authenticated and uploaded the exact hashed manifest, then observed provider readiness. Preserve the existing lease identifier; do not create a second lease.
 4. Completed and verified: Cloudflare **CNAME** named **`merovingian`** targets **`refuge-928a176.barney0.manifest0.net`**, **DNS only (gray cloud)**. This exact native FQDN came from the authenticated provider connection response; Fred retains it alongside the custom-domain router. Keep proxying disabled. Do not point the record at itself, the Fred API hostname, or the testnet deployment.
 5. Completed: direct DNS resolution and valid TLS on the custom domain and native hostname. Cloudflare manages DNS only; the provider serves HTTPS and must renew the origin certificate. See [Cloudflare proxy status](https://developers.cloudflare.com/dns/proxy-status/). Certificate renewal has not yet been observed over a renewal cycle.

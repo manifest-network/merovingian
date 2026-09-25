@@ -119,15 +119,20 @@ tests invoke local Node/Python subprocesses and make no network requests.
 
 ## Remaining confinement acceptance
 
-This job explicitly reports named AppArmor verification as **unavailable**. It
-does not load policy on a shared runner or expose privileged self-hosted runners
-to untrusted pull requests. A seccomp pass or a denied write due to ownership
-does not prove AppArmor enforcement. ENG-1038 must first establish provider
-support and the proposed service-specific profile; ENG-1041 still needs a
-separate isolated capable runner to verify that profile's enforce mode,
-controlled DNS/TLS/application compatibility, attributed negative denials, and
-attachment across recreation. This release acceptance item stays open even when
-the ordinary CI image job passes. See [Docker's AppArmor documentation](https://docs.docker.com/engine/security/apparmor/).
+This job reports AppArmor verification as **unavailable**. It does not load
+policy on a shared runner or expose privileged self-hosted runners to untrusted
+pull requests. A seccomp pass or a denied write due to ownership does not prove
+AppArmor enforcement.
+
+On 2026-09-25 the planned Merovingian-specific AppArmor profile was dropped,
+along with the tests that would have verified it on an isolated AppArmor-capable
+runner (ENG-1041 closed). Docker's `docker-default` profile in enforce mode is
+sufficient. The remaining acceptance
+is provider runtime evidence, tracked in ENG-1038. It must be tied to the running
+image digest, and the application process's `/proc/<pid>/attr/current` must read
+`docker-default (enforce)`. `docker info` and `docker inspect` do not prove
+that a profile is attached. This item stays open even when the CI image job
+passes. See [Docker's AppArmor documentation](https://docs.docker.com/engine/security/apparmor/).
 
 All checks are local candidate checks. Actual provider enforcement and any
 production publication, deployment or policy attachment require separate

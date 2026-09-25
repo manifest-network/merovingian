@@ -70,3 +70,11 @@ verification. The [release evidence](evidence/release-0.4.5.json) and
 Provider CPU/alert behavior and AppArmor enforcement remain unverified by these
 checks. Future production actions still require authorization under
 [AGENTS.md](../AGENTS.md).
+
+**Later follow-up, 2026-09-25:** a read-only check of the provider's CPU metrics
+confirmed that the throttling alert stopped after this release. It had 0 firing
+evaluations in a 91-hour window from 2026-09-21T18:00Z, 17 minutes after it went
+live, to 2026-09-25T13:00Z. See the
+[provider observation](RUNTIME-IMAGE.md#eng-1044-local-validation--2026-09-21) and
+its [evidence](evidence/provider-cpu-2026-09-25.json). AppArmor enforcement
+remains unverified; it is tracked in ENG-1038.

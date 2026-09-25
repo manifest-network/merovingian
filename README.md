@@ -13,8 +13,10 @@ registry version published through the MCP Registry workflow. It retains the
 OpenAPI contracts and read-only smoke checks from `0.4.6`, the curl healthcheck
 from `0.4.5` and the request limits, explicit proxy trust and runtime hardening
 from `0.4.4`. See the [release notes](docs/RELEASE-0.4.7.md) and
-[publication and acceptance evidence](docs/evidence/release-0.4.7.json), including
-the remaining provider/AppArmor acceptance work. The official MCP Registry lists
+[publication and acceptance evidence](docs/evidence/release-0.4.7.json). The
+remaining provider/AppArmor acceptance work is described in
+[image verification](docs/IMAGE-SECURITY.md#remaining-confinement-acceptance).
+The official MCP Registry lists
 `0.4.7` as active and latest, matching the deployed release.
 
 **MCP compatibility:** `0.4.3` changed the runtime/server-card name from

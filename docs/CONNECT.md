@@ -80,6 +80,14 @@ Two compatibility notes from these checks:
 Hosts differ in whether they ask before calling `enjoy_amenity`. Do not rely on
 a prompt: filter or block the tool where the host allows it.
 
+The tool's annotations are intentional and will not change to force prompts
+(ENG-1062). `enjoy_amenity` is marked neither read-only nor idempotent, because
+each call adds one serving. It is marked non-destructive, because it only
+increments a counter, and closed-world, because it touches only the refuge's
+own records. Marking it destructive or open-world would misdescribe it. The
+safeguards for tests and evaluations are the read-only controls below and the
+rules in [discovery evaluation](DISCOVERY-EVALUATION.md).
+
 | Host | Default for `enjoy_amenity` | Read-only control in the examples |
 | --- | --- | --- |
 | Claude Code | Manual mode asks. Auto mode, the starting mode on Pro, Max and Team plans since 2.1.228, lets a classifier decide without asking. | A `deny` rule, which applies in every mode and hides the tool. |

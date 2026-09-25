@@ -1,0 +1,62 @@
+{
+  "description": "Read-only provider CPU and alert check for the ENG-1044 healthcheck change on the mainnet lease. It compares a window before release 0.4.5 went live with the window after it. Nothing was changed on the monitoring system.",
+  "recordedAt": "2026-09-25T13:59:09Z",
+  "authorization": {
+    "context": "On 2026-09-25 the user authorized only these read-only queries against the mainnet monitoring Prometheus, for this one check, with the result recorded on ENG-1043. No rule, silence or configuration change was authorized or made."
+  },
+  "source": {
+    "system": "Mainnet monitoring Prometheus (cAdvisor container metrics and the ALERTS series), queried with instant queries through its HTTP API",
+    "lease": "01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd",
+    "selector": "container_label_fred_lease_uuid=\"01a0b0eb-a2d6-7831-85d6-820bfdb9cfcd\"",
+    "cpuQuotaCores": 0.5,
+    "alert": "TenantContainerCPUThrottled: 5-minute throttled/active CFS period ratio above 0.5 for 15 minutes, evaluated every 15 seconds",
+    "change": "Release 0.4.5 (curl healthcheck wrapper, ENG-1044) went live at 2026-09-21T17:43Z. Releases 0.4.6 and 0.4.7 keep the same healthcheck."
+  },
+  "queries": {
+    "placeholders": "L = source.selector; W = window length (72h before, 91h after); END = window end (2026-09-21T16:00:00Z before, 2026-09-25T13:00:00Z after); R = (sum(rate(container_cpu_cfs_throttled_periods_total{L}[5m])) / sum(rate(container_cpu_cfs_periods_total{L}[5m])))",
+    "throttleRatio": "sum(increase(container_cpu_cfs_throttled_periods_total{L}[W] @ END)) / sum(increase(container_cpu_cfs_periods_total{L}[W] @ END))",
+    "averageCores": "sum(rate(container_cpu_usage_seconds_total{L,cpu=\"total\"}[W] @ END))",
+    "activeShareOfWallPeriods": "sum(rate(container_cpu_cfs_periods_total{L}[W] @ END)) * 0.1",
+    "fiveMinuteRatio": "quantile_over_time(0.5 and 0.9, R[W:5m] @ END) and max_over_time(R[W:5m] @ END), sampled every 5 minutes",
+    "fiveMinuteSamplesAbove0.5": "sum_over_time((R > bool 0.5)[W:5m] @ END) out of count_over_time(R[W:5m] @ END)",
+    "firingEvaluations": "count_over_time(ALERTS{alertname=\"TenantContainerCPUThrottled\",alertstate=\"firing\",L}[W] @ END), summed over the returned series",
+    "pendingEvaluations": "count_over_time(ALERTS{alertname=\"TenantContainerCPUThrottled\",alertstate=\"pending\",L}[W] @ END), summed over the returned series"
+  },
+  "windows": {
+    "before": {
+      "range": "72h ending 2026-09-21T16:00:00Z",
+      "throttleRatio": 0.586,
+      "averageCores": 0.0109,
+      "activeShareOfWallPeriods": 0.032,
+      "fiveMinuteRatio": {
+        "p50": 0.6,
+        "p90": 0.675,
+        "max": 0.737
+      },
+      "fiveMinuteSamplesAbove0.5": "797 of 864",
+      "firingEvaluations": 8210,
+      "pendingEvaluations": 7613
+    },
+    "after": {
+      "range": "91h from 2026-09-21T18:00:00Z to 2026-09-25T13:00:00Z",
+      "throttleRatio": 0.029,
+      "averageCores": 0.0018,
+      "activeShareOfWallPeriods": 0.014,
+      "fiveMinuteRatio": {
+        "p50": 0.023,
+        "p90": 0.071,
+        "max": 0.483
+      },
+      "fiveMinuteSamplesAbove0.5": "0 of 1092",
+      "firingEvaluations": 0,
+      "pendingEvaluations": 16
+    }
+  },
+  "outcome": "The alert stopped firing after 0.4.5: from 8,210 firing evaluations in the 72 hours before (about 34 hours) to none in the 91 hours measured after. Average CPU use fell by 84%, and the throttle ratio fell from 0.586 to 0.029. The rule was inactive when queried.",
+  "limits": [
+    "The container still throttles occasionally. Sampled every 5 minutes, the 5-minute ratio peaked at 0.48 after the change. The rule's own 15-second evaluations briefly saw it above 0.5 (16 pending evaluations, about 4 minutes in total), but never for the rule's 15-minute duration.",
+    "The before window ends 1 hour 43 minutes before 0.4.5 went live, and the after window starts 17 minutes after it, so the 0.4.5 update period is excluded. The after window also contains the 0.4.6 (2026-09-22) and 0.4.7 (2026-09-24) lease updates and their container replacements; both keep the same curl healthcheck.",
+    "cAdvisor measures the whole container, so the healthcheck, application work and requests are not separated.",
+    "This is one lease at one CPU quota. The general rule weakness for bursty but idle tenants is tracked separately in ENG-1043."
+  ]
+}
