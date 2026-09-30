@@ -37,12 +37,12 @@
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
-    "@types/node": "^24.0.0",
+    "@types/node": "^24.13.6",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
     "cosmjs-amino-modern": "npm:@cosmjs/amino@0.34.0",
     "cosmjs-proto-signing-modern": "npm:@cosmjs/proto-signing@0.34.0",
-    "tsx": "4.23.13",
+    "tsx": "4.23.15",
     "typescript": "6.0.3"
   }
 }
