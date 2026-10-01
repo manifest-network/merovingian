@@ -106,6 +106,31 @@ test('unknown outcomes recover the same order and replay the exact authorization
   assert.equal(f.calls.filter(c => c.path.includes('/quotes')).length, 0);
 });
 
+test('gateway 502 responses require explicit replay and do not confirm an awaiting order', async () => {
+  const gateway = () => Response.json({ title: 'Error 502: Bad gateway', status: 502,
+    error_name: 'origin_bad_gateway', detail: 'private upstream diagnostics', retryable: true, retry_after: 60 },
+  { status: 502, headers: { 'Content-Type': 'application/problem+json' } });
+  const f = fixture([gateway, () => ok({ order, receipt: null }), gateway, () => ok({ order, receipt: null })]);
+  const exactAuthorization = signedPayment();
+  const expectedError = { code: 'STATION_UNAVAILABLE', status: 502, message: 'STATION_UNAVAILABLE' };
+  await assert.rejects(f.client.submitPayment(order, required, exactAuthorization), expectedError);
+  assert.equal(f.calls.length, 1, 'A retryable gateway error must not trigger an automatic payment retry');
+  const polled = await f.client.getOrder(order);
+  assert.equal(polled.order.payment_state, 'awaiting');
+  assert.equal(polled.receipt, null);
+  await assert.rejects(f.client.submitPayment(polled.order, required, exactAuthorization), expectedError);
+  assert.equal(f.calls.length, 3);
+  const afterReplay = await f.client.getOrder(polled.order);
+  assert.equal(afterReplay.order.payment_state, 'awaiting');
+  assert.equal(afterReplay.receipt, null);
+  assert.deepEqual(f.calls.map(c => [c.method, c.path]), [
+    ['POST', `/api/v1/agent/orders/${order.id}/pay`], ['GET', `/api/v1/agent/orders/${order.id}`],
+    ['POST', `/api/v1/agent/orders/${order.id}/pay`], ['GET', `/api/v1/agent/orders/${order.id}`],
+  ]);
+  assert.equal(f.calls[0]!.headers.get('PAYMENT-SIGNATURE'), exactAuthorization);
+  assert.equal(f.calls[2]!.headers.get('PAYMENT-SIGNATURE'), exactAuthorization);
+});
+
 test('a previously submitted order can be recovered after its quote expires', async () => {
   const f = fixture([() => ok({ order, receipt: null })]);
   const result = await f.client.createOrder({ ...quote, expires_at: '2026-09-30T00:00:00Z' }, 'persisted-key');

@@ -2,9 +2,12 @@
 
 Status on October 1, 2026: repository changes and local tests are prepared; no
 production release has been made. A real faucet-funded `MsgSend` increased the
-existing testnet account's available hosting credit. PWR-Station QA authentication
-and catalog access work, but QA x402 quotes and credit-address validation block
-the full purchase test. See [public evidence](evidence/pwr-station-2026-10-01.json).
+existing testnet account's available hosting credit. PWR-Station's x402 and
+32-byte recipient fixes now pass: quotes, order creation and the Base Sepolia
+payment challenge work. Signed payment submissions return Cloudflare HTTP 502,
+so the full purchase remains unconfirmed. See the
+[retest evidence](evidence/pwr-station-2026-10-01-retest.json) and
+[earlier direct-transfer evidence](evidence/pwr-station-2026-10-01.json).
 
 Existing visits stay free. These are two separate destinations:
 
@@ -105,34 +108,51 @@ remain private and outside source, Git history, images, and public reports.
 
 ## Requests for the PWR-Station team
 
-The QA probe at **2026-10-01T19:16:36.811Z** found:
+The retest at **2026-10-01T19:55:20.877Z** confirmed both reported fixes.
+The earlier 501 and recipient-validation errors in the initial evidence are
+historical, no longer the blocker.
 
 | Request | Observed result |
 | --- | --- |
 | ADR-036 authentication and package catalog | Successful |
-| x402 quote to existing credit address | HTTP 501, `AGENT_X402_UNAVAILABLE` |
-| Checkout quote to the same credit address | HTTP 400, `WALLET_ADDRESS_INVALID` |
+| x402 quote to existing 32-byte credit address | Valid sandbox quote |
+| Checkout quote to the same credit address | Valid sandbox quote |
 | Checkout control to an ordinary 20-byte wallet | Valid sandbox quote on `manifest-ledger-testnet` |
+| Repeated order creation with the same idempotency key | Same order recovered |
+| Order read authenticated as a different wallet | HTTP 404, `NOT_FOUND` |
+| Unsigned payment request | HTTP 402; exact 1 test USDC on Base Sepolia |
+| Signed payment request, then one identical replay | HTTP 502 on both submissions |
 
 Both quote paths used package `apk_pwrtest02`: 100 cents, zero listed fees,
-1,000,000 test PWR base units. No order or payment was created. Authentication
-tokens, login signatures and private wallet material are not included in evidence.
+1,000,000 test PWR base units. One order was created. Circle's faucet supplied
+20 test USDC; one authorization for 1 test USDC was signed and submitted twice
+unchanged. The observed challenge matched `eip155:84532`, Circle's test USDC,
+and EIP-712 domain `USDC` / `2`. A read-only call to the token contract accepted
+that same `transferWithAuthorization` at **20:10:38 UTC**, before expiry.
+Simulation validates the token authorization, not PWR-Station settlement.
 
-Please provide:
+**Current request: investigate the QA origin handling of signed
+`POST /api/v1/agent/orders/{id}/pay` requests.** The replay returned Cloudflare
+`origin_bad_gateway` at **2026-10-01T20:08:50Z**, Ray ID
+**`a43e19fdfc89abd0`**. The unsigned challenge and authenticated order reads
+succeeded. Both submissions left the order at `payment_state: awaiting`,
+`delivery_state: not_started`, `refund_state: none`, and
+`next_action: retry_same_request`, with no receipt. This differs from the
+documented `outcome_unknown` / `poll` state after an uncertain payment.
+The gateway response alone does not identify the failing origin component.
 
-1. **Enable x402 on QA.** The current
-   [testing page](https://pwr-station.com/docs/testing) specifies Base Sepolia,
-   Circle test USDC and the `USDC` / `2` EIP-712 domain, matching this prototype.
-   It also confirms that QA x402 is still being enabled. We need that path and
-   its facilitator operational before the full test. The client will verify the
-   actual challenge network and asset before signing, not rely on the hostname
-   or sandbox flag alone.
-2. **Valid 32-byte Manifest recipients.** The tenant credit account below exists
-   and accepts bank sends. The same package succeeds with a normal wallet, which
-   isolates the checkout rejection to the recipient type. Accept the credit
-   address as `recipient` and deliver to it with `MsgSend`.
+At **2026-10-01T20:15:10.152Z**, a read at Base Sepolia block **47558710**
+(timestamp **20:15:08 UTC**) showed the authorization unused after its
+**20:11:46 UTC** expiry and all **20 test USDC** remaining. Manifest hosting
+credit stayed at **4,343,500** base units. No replacement authorization or
+order was created. Before another signed attempt, reconcile the existing order
+with the expired authorization and obtain fresh valid terms as needed.
 
-Reproduction after ordinary QA authentication:
+Authentication tokens, order identifiers, idempotency keys, payment signatures,
+nonces and private wallet material are omitted from public evidence. Recovery
+material stays with the agent host.
+
+The previously failing quote is now a successful regression check:
 
 ```http
 POST https://testnet.pwr-station.com/api/v1/agent/quotes
@@ -146,8 +166,8 @@ Authorization: Bearer <your QA session token>
 }
 ```
 
-Changing only `payment_path` to `checkout` reproduces the address-validation
-error. Tenant: `manifest1z5ep5m3ka5v2fn5wyv93elqh5nqlfqww2u82f4`.
+Changing only `payment_path` to `checkout` also succeeds.
+Tenant: `manifest1z5ep5m3ka5v2fn5wyv93elqh5nqlfqww2u82f4`.
 Chain: `manifest-ledger-testnet`. PWR denomination:
 `factory/manifest1afk9zr2hn2jsac63h4hm60vl9z3e5u69gndzf7c99cqge3vzwjzsfmy9qj/upwr`.
 These are testnet reproduction targets, not mainnet payment instructions.
@@ -159,7 +179,8 @@ npm run pwr-station:probe -- manifest1z5ep5m3ka5v2fn5wyv93elqh5nqlfqww2u82f4
 ```
 
 It creates a temporary QA login and unpaid quotes. The retired testnet application
-does not need to be restarted. Live quote results can change after the QA fixes.
+does not need to be restarted. This probe does not exercise signed payment or
+prove the full purchase flow.
 
 ## Gifts and paid extras
 
@@ -187,18 +208,21 @@ entitlement. Provider payouts must remain outside the hosting contribution ledge
 
 ## Acceptance remaining
 
-`npm run check` passed the registry metadata check, TypeScript check, all **404
+`npm run check` passed the registry metadata check, TypeScript check, all **405
 local tests**, and production build. Tests used isolated local fixtures and did
 not publish, deploy or perform live visits.
 
 Local tests cover success, wrong chain/recipient/token, budgets, idempotent order
-recovery, exact payment replay after unknown outcomes, refunds, receipt mismatches,
-direct credit verification, mixed-message accounting and HTTP/MCP agreement.
+recovery, exact payment replay after unknown outcomes and gateway 502s, refunds,
+receipt mismatches, direct credit verification, mixed-message accounting and
+HTTP/MCP agreement.
 
-After the QA fixes, connect a host-owned test EVM signer and durable recovery
-storage, run one bounded purchase through the full path, and test interrupted
-payment/delivery recovery using the same order. Only then prepare a separate
-mainnet configuration and concrete release proposal. Production deployment or
+The private acceptance harness connected a host-owned test EVM signer and durable
+recovery storage, but the origin failure prevented settlement and delivery.
+After that failure is fixed, reconcile the expired authorization and existing
+order, complete one bounded purchase, and verify payment/delivery recovery.
+Only then prepare a separate mainnet configuration and concrete release proposal.
+Production deployment or
 real-money operations require explicit authorization. Nothing here reopens the
 retired lease or authorizes a mainnet payment.
 
