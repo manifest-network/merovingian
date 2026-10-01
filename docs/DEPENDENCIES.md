@@ -6,7 +6,9 @@ The published SDK differs from the development checkout. Runtime contribution ve
 
 ## Dependency overrides
 
-The lockfile applies no dependency overrides. The `axios` and `protobufjs` overrides used with SDK 0.22.0 were removed with the 0.23.0 upgrade: manifestjs 4.0.0 depends on Manifest's published forks, which declare the patched lines directly.
+The lockfile applies one scoped override: `@manifest-network/manifest-mcp-core` uses `undici@8.10.2` instead of the SDK's exact `8.10.0` pin. The October 1 final-image scan blocked eleven advisories in that HTTP dependency, all fixed by the [8.10.2 security release](https://github.com/nodejs/undici/releases/tag/v8.10.2). This patch keeps the published SDK at 0.23.0; remove the override when its upstream dependency pin includes the fixes.
+
+The `axios` and `protobufjs` overrides used with SDK 0.22.0 were removed with the 0.23.0 upgrade: manifestjs 4.0.0 depends on Manifest's published forks, which declare the patched lines directly.
 
 - `@cosmology/lcd` resolves to `@manifest-network/lcd@0.14.7`, which declares `axios@^1.19.0`; the lockfile resolves a single `axios@1.20.0`.
 - `@confio/ics23` resolves to `@manifest-network/ics23@0.6.10` (through `@manifest-network/stargate@0.32.4-ll.5`), which declares `protobufjs@^7.6.5` instead of the vulnerable 6.x line; the lockfile resolves a single `protobufjs@7.6.6`.
