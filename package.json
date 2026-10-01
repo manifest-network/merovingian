@@ -23,6 +23,7 @@
     "mainnet": "node --import tsx scripts/mainnet.ts",
     "keyring:build": "node scripts/build-keyring.mjs",
     "keyring:check": "node --import tsx scripts/keyring-check.ts",
+    "pwr-station:probe": "node --import tsx scripts/pwr-station-probe.ts",
     "mainnet:preview": "node --import tsx scripts/mainnet-preview.ts",
     "mainnet:launch": "node --import tsx scripts/mainnet-launch.ts"
   },

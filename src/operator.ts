@@ -50,8 +50,8 @@ export function operatorPage(config: Config, history: ContributionHistory, info:
   const totals = ready ? history.totals : null;
   const fundingLabel = history.complete ? 'Total funding' : 'Funding in recent history';
   const totalNote = totals ? `${formatPwr(totals.tenantAmount)} ${unit} from the tenant wallet.` : 'Funding history is unavailable.';
-  const historyUrl = config.restUrl && config.tenant ? new URL(`${config.restUrl.replace(/\/$/, '')}/cosmos/tx/v1beta1/txs`) : null;
-  if (historyUrl) historyUrl.search = new URLSearchParams({ query: `credit_funded.tenant='${config.tenant}'`, order_by: 'ORDER_BY_DESC', limit: '100', page: '1' }).toString();
+  const historyUrl = config.restUrl && info.status === 'available' && info.hostingCredit ? new URL(`${config.restUrl.replace(/\/$/, '')}/cosmos/tx/v1beta1/txs`) : null;
+  if (historyUrl && info.hostingCredit) historyUrl.search = new URLSearchParams({ query: `transfer.recipient='${info.hostingCredit.creditAddress}'`, order_by: 'ORDER_BY_DESC', limit: '100', page: '1' }).toString();
   const rows = ready ? history.entries.map(entry => `<tr><td>${time(entry.timestamp)}</td><td class="money">${formatPwr(entry.amount)}<br><span class="muted">${html(unit)}</span></td><td><details><summary>${entry.sender === config.tenant ? 'Tenant wallet' : 'Other wallet'}</summary><code>${html(entry.sender)}</code></details></td><td>${transactionLink(config, entry.transactionHash)}<br><span class="muted">Block ${html(entry.height)}</span></td></tr>`).join('') : '';
   const historyNotice = !ready
     ? `<aside class="notice" role="status">${html(history.message)} Refresh to try again. An unavailable query does not mean zero contributions.</aside>`
@@ -59,7 +59,7 @@ export function operatorPage(config: Config, history: ContributionHistory, info:
       ? `<aside class="notice">Recent history only. Totals cover the contributions shown, not lifetime funding. ${html(history.message)}</aside>`
       : '';
   const creditNotice = info.status !== 'available' || !info.hostingCredit
-    ? '<aside class="notice" role="status">Hosting credit is unavailable. Funding history and free visits remain independent of this balance query.</aside>'
+    ? '<aside class="notice" role="status">Hosting credit is unavailable. Free visits remain available while chain queries recover.</aside>'
     : '';
   return page(config, 'Operator dashboard — merovingian', '/operator', `
 <p class="eyebrow">Operator dashboard</p>
@@ -76,11 +76,11 @@ ${metric('Reserved hosting credit', creditAmount(info, 'reserved'), unit, 'Credi
 </div>
 <p class="small">History checked: ${time(history.checkedAt)}<br>Credit checked: ${time(info.checkedAt)}</p>
 <h2>Contribution history</h2>
-<p class="small">Successful PWR hosting deposits, newest first. Multiple deposits from one wallet in the same transaction are combined. Expand a wallet to see its address; transaction links open the chain’s JSON record.</p>
+<p class="small">Successful PWR hosting deposits, newest first. Multiple deposits from one wallet in the same transaction are combined. A distributor’s wallet does not identify its customer. Expand a wallet to see its address; transaction links open the chain’s JSON record.</p>
 ${rows ? `<div class="table-scroll" role="region" aria-label="Contribution history" tabindex="0"><table><caption>${history.entries.length} funding ${history.entries.length === 1 ? 'entry' : 'entries'} · ${history.scannedTransactions} of ${history.indexedTransactions ?? 'unknown'} indexed transactions checked</caption><thead><tr><th scope="col">Date (UTC)</th><th scope="col">Amount</th><th scope="col">Source</th><th scope="col">Transaction</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<p class="empty">${ready ? 'No matching contributions found in the checked transactions.' : 'Contribution history is temporarily unavailable.'}</p>`}
 <p class="small ledger-tools"><a href="/api/v1/contributions">History as JSON</a>${historyUrl ? `<a href="${html(historyUrl.toString())}">Chain history query</a>` : ''}</p>
 <h2>Where the funds go</h2>
-<p>Funding totals measure deposits. Available and reserved credit show the account’s current balance, which changes as hosting is settled. Hosting deposits cannot be withdrawn. Studio revenue will be tracked separately when paid extras launch.</p>
+<p>Funding totals measure deposits. Available and reserved credit show the account’s current balance, which changes as hosting is settled. Hosting deposits cannot be withdrawn. Gifts sent to the hosting provider’s payout wallet are separate from this ledger.</p>
 <p class="small">Tenant<br><code class="address">${html(config.tenant || 'Not configured')}</code></p>
 <p class="small">Token denomination<br><code class="address">${html(config.pwrDenom)}</code></p>
 <p class="small">Public aggregate counts and chain data only. No wallet connection or sign-in is needed. This page cannot spend funds or change the deployment.</p>`, false, styles);

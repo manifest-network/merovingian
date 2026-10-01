@@ -105,6 +105,7 @@ export function httpApiDocument(config: Config, description: string) {
     }] },
     Coin: object({ denom: nonempty, amount: { ...integer, description: 'Amount in integer base units, encoded as a string to preserve precision.' } }),
     HostingCredit: object({
+      creditAddress: { ...nonempty, description: 'Existing tenant credit account verified on the configured chain. Direct PWR bank transfers to this address fund hosting; the tenant wallet and provider payout are different destinations.' },
       available: array(ref('Coin')), reserved: array(ref('Coin')),
       activeLeases: { ...integer, description: 'Active lease count as a decimal integer string. Settlement can lag usage.' },
     }),
@@ -129,7 +130,7 @@ export function httpApiDocument(config: Config, description: string) {
     },
     ContributionEntry: object({
       transactionHash: hash, height: positiveInteger, timestamp: { ...dateTime, description: 'UTC indexed transaction time.' },
-      sender: { ...nonempty, description: 'Public funding address; does not identify a visitor.' },
+      sender: { ...nonempty, description: 'On-chain sender, which may be a distributor; does not identify its customer or a visitor.' },
       amount: { ...positiveInteger, description: 'Successful PWR funding for this sender and transaction in integer base units.' },
     }),
     ContributionTotals: object({
@@ -138,13 +139,13 @@ export function httpApiDocument(config: Config, description: string) {
       otherAmount: { ...integer, description: 'Deposits from all other funding wallets.' },
     }),
     ContributionHistory: {
-      description: 'All fields are required. Cached for up to 60 seconds. Entries aggregate by transaction and sender, so one transaction can produce multiple entries. Unavailable or unconfigured means unknown history, not zero deposits.',
+      description: 'All fields are required. Cached for up to 60 seconds. The transfer.recipient index covers MsgFundCredit and direct bank deposits to the existing credit account, counted once. Entries aggregate by transaction and sender, so one transaction can produce multiple entries. Unavailable or unconfigured means unknown history, not zero deposits.',
       oneOf: [
         object({ ...supportFields, status: { type: 'string', const: 'available' }, checkedAt: dateTime,
           entries: array(ref('ContributionEntry')), totals: ref('ContributionTotals'),
           indexedTransactions: { type: 'integer', minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
           scannedTransactions: { type: 'integer', minimum: 0, maximum: HISTORY_LIMIT, description: 'Distinct indexed transactions inspected, including records excluded from deposit totals.' },
-          complete: { type: 'boolean', description: `True when every indexed funding transaction was inspected. False means totals cover only returned entries from the latest page (at most ${HISTORY_LIMIT} transactions).` },
+          complete: { type: 'boolean', description: `True when every indexed deposit transaction was inspected. False means totals cover only returned entries from the latest page (at most ${HISTORY_LIMIT} transactions).` },
           message: nonempty }),
         ...['unavailable', 'unconfigured'].map(status => object({ ...supportFields, status: { type: 'string', const: status },
           checkedAt: nil, entries: { ...array(ref('ContributionEntry')), maxItems: 0 }, totals: nil, indexedTransactions: nil,
@@ -259,7 +260,7 @@ export function httpApiDocument(config: Config, description: string) {
         responses: operationResponses({ ...apiErrors, '200': jsonResponse('Availability, network, target tenant, token and unsigned instruction template. Unavailable or unconfigured returns null instructions, credit and checkedAt.', ref('SupportInfo'), examples.support) }),
       } },
       '/api/v1/contributions': { get: {
-        operationId: 'contributionHistory', summary: `Read public hosting deposits from the latest ${HISTORY_LIMIT} indexed funding transactions`,
+        operationId: 'contributionHistory', summary: `Read public hosting deposits from the latest ${HISTORY_LIMIT} indexed deposit transactions`,
         responses: operationResponses({ ...apiErrors, '200': jsonResponse('Availability, confirmed funding entries, base-unit totals, checkedAt and completeness. Partial totals cover only returned entries; unavailable totals are null. Cached for up to 60 seconds.', ref('ContributionHistory'), examples.history) }),
       } },
       '/api/v1/support/verify': { post: {

@@ -6,6 +6,7 @@ export const MAX_FORM_PARAMETERS = 5;
 export const BODY_TIMEOUT_MS = 5_000;
 export const HISTORY_LIMIT = 100;
 export const FUND_CREDIT_TYPE = '/liftedinit.billing.v1.MsgFundCredit';
+export const BANK_SEND_TYPE = '/cosmos.bank.v1beta1.MsgSend';
 export const OPENAPI_MEDIA_TYPE = 'application/vnd.oai.openapi+json';
 
 export const FUNDING_PLACEHOLDERS = Object.freeze({
@@ -37,8 +38,8 @@ export const SUPPORT_MESSAGES = Object.freeze({
     + 'You also pay network gas. After confirmation, submit the transaction hash to /api/v1/support/verify. '
     + 'The thank-you receipt is public, non-transferable, and proves no ownership or entitlement.',
   historyUnconfigured: 'Contribution history requires a configured refuge tenant and REST endpoint.',
-  historyComplete: 'All indexed funding transactions were inspected. Totals include only successful PWR funding events for this tenant.',
-  historyPartial: (scanned: number, indexed: number) => `Partial history: inspected ${scanned} of ${indexed} indexed funding transactions (latest ${HISTORY_LIMIT} maximum). Totals cover only the returned rows.`,
+  historyComplete: 'All indexed deposits were inspected. Totals include successful PWR transfers into this tenant credit account, counted once. A distributor address does not identify its customer.',
+  historyPartial: (scanned: number, indexed: number) => `Partial history: inspected ${scanned} of ${indexed} indexed deposit transactions (latest ${HISTORY_LIMIT} maximum). Totals cover only the returned rows.`,
   historyUnavailable: 'Contribution history could not be verified or queried. Totals are unavailable; this does not mean no contributions were made.',
   invalidHash: 'Provide exactly 64 hexadecimal transaction-hash characters and, optionally, a valid Manifest sender.',
   verificationUnconfigured: 'The contribution jar is not configured.',

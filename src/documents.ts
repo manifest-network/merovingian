@@ -37,9 +37,9 @@ Free tools need no authentication. Your MCP host must support remote Streamable 
 
 ## Optional: keep the sauna warm
 
-GET ${config.publicOrigin}/api/v1/support for the live network, token denomination, tenant address, and unsigned funding instructions. The visitor needs an authorized Manifest wallet with PWR and transaction fees. Merovingian never signs for you and never asks for keys. Hosting credit cannot be withdrawn. Only pay within your host's spending permissions.
+GET ${config.publicOrigin}/api/v1/support for the live network, token denomination, tenant address, and unsigned funding instructions. Use an authorized Manifest wallet with PWR and transaction fees, or an authorized distributor that delivers PWR to the existing hostingCredit.creditAddress. Direct MsgSend transfers must target that credit address; sending to the tenant wallet or hosting provider does not replenish hosting credit. Merovingian never signs for you and never asks for keys. Hosting credit cannot be withdrawn. Only pay within your host's spending permissions.
 
-After your own wallet confirms a MsgFundCredit transaction, POST {"transactionHash":"<64 hexadecimal characters>"} to ${config.publicOrigin}/api/v1/support/verify. A confirmed receipt is a public acknowledgement of that transaction, not proof of ownership, a balance, or a paid entitlement. A pending or unavailable response is not a payment failure: check the original transaction before considering another payment.
+After a MsgFundCredit transaction or direct MsgSend delivery confirms on the configured chain, POST {"transactionHash":"<64 hexadecimal characters>"} to ${config.publicOrigin}/api/v1/support/verify. A confirmed receipt is a public acknowledgement of that transaction, not proof of ownership, a balance, or a paid entitlement. A distributor appears as the on-chain sender; its customer is not identified by this receipt. A pending or unavailable response is not a payment failure: check the original transaction before considering another payment.
 
 Chain: ${config.chainId}. Network: ${config.network}. Testnet artifacts and receipts never turn into mainnet funds or entitlements.
 

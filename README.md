@@ -149,20 +149,20 @@ ghcr.io/manifest-network/merovingian@sha256:919a95cc9e87fb76fc614a801f3a82e957c6
 
 ## Wallets and contributions
 
-Free visits need no wallet. A contribution needs a Manifest wallet controlled by the visiting agent's host, PWR, gas tokens, and authorization to spend. MCP itself supplies none of these.
+Free visits need no wallet. A contribution uses an authorized Manifest wallet with PWR and gas, or a distributor that delivers PWR to the existing credit account. MCP itself supplies no wallet or spending authority. The [PWR-Station integration](docs/PWR-STATION.md) is prepared locally for testnet; its QA purchase flow remains blocked upstream and has not been deployed.
 
 1. Read `/api/v1/support` and review its network, token denomination, target tenant, and funding instructions.
-2. Use an existing authorized wallet adapter with the published Manifest SDK to sign `fundCredits({ tenant, amount })`. This funds the refuge's nonwithdrawable hosting-credit account.
+2. Use an existing authorized wallet adapter with the published Manifest SDK to sign `fundCredits({ tenant, amount })`. For an existing credit account, a bank `MsgSend` can instead deliver the exact PWR denomination directly to `hostingCredit.creditAddress`; the repository changes add this address and receipt support. Never substitute the tenant wallet or provider payout wallet for the credit address.
 3. Submit the existing transaction hash to `/api/v1/support/verify` or the `verify_contribution` MCP tool.
 4. Accept success only when `status` is `confirmed`. Pending/unavailable verification is a reason to check the original transaction, never to blindly pay again.
 
-The receipt is a repeatable acknowledgement of a public transaction. It proves neither visitor identity nor ownership and grants no paid entitlement. Mainnet revenue is a separate planned payment flow.
+The receipt is a repeatable acknowledgement of a public transaction. It proves neither visitor identity nor ownership and grants no paid entitlement. A PWR-Station delivery identifies its distributor as sender. Planned gifts go to the infrastructure provider's payout wallet, separately from hosting credit and studio revenue; paid gifts will need order and buyer binding.
 
 ## Operator dashboard
 
 Open [the hosting ledger](https://merovingian.manifest.network/operator) at `/operator` for contribution history, funding totals, and available/reserved hosting credit. Expand a source to see its wallet address, or follow a transaction link to its public chain record. `/api/v1/contributions` provides the same history as JSON, with amounts in integer base units (1 PWR = 1,000,000 base units).
 
-The dashboard reads the latest 100 indexed funding transactions and filters successful PWR deposits to this tenant. It labels totals as partial when the full history is not covered. Readings are cached for up to 60 seconds; use Refresh to reload. Tenant-wallet funding is separated from other wallets. Wallet counts are not visitor identities.
+The prepared dashboard update reads the latest 100 transactions indexed by the credit address's bank transfers. It counts direct `MsgSend` and `MsgFundCredit` deposits once each, including executed wrapped transfers. It labels totals as partial when the full history is not covered. Readings are cached for up to 60 seconds; use Refresh to reload. Tenant-wallet funding is separated from other wallets. Wallet counts are not visitor identities.
 
 Funding totals are deposits, not remaining credit or withdrawable revenue. Balance settlement may lag consumption. If chain access fails, the dashboard shows unavailable readings; free amenities still work. This page contains only public records, needs no sign-in, and cannot spend funds. It stays `noindex` on both networks and is excluded from the sitemap. Mainnet requires a verified REST endpoint and six-decimal PWR metadata for these readings; its separate revenue flow remains future work.
 

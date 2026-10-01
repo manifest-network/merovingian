@@ -158,6 +158,10 @@ Mainnet readiness also includes adequate funding/runway alerts, verified recipie
 
 ## Research references
 
+The [PWR-Station testnet integration follow-up](docs/PWR-STATION.md) records the
+October 1 implementation, direct-bank-transfer validation, upstream QA blockers,
+and the distinct provider-payout flow for future gifts. Existing visits stay free.
+
 - [Published Manifest SDK](https://www.npmjs.com/package/@manifest-network/manifest-sdk): read clients, Fred deployment, Node transport, and faucet exports. This project pins the tested published version.
 - [Billing API](https://github.com/manifest-network/manifest-ledger/blob/main/x/billing/docs/API.md) and [billing implementation](https://github.com/manifest-network/manifest-ledger/blob/main/x/billing/keeper/msg_server.go): third-party credit funding and token-policy checks. These establish source behavior, not deployed network configuration.
 - [Manifest ledger](https://github.com/manifest-network/manifest-ledger): provider catalogs, credit accounts, and leases.
