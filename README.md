@@ -149,7 +149,7 @@ ghcr.io/manifest-network/merovingian@sha256:919a95cc9e87fb76fc614a801f3a82e957c6
 
 ## Wallets and contributions
 
-Free visits need no wallet. A contribution uses an authorized Manifest wallet with PWR and gas, or a distributor that delivers PWR to the existing credit account. MCP itself supplies no wallet or spending authority. The [PWR-Station integration](docs/PWR-STATION.md) is prepared locally for testnet: quotes, orders and the payment challenge pass, but signed payments return an upstream HTTP 502. It has not been deployed.
+Free visits need no wallet. A contribution uses an authorized Manifest wallet with PWR and gas, or a distributor that delivers PWR to the existing credit account. MCP itself supplies no wallet or spending authority. The [PWR-Station integration](docs/PWR-STATION.md) passed a full testnet purchase: 1 test USDC bought 1 test PWR delivered directly to hosting credit, with matching local HTTP/MCP receipts and no duplicate charge on replay. It has not been deployed.
 
 1. Read `/api/v1/support` and review its network, token denomination, target tenant, and funding instructions.
 2. Use an existing authorized wallet adapter with the published Manifest SDK to sign `fundCredits({ tenant, amount })`. For an existing credit account, a bank `MsgSend` can instead deliver the exact PWR denomination directly to `hostingCredit.creditAddress`; the repository changes add this address and receipt support. Never substitute the tenant wallet or provider payout wallet for the credit address.

@@ -1,13 +1,12 @@
 # PWR-Station integration — testnet first
 
-Status on October 1, 2026: repository changes and local tests are prepared; no
-production release has been made. A real faucet-funded `MsgSend` increased the
-existing testnet account's available hosting credit. PWR-Station's x402 and
-32-byte recipient fixes now pass: quotes, order creation and the Base Sepolia
-payment challenge work. Signed payment submissions return Cloudflare HTTP 502,
-so the full purchase remains unconfirmed. See the
-[retest evidence](evidence/pwr-station-2026-10-01-retest.json) and
-[earlier direct-transfer evidence](evidence/pwr-station-2026-10-01.json).
+Status on October 2, 2026: the full testnet purchase passed. An agent-controlled
+wallet spent **1 test USDC on Base Sepolia**, and PWR-Station delivered
+**1 test PWR directly to the existing 32-byte hosting credit address**.
+Merovingian's local HTTP and MCP interfaces confirmed the same receipt, and
+history counted the deposit once. Replaying the paid request returned the same
+receipt without another charge or delivery. No production release has been made.
+See the [end-to-end evidence](evidence/pwr-station-2026-10-02.json).
 
 Existing visits stay free. These are two separate destinations:
 
@@ -106,47 +105,52 @@ The low-level client never automatically retries, signs, or increases the budget
 The host must persist recovery state across process restarts. Those files must
 remain private and outside source, Git history, images, and public reports.
 
-## Requests for the PWR-Station team
+## Testnet acceptance
 
-The retest at **2026-10-01T19:55:20.877Z** confirmed both reported fixes.
-The earlier 501 and recipient-validation errors in the initial evidence are
-historical, no longer the blocker.
+The October 2 purchase completed after PWR-Station's QA update. The earlier
+501, 32-byte recipient rejection and signed-payment 502 are resolved for this
+tested flow. Their historical results remain in the
+[initial evidence](evidence/pwr-station-2026-10-01.json) and
+[October 1 retest](evidence/pwr-station-2026-10-01-retest.json).
 
 | Request | Observed result |
 | --- | --- |
 | ADR-036 authentication and package catalog | Successful |
-| x402 quote to existing 32-byte credit address | Valid sandbox quote |
-| Checkout quote to the same credit address | Valid sandbox quote |
-| Checkout control to an ordinary 20-byte wallet | Valid sandbox quote on `manifest-ledger-testnet` |
+| x402 quote to existing 32-byte credit address | Valid sandbox quote on `manifest-ledger-testnet` |
+| Checkout quotes to credit address and ordinary-wallet control | Passed in the October 1 quote probe; checkout payment was not exercised |
 | Repeated order creation with the same idempotency key | Same order recovered |
 | Order read authenticated as a different wallet | HTTP 404, `NOT_FOUND` |
 | Unsigned payment request | HTTP 402; exact 1 test USDC on Base Sepolia |
-| Signed payment request, then one identical replay | HTTP 502 on both submissions |
+| Signed payment request | Settled; PWR delivery queued |
+| Order poll from a fresh process | Delivery confirmed; `next_action: complete`, `recording_state: n_a`, no refund |
+| Identical signed request replay after settlement | Same delivery receipt, no additional charge or credit increase |
+| Local HTTP and MCP contribution verification | Matching confirmed receipts for 1,000,000 PWR base units |
+| Local contribution history | Deposit counted exactly once |
 
-Both quote paths used package `apk_pwrtest02`: 100 cents, zero listed fees,
-1,000,000 test PWR base units. One order was created. Circle's faucet supplied
-20 test USDC; one authorization for 1 test USDC was signed and submitted twice
-unchanged. The observed challenge matched `eip155:84532`, Circle's test USDC,
-and EIP-712 domain `USDC` / `2`. A read-only call to the token contract accepted
-that same `transferWithAuthorization` at **20:10:38 UTC**, before expiry.
-Simulation validates the token authorization, not PWR-Station settlement.
+Before the new purchase, the October 1 order was polled and returned `requote`.
+At **2026-10-02T15:57:49.886Z**, finalized Base Sepolia block **47593575**
+(timestamp **15:37:18 UTC**) proved that its old authorization had expired
+unused. The wallet still held all **20 faucet test USDC** and hosting credit
+remained **4,343,500** base units. Only after that reconciliation was a fresh
+quote, order and authorization created.
 
-**Current request: investigate the QA origin handling of signed
-`POST /api/v1/agent/orders/{id}/pay` requests.** The replay returned Cloudflare
-`origin_bad_gateway` at **2026-10-01T20:08:50Z**, Ray ID
-**`a43e19fdfc89abd0`**. The unsigned challenge and authenticated order reads
-succeeded. Both submissions left the order at `payment_state: awaiting`,
-`delivery_state: not_started`, `refund_state: none`, and
-`next_action: retry_same_request`, with no receipt. This differs from the
-documented `outcome_unknown` / `poll` state after an uncertain payment.
-The gateway response alone does not identify the failing origin component.
+The new order used package `apk_pwrtest02`: 100 cents, zero listed fees,
+1,000,000 test PWR base units. The challenge matched `eip155:84532`, Circle's
+test USDC, and EIP-712 domain `USDC` / `2`. The confirmed
+[Base Sepolia settlement](https://sepolia.basescan.org/tx/0x9ec7e2ae55d3e3bb225b46dc38e680d59104abeadb0fd63453f53f61a652d42e)
+contained exactly one matching USDC transfer for **1,000,000 base units**.
+The authorization was consumed and the wallet balance became **19 test USDC**.
 
-At **2026-10-01T20:15:10.152Z**, a read at Base Sepolia block **47558710**
-(timestamp **20:15:08 UTC**) showed the authorization unused after its
-**20:11:46 UTC** expiry and all **20 test USDC** remaining. Manifest hosting
-credit stayed at **4,343,500** base units. No replacement authorization or
-order was created. Before another signed attempt, reconcile the existing order
-with the expired authorization and obtain fresh valid terms as needed.
+PWR-Station delivered with one root `MsgSend`, without `MsgFundCredit`, in
+[Manifest testnet transaction 5D166444…EF5B19FF](https://nodes.liftedinit.tech/manifest/testnet/api/cosmos/tx/v1beta1/txs/5D166444D8552011055CD05C9BFCBA6B3912C250611B7BABBA18CF63EF5B19FF),
+height **11438930**. Available hosting credit increased from **4,343,500 to
+5,343,500** base units. The receipt attributes the transfer to PWR-Station's
+distributor, not the purchasing agent.
+
+HTTP support, verification and history, plus MCP `hosting_support` and
+`verify_contribution`, were exercised against a loopback-only application using
+the real testnet transaction. All checks passed with **zero servings**. The
+retired testnet lease was not reopened, and no public deployment was changed.
 
 Authentication tokens, order identifiers, idempotency keys, payment signatures,
 nonces and private wallet material are omitted from public evidence. Recovery
@@ -217,14 +221,17 @@ recovery, exact payment replay after unknown outcomes and gateway 502s, refunds,
 receipt mismatches, direct credit verification, mixed-message accounting and
 HTTP/MCP agreement.
 
-The private acceptance harness connected a host-owned test EVM signer and durable
-recovery storage, but the origin failure prevented settlement and delivery.
-After that failure is fixed, reconcile the expired authorization and existing
-order, complete one bounded purchase, and verify payment/delivery recovery.
-Only then prepare a separate mainnet configuration and concrete release proposal.
-Production deployment or
-real-money operations require explicit authorization. Nothing here reopens the
-retired lease or authorizes a mainnet payment.
+The private acceptance harness completed the testnet purchase with a host-owned
+EVM signer and durable recovery storage. Live checks covered expired-order
+reconciliation, process restarts, idempotent order creation, exact paid-request
+replay, wallet isolation, settlement and delivery. Failure and refund branches
+remain covered by local fixtures; no live refund or deliberately interrupted
+settlement was induced.
+
+A reusable host-owned purchase runner, paid-gift order/claim binding, and a
+separate mainnet configuration and release proposal remain follow-up work.
+Production deployment or real-money operations require explicit authorization.
+Nothing here reopens the retired lease or authorizes a mainnet payment.
 
 Primary API references: [overview](https://pwr-station.com/docs/overview),
 [purchase flow](https://pwr-station.com/docs/purchase-flow),
