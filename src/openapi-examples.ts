@@ -22,7 +22,7 @@ export function responseExamples(config: Config, amenities = getAmenities()) {
         amount: { denom, amount: FUNDING_PLACEHOLDERS.amount } },
       notice: SUPPORT_MESSAGES.fundingNotice,
     },
-    hostingCredit: { available: [{ denom, amount: '2000000' }], reserved: [{ denom, amount: '500000' }], activeLeases: '1' },
+    hostingCredit: { creditAddress: '<example only: read hostingCredit.creditAddress from GET /api/v1/support>', available: [{ denom, amount: '2000000' }], reserved: [{ denom, amount: '500000' }], activeLeases: '1' },
     checkedAt,
   };
   const history = {

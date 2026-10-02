@@ -15,15 +15,17 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { liftedinit } from '@manifest-network/manifestjs';
 import { parseAddress } from '@manifest-network/manifest-sdk';
 import { TxBody, TxRaw } from 'cosmjs-types/cosmos/tx/v1beta1/tx.js';
+import { MsgSend } from 'cosmjs-types/cosmos/bank/v1beta1/tx.js';
 import { createApp, REQUEST_LIMITS, type AppOptions } from '../src/app.js';
 import { loadConfig, type Config } from '../src/config.js';
 import { VisitCounter } from '../src/counts.js';
 import { FUND_CREDIT_TYPE, SupportService, type ChainGateway, type ChainTransaction, type FundingHistoryPage, type SupportInfo, type ContributionHistory, type VerificationResult } from '../src/support.js';
-import { API_MESSAGES, MAX_VISIT_OUTPUT_BYTES, OPENAPI_MEDIA_TYPE } from '../src/protocol.js';
+import { API_MESSAGES, BANK_SEND_TYPE, MAX_VISIT_OUTPUT_BYTES, OPENAPI_MEDIA_TYPE } from '../src/protocol.js';
 
 // Synthetic addresses and indexed transaction bytes; no keys, signing or network access.
 const tenant = 'manifest1qyqszqgpqyqszqgpqyqszqgpqyqszqgpn3rfe5';
 const sender = 'manifest1qgpqyqszqgpqyqszqgpqyqszqgpqyqszz49vjz';
+const creditAddress = 'manifest1u38rpxv2ynqy5fe8xsqyzp6w37qkmdcya9jmuqwfxqxrldru0wrqqd8yzt';
 const checkedAt = '2026-09-21T00:00:00.000Z';
 const pwrDenom = loadConfig({}).pwrDenom;
 const config: Config = {
@@ -53,10 +55,12 @@ function historyPage(total = '1'): FundingHistoryPage {
   return { total, txResponses: [{
     txhash: transaction().hash, height: '1542', code: 0, timestamp: '2026-09-21T00:00:00.123456789Z',
     tx: { '@type': '/cosmos.tx.v1beta1.Tx', body: { messages: messages.map(message => ({ '@type': FUND_CREDIT_TYPE, ...message })) } },
-    events: messages.map(message => ({ type: 'credit_funded', attributes: Object.entries({
-      tenant, sender: message.sender, amount: `${message.amount.amount}${message.amount.denom}`, credit_address: tenant,
+    events: messages.flatMap(message => [{ type: 'transfer', attributes: Object.entries({
+      recipient: creditAddress, sender: message.sender, amount: `${message.amount.amount}${message.amount.denom}`,
+    }).map(([key, value]) => ({ key, value })) }, { type: 'credit_funded', attributes: Object.entries({
+      tenant, sender: message.sender, amount: `${message.amount.amount}${message.amount.denom}`, credit_address: creditAddress,
       new_balance: `9007199254741000${message.amount.denom}`,
-    }).map(([key, value]) => ({ key, value })) })),
+    }).map(([key, value]) => ({ key, value })) }]),
   }] };
 }
 
@@ -64,7 +68,7 @@ async function fixture(t: TestContext, overrides: Partial<Config> = {}, gatewayO
   const effectiveConfig = { ...config, ...overrides };
   const gateway: ChainGateway = {
     getChainId: async () => effectiveConfig.chainId, getTransaction: async () => transaction(),
-    getCredit: async () => ({ available: [{ denom: effectiveConfig.pwrDenom, amount: '9007199254740993' }],
+    getCredit: async () => ({ creditAddress, available: [{ denom: effectiveConfig.pwrDenom, amount: '9007199254740993' }],
       reserved: [{ denom: effectiveConfig.pwrDenom, amount: '7' }], activeLeases: '1' }),
     getFundingHistory: async () => historyPage(), ...gatewayOverrides,
   };
@@ -382,6 +386,28 @@ test('real history handling distinguishes empty, partial and failed reads', asyn
     const name = history.status === 'available' ? mode : 'unavailable';
     assert.equal((c.example('/api/v1/contributions', 'get', 200, name) as ContributionHistory).message, history.message);
   });
+});
+
+test('direct PWR delivery produces the same public receipt over HTTP and MCP without serving a visit', async t => {
+  const bytes = TxRaw.encode(TxRaw.fromPartial({
+    bodyBytes: TxBody.encode(TxBody.fromPartial({ messages: [{ typeUrl: BANK_SEND_TYPE,
+      value: MsgSend.encode({ fromAddress: sender, toAddress: creditAddress, amount: [{ denom: pwrDenom, amount: '1000000' }] }).finish(),
+    }] })).finish(), signatures: [new Uint8Array([1, 2, 3])],
+  })).finish();
+  const tx = { hash: createHash('sha256').update(bytes).digest('hex').toUpperCase(), height: '1542', code: 0, bytes };
+  const f = await fixture(t, {}, { getTransaction: async () => tx });
+  const c = await contracts(f);
+  const info = await c.response('/api/v1/support', 'get', await f.request('/api/v1/support'), 200);
+  assert.equal(info.hostingCredit.creditAddress, creditAddress);
+  const mcp = await f.mcp();
+  await c.agreement(mcp, 'hosting_support', {}, info, 'SupportInfo');
+  const input = { transactionHash: tx.hash };
+  const verified = await c.response('/api/v1/support/verify', 'post', await f.json('/api/v1/support/verify', input), 200);
+  assert.equal(verified.status, 'confirmed');
+  assert.deepEqual(verified.receipt.contributions, [{ sender, amount: '1000000' }]);
+  assert.equal(verified.receipt.provesOwnership, false);
+  await c.agreement(mcp, 'verify_contribution', input, verified, 'VerificationResult');
+  assert.equal((await (await f.request('/api/v1/stats')).json()).total, '0');
 });
 
 test('pending, failed, unrelated and inconsistent indexed transactions conform over HTTP and MCP', async t => {

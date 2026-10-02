@@ -69,6 +69,19 @@ grants no entitlement. A pending or unavailable result is a reason to check the
 original transaction, never to blindly pay again.
 
 History queries use `GetTxsEvent` with `query`, `order_by`, `page` and `limit`.
+The prepared direct-deposit update resolves the existing credit account first,
+then queries `transfer.recipient='<creditAddress>'`. It counts PWR bank movements
+from both `MsgSend` and `MsgFundCredit` once, with billing events used only for
+consistency checks. History includes executed wrapped transfers; individual
+receipt verification supports direct root messages. A missing credit account or
+an inconsistent event response yields unavailable history.
+
+`hostingCredit.creditAddress` is a required string whenever `hostingCredit` is
+present. It is the verified existing account's destination for direct PWR
+delivery; neither the tenant wallet nor the provider payout wallet is a substitute.
+Distributor addresses identify the on-chain sender, not their customers. The
+[PWR-Station testnet notes](PWR-STATION.md) describe the unreleased integration.
+
 In Manifest's Cosmos SDK v0.50.14-liftedinit.1, the
 [transaction service](https://github.com/manifest-network/cosmos-sdk/blob/v0.50.14-liftedinit.1/x/auth/tx/service.go#L45-L75)
 always sets the response's top-level `total` from the

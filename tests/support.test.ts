@@ -5,6 +5,8 @@ import { createServer } from 'node:http';
 import test from 'node:test';
 import { liftedinit } from '@manifest-network/manifestjs';
 import { TxBody, TxRaw } from 'cosmjs-types/cosmos/tx/v1beta1/tx.js';
+import { MsgSend } from 'cosmjs-types/cosmos/bank/v1beta1/tx.js';
+import { BANK_SEND_TYPE } from '../src/protocol.js';
 import {
   FUND_CREDIT_TYPE, SupportService,
   type ChainGateway, type ChainTransaction, type FundingHistoryPage, type SupportConfig,
@@ -12,6 +14,7 @@ import {
 
 const tenant = 'manifest1am058pdux3hyulcmfgj4m3hhrlfn8nzmx97smg';
 const sender = 'manifest19rl4cm2hmr8afy4kldpxz3fka4jguq0aaz02ta';
+const creditAddress = 'manifest1u38rpxv2ynqy5fe8xsqyzp6w37qkmdcya9jmuqwfxqxrldru0wrqqd8yzt';
 const config: SupportConfig = {
   network: 'testnet', chainId: 'manifest-testnet-1', rpcUrl: 'https://rpc.example.com',
   gasPrice: '1umfx', pwrDenom: 'upwr', tenant,
@@ -36,12 +39,76 @@ function transaction(messages = [funding()], signatures = [new Uint8Array([1, 2,
   return { hash: createHash('sha256').update(bytes).digest('hex').toUpperCase(), height: '1542', code: 0, bytes };
 }
 
+function bankSend(fromAddress = sender, toAddress = creditAddress, amount = [{ denom: 'upwr', amount: '1000000' }]) {
+  return { typeUrl: BANK_SEND_TYPE, value: MsgSend.encode({ fromAddress, toAddress, amount }).finish() };
+}
+
+test('direct PWR delivery to existing credit confirms without MsgFundCredit or buyer attribution', async () => {
+  const tx = transaction([bankSend()]);
+  const { service } = fixture(tx);
+  const result = await service.verify({ transactionHash: tx.hash });
+  assert.equal(result.status, 'confirmed');
+  if (result.status !== 'confirmed') return;
+  assert.deepEqual(result.receipt.contributions, [{ sender, amount: '1000000' }]);
+  assert.equal(result.receipt.amount.amount, '1000000');
+  assert.equal(result.receipt.provesOwnership, false);
+  assert.equal(result.receipt.transferable, false);
+  assert.deepEqual(await service.verify({ transactionHash: tx.hash, expectedSender: sender.toUpperCase() }), result);
+  assert.equal((await service.verify({ transactionHash: tx.hash, expectedSender: tenant })).status, 'not_a_contribution');
+});
+
+test('direct transfers and FundCredit combine exactly, ignoring other destinations and coins', async () => {
+  const tx = transaction([
+    bankSend(sender.toUpperCase(), creditAddress.toUpperCase(), [{ denom: 'upwr', amount: '9007199254740993' }, { denom: 'umfx', amount: '20' }]),
+    funding({ amount: '2' }), bankSend(tenant, creditAddress, [{ denom: 'upwr', amount: '3' }]),
+    bankSend(sender, tenant), bankSend(creditAddress, creditAddress),
+  ]);
+  const result = await fixture(tx).service.verify({ transactionHash: tx.hash });
+  assert.equal(result.status, 'confirmed');
+  if (result.status !== 'confirmed') return;
+  assert.equal(result.receipt.amount.amount, '9007199254740998');
+  assert.deepEqual(result.receipt.contributions, [{ sender, amount: '9007199254740995' }, { sender: tenant, amount: '3' }]);
+});
+
+test('provider/tenant payouts, self sends, invalid coins and malformed bank messages are not hosting contributions', async () => {
+  const invalid = [
+    bankSend(sender, tenant), bankSend(creditAddress, creditAddress), bankSend('invalid', creditAddress),
+    bankSend(sender, creditAddress, []), bankSend(sender, creditAddress, [{ denom: 'umfx', amount: '1000000' }]),
+    bankSend(sender, creditAddress, [{ denom: 'upwr', amount: '1' }, { denom: 'upwr', amount: '2' }]),
+    { typeUrl: BANK_SEND_TYPE, value: new Uint8Array([255]) },
+    ...['0', '-1', '01', '1.5', '9'.repeat(79)].map(amount => bankSend(sender, creditAddress, [{ denom: 'upwr', amount }])),
+  ];
+  for (const message of invalid) {
+    const tx = transaction([message]);
+    const result = await fixture(tx).service.verify({ transactionHash: tx.hash });
+    assert.equal(result.status, 'not_a_contribution');
+    assert.ok(!('receipt' in result));
+  }
+});
+
+test('direct delivery requires a verified existing account and successful inclusion on the expected chain', async () => {
+  const tx = transaction([bankSend()]);
+  for (const [override, status] of [
+    [{ getCredit: async () => null }, 'not_a_contribution'],
+    [{ getCredit: async () => { throw new Error('private endpoint detail'); } }, 'unavailable'],
+    [{ getCredit: async () => ({ creditAddress: 'bad', available: [], reserved: [], activeLeases: '0' }) }, 'unavailable'],
+    [{ getChainId: async () => 'manifest-ledger' }, 'unavailable'],
+  ] as const) {
+    const result = await fixture(tx, override).service.verify({ transactionHash: tx.hash });
+    assert.equal(result.status, status);
+    assert.ok(!('receipt' in result));
+  }
+  assert.equal((await fixture({ ...tx, code: 7 }).service.verify({ transactionHash: tx.hash })).status, 'failed');
+  const unsigned = transaction([bankSend()], []);
+  assert.equal((await fixture(unsigned).service.verify({ transactionHash: unsigned.hash })).status, 'not_a_contribution');
+});
+
 function fixture(tx: ChainTransaction | null = transaction(), overrides: Partial<ChainGateway> = {}, options = {}) {
   let reads = 0;
   const gateway: ChainGateway = {
     getChainId: async () => { reads++; return config.chainId; },
     getTransaction: async () => tx,
-    getCredit: async () => ({ available: [{ denom: 'upwr', amount: '2200' }], reserved: [], activeLeases: '1' }),
+    getCredit: async () => ({ creditAddress, available: [{ denom: 'upwr', amount: '2200' }], reserved: [], activeLeases: '1' }),
     ...overrides,
   };
   return { service: new SupportService(config, gateway, options), reads: () => reads, gateway };
@@ -266,7 +333,7 @@ test('credit gateway makes only one credit query after both identity checks and 
   try {
     const [a, b] = await Promise.all([service.getInfo(), service.getInfo()]);
     assert.equal(a.status, 'available');
-    assert.deepEqual(a.hostingCredit, { available: [{ denom: 'upwr', amount: '2200' }], reserved: [{ denom: 'upwr', amount: '20' }], activeLeases: '1' });
+    assert.deepEqual(a.hostingCredit, { creditAddress, available: [{ denom: 'upwr', amount: '2200' }], reserved: [{ denom: 'upwr', amount: '20' }], activeLeases: '1' });
     assert.deepEqual(paths, ['/status', '/cosmos/base/tendermint/v1beta1/node_info', `/liftedinit/billing/v1/credit/${tenant}`]);
     assert.equal(signals.size, 3);
     assert.ok([...signals].every((signal) => signal.aborted));
@@ -322,7 +389,7 @@ test('credit gateway preserves precise absent-account semantics and rejects malf
   response = { ...creditResponse(), available_balances: [{ denom: 'upwr', amount: '9007199254740993' }] };
   assert.equal((await read()).hostingCredit?.available[0]?.amount, '9007199254740993');
   response = { ...creditResponse(), available_balances: [], credit_account: { ...creditResponse().credit_account, active_lease_count: '0', reserved_amounts: [] } };
-  assert.deepEqual((await read()).hostingCredit, { available: [], reserved: [], activeLeases: '0' });
+  assert.deepEqual((await read()).hostingCredit, { creditAddress, available: [], reserved: [], activeLeases: '0' });
 });
 
 test('credit gateway accepts omitted protobuf default fields without accepting a missing account identity', async (context) => {
@@ -340,7 +407,7 @@ test('credit gateway accepts omitted protobuf default fields without accepting a
     try {
       const info = await service.getInfo();
       assert.equal(info.status, 'available');
-      assert.deepEqual(info.hostingCredit, expected);
+      assert.deepEqual(info.hostingCredit, { creditAddress, ...expected });
     } finally { service.dispose(); }
   }
 });
@@ -412,6 +479,7 @@ test('REST identity and history errors abort transport and cancel bodies without
         cancel() { cancelled++; assert.equal(errorSignal?.aborted, true); },
       }, { highWaterMark: 0 }), { status: 503 });
     }
+    if (new URL(String(input)).pathname.startsWith('/liftedinit/billing/v1/credit/')) return Response.json(creditResponse());
     return identityResponse(input) ?? Response.json({ total: '0', tx_responses: [] });
   });
   for (failedPath of ['/node_info', '/txs']) {
@@ -577,14 +645,22 @@ function historyMessage(overrides: Record<string, unknown> = {}) {
 }
 
 function historyEvent(overrides: Record<string, string> = {}) {
-  const attributes = { tenant, sender, amount: '10upwr', credit_address: tenant, new_balance: '10000000upwr', ...overrides };
+  const attributes = { tenant, sender, amount: '10upwr', credit_address: overrides.tenant && overrides.tenant.toLowerCase() !== tenant ? sender : creditAddress, new_balance: '10000000upwr', ...overrides };
   return { type: 'credit_funded', attributes: Object.entries(attributes).map(([key, value]) => ({ key, value, index: true })) };
 }
 
-function historyRecord(id: number, messages = [historyMessage()], overrides: Record<string, unknown> = {}) {
-  const events = messages.filter((message) => message['@type'] === FUND_CREDIT_TYPE).map((message) => {
+function fundingEvents(...events: ReturnType<typeof historyEvent>[]) {
+  return events.flatMap(event => {
+    const attributes = Object.fromEntries(event.attributes.map(({ key, value }) => [key, value]));
+    return [{ type: 'transfer', attributes: Object.entries({ recipient: attributes.credit_address!, sender: attributes.sender!, amount: attributes.amount! })
+      .map(([key, value]) => ({ key, value, index: true })) }, event];
+  });
+}
+
+function historyRecord(id: number, messages: Record<string, unknown>[] = [historyMessage()], overrides: Record<string, unknown> = {}) {
+  const events = messages.filter((message) => message['@type'] === FUND_CREDIT_TYPE).flatMap((message) => {
     const coin = message.amount as { amount: string; denom: string };
-    return historyEvent({ tenant: String(message.tenant), sender: String(message.sender), amount: `${coin.amount}${coin.denom}`, new_balance: `10000000${coin.denom}` });
+    return fundingEvents(historyEvent({ tenant: String(message.tenant), sender: String(message.sender), amount: `${coin.amount}${coin.denom}`, new_balance: `10000000${coin.denom}` }));
   });
   return {
     txhash: id.toString(16).padStart(64, '0').toUpperCase(), height: String(1000 + id), code: 0,
@@ -597,6 +673,65 @@ function historyFixture(page: FundingHistoryPage, overrides: Partial<ChainGatewa
   return { ...f, service: new SupportService({ ...config, restUrl: 'https://rest.example.com' }, f.gateway, options) };
 }
 
+function bankHistory(amount = '1000000', from = sender, to = creditAddress) {
+  return {
+    message: { '@type': BANK_SEND_TYPE, from_address: from, to_address: to, amount: [{ denom: 'upwr', amount }] },
+    event: { type: 'transfer', attributes: Object.entries({ recipient: to, sender: from, amount: amount + 'upwr' })
+      .map(([key, value]) => ({ key, value })) },
+  };
+}
+
+test('history counts bank delivery and FundCredit once each, ignoring duplicated logs, fees and provider payouts', async () => {
+  const delivered = bankHistory('9007199254740993');
+  const payout = bankHistory('100', sender, tenant);
+  const self = bankHistory('300', creditAddress);
+  const row = historyRecord(1, [delivered.message, historyMessage(), payout.message, self.message], {
+    events: [delivered.event, ...fundingEvents(historyEvent()), payout.event, self.event],
+    logs: [{ events: [delivered.event] }],
+  });
+  let queriedAddress = '';
+  const result = await historyFixture({ total: '1', txResponses: [row] }, {
+    getFundingHistory: async address => { queriedAddress = address; return { total: '1', txResponses: [row] }; },
+  }).service.getHistory();
+  assert.equal(queriedAddress, creditAddress);
+  assert.equal(result.status, 'available');
+  assert.equal(result.complete, true);
+  assert.equal(result.entries.length, 1);
+  assert.equal(result.entries[0]!.sender, sender);
+  assert.equal(result.totals?.amount, '9007199254741003');
+  assert.match(result.message, /distributor address does not identify its customer/);
+});
+
+test('history includes wrapped bank deliveries and filters non-PWR multi-coin transfers', async () => {
+  const bank = bankHistory();
+  const row = historyRecord(1, [{ '@type': '/cosmos.authz.v1beta1.MsgExec', msgs: [bank.message] }], {
+    events: [{ ...bank.event, attributes: bank.event.attributes.map(a => a.key === 'amount' ? { ...a, value: '200umfx,1000000upwr' } : a) }],
+  });
+  const result = await historyFixture({ total: '1', txResponses: [row] }).service.getHistory();
+  assert.equal(result.status, 'available');
+  assert.equal(result.totals?.amount, '1000000');
+});
+
+test('history rejects missing credit, mismatched bank amounts and duplicate transfer attributes or denominations', async () => {
+  const bank = bankHistory();
+  const row = historyRecord(1, [bank.message], { events: [bank.event] });
+  const absent = await historyFixture({ total: '1', txResponses: [row] }, { getCredit: async () => null }).service.getHistory();
+  assert.equal(absent.status, 'unavailable');
+  const events = [
+    [],
+    [bankHistory('999999').event],
+    [{ ...bank.event, attributes: [...bank.event.attributes, { key: 'amount', value: '1000000upwr' }] }],
+    [{ ...bank.event, attributes: bank.event.attributes.map(a => a.key === 'amount' ? { ...a, value: '1000000upwr,1000000upwr' } : a) }],
+    [{ ...bank.event, attributes: bank.event.attributes.filter(a => a.key !== 'sender') }],
+    [bank.event, historyEvent({ amount: '1000001upwr' })],
+  ];
+  for (const malformed of events) {
+    const result = await historyFixture({ total: '1', txResponses: [{ ...row, events: malformed }] }).service.getHistory();
+    assert.equal(result.status, 'unavailable');
+    assert.equal(result.totals, null);
+  }
+});
+
 test('history aggregates matching senders exactly and excludes failed, wrong-denom, other-tenant and other messages', async () => {
   const rows = [
     historyRecord(1, [historyMessage({ amount: { denom: 'upwr', amount: '9007199254740993' } }),
@@ -605,7 +740,7 @@ test('history aggregates matching senders exactly and excludes failed, wrong-den
     historyRecord(3, [historyMessage({ amount: { denom: 'umfx', amount: '50000' } })]),
     historyRecord(4, [historyMessage({ tenant: sender })]),
     historyRecord(5, [historyMessage({ '@type': '/cosmos.authz.v1beta1.MsgExec' })], {
-      events: [historyEvent({ amount: '20umfx', new_balance: '100umfx' }), { type: 'transfer', attributes: [] }],
+      events: fundingEvents(historyEvent({ amount: '20umfx', new_balance: '100umfx' })),
     }),
   ];
   const result = await historyFixture({ total: '5', txResponses: rows }).service.getHistory();
@@ -645,10 +780,10 @@ test('history deduplicates identical hashes without inflating totals, rejects co
 
 test('history includes executed authz and group funding events without requiring direct message bodies', async () => {
   const authz = historyRecord(1, [historyMessage({ '@type': '/cosmos.authz.v1beta1.MsgExec', msgs: [historyMessage()] })], {
-    events: [historyEvent()],
+    events: fundingEvents(historyEvent()),
   });
   const group = historyRecord(2, [historyMessage({ '@type': '/cosmos.group.v1.MsgExec', proposal_id: '42', executor: sender })], {
-    events: [historyEvent({ sender: tenant, amount: '25upwr' })],
+    events: fundingEvents(historyEvent({ sender: tenant, amount: '25upwr' })),
   });
   const result = await historyFixture({ total: '2', txResponses: [authz, group] }).service.getHistory();
   assert.equal(result.status, 'available');
@@ -659,7 +794,7 @@ test('history includes executed authz and group funding events without requiring
 
 test('history accepts canonical-equivalent uppercase wire addresses and a real 32-byte credit address', async () => {
   const row = historyRecord(1, [historyMessage({ sender: sender.toUpperCase(), tenant: tenant.toUpperCase() })], {
-    events: [historyEvent({ credit_address: 'manifest1u38rpxv2ynqy5fe8xsqyzp6w37qkmdcya9jmuqwfxqxrldru0wrqqd8yzt' })],
+    events: fundingEvents(historyEvent({ credit_address: creditAddress })),
   });
   const result = await historyFixture({ total: '1', txResponses: [row] }).service.getHistory();
   assert.equal(result.status, 'available');
@@ -668,7 +803,7 @@ test('history accepts canonical-equivalent uppercase wire addresses and a real 3
 });
 
 test('history counts legitimate identical funding events, ignores logs and never sums new_balance', async () => {
-  const events = [historyEvent(), historyEvent(), { type: 'transfer', attributes: [{ key: 'amount', value: '9999upwr' }] }];
+  const events = [...fundingEvents(historyEvent(), historyEvent()), { type: 'coin_received', attributes: [{ key: 'amount', value: '9999upwr' }] }];
   const row = historyRecord(1, [historyMessage({ '@type': '/cosmos.authz.v1beta1.MsgExec' })], {
     events, logs: [{ events }],
   });
@@ -814,10 +949,11 @@ test('chain gateway uses the fixed history query and top-level total independent
       requests.push(url.pathname);
       if (url.pathname === '/status') return Response.json({ result: { node_info: { network: config.chainId } } });
       if (url.pathname === '/cosmos/base/tendermint/v1beta1/node_info') return Response.json({ default_node_info: { network: config.chainId } });
+      if (url.pathname.startsWith('/liftedinit/billing/v1/credit/')) return Response.json(creditResponse());
       assert.equal(url.origin, 'https://rest.example.com');
       assert.equal(url.pathname, '/cosmos/tx/v1beta1/txs');
       assert.deepEqual(Object.fromEntries(url.searchParams), {
-        query: `credit_funded.tenant='${tenant}'`, order_by: 'ORDER_BY_DESC', limit: '100', page: '1',
+        query: `transfer.recipient='${creditAddress}'`, order_by: 'ORDER_BY_DESC', limit: '100', page: '1',
       });
       return Response.json(scenario.body);
     });
@@ -833,7 +969,7 @@ test('chain gateway uses the fixed history query and top-level total independent
         assert.equal(history.totals, null);
         assert.equal(history.checkedAt, null);
       } else assert.equal(history.totals?.amount, String(scenario.scanned * 10));
-      assert.deepEqual(requests, ['/status', '/cosmos/base/tendermint/v1beta1/node_info', '/cosmos/tx/v1beta1/txs']);
+      assert.deepEqual(requests, ['/status', '/cosmos/base/tendermint/v1beta1/node_info', `/liftedinit/billing/v1/credit/${tenant}`, '/cosmos/tx/v1beta1/txs']);
     } finally { service.dispose(); }
   });
 });

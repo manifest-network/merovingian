@@ -1,0 +1,116 @@
+{
+  "checkedAt": "2026-10-01T20:15:10.152Z",
+  "scope": "Retest of the QA x402 and 32-byte recipient fixes, followed by one bounded test-USDC purchase attempt. Settlement and PWR delivery remain blocked by an origin gateway failure.",
+  "previousEvidence": "pwr-station-2026-10-01.json",
+  "qa": {
+    "origin": "https://testnet.pwr-station.com",
+    "probeCheckedAt": "2026-10-01T19:55:20.877Z",
+    "authentication": "ADR-036 with a separate agent-controlled Manifest wallet",
+    "package": "apk_pwrtest02",
+    "priceCents": 100,
+    "feesCents": 0,
+    "pwrBaseUnits": "1000000",
+    "quoteResults": [
+      {
+        "recipientKind": "existing_32_byte_credit_account",
+        "paymentPath": "x402",
+        "status": "quote_validated",
+        "environment": "sandbox",
+        "chainId": "manifest-ledger-testnet"
+      },
+      {
+        "recipientKind": "existing_32_byte_credit_account",
+        "paymentPath": "checkout",
+        "status": "quote_validated",
+        "environment": "sandbox",
+        "chainId": "manifest-ledger-testnet"
+      },
+      {
+        "recipientKind": "ordinary_wallet_control",
+        "paymentPath": "checkout",
+        "status": "quote_validated",
+        "environment": "sandbox",
+        "chainId": "manifest-ledger-testnet"
+      }
+    ],
+    "uniqueOrdersCreated": 1,
+    "idempotentOrderCreation": "same_order_recovered",
+    "differentAuthenticatedWalletOrderRead": {
+      "httpStatus": 404,
+      "code": "NOT_FOUND"
+    },
+    "paymentChallenge": {
+      "httpStatus": 402,
+      "x402Version": 2,
+      "scheme": "exact",
+      "network": "eip155:84532",
+      "asset": "0x036cbd53842c5426634e7929541ec2318f3dcf7e",
+      "amount": "1000000",
+      "maxTimeoutSeconds": 300,
+      "assetTransferMethod": "eip3009",
+      "signingDomain": { "name": "USDC", "version": "2" }
+    },
+    "paymentAttempt": {
+      "maxTotalCents": 100,
+      "fundingSource": "Circle faucet, Base Sepolia test USDC only",
+      "uniqueAuthorizationsSigned": 1,
+      "signedSubmissions": 2,
+      "replay": "identical_payment_signature_header_and_nonce",
+      "submissionHttpStatuses": [502, 502],
+      "gatewayReplay": {
+        "timestamp": "2026-10-01T20:08:50Z",
+        "rayId": "a43e19fdfc89abd0",
+        "errorName": "origin_bad_gateway",
+        "errorCategory": "origin"
+      },
+      "authorizationSimulation": {
+        "checkedAt": "2026-10-01T20:10:38.882Z",
+        "method": "eth_call transferWithAuthorization with the submitted authorization",
+        "result": "passed_before_expiry",
+        "transactionsBroadcastBySimulation": 0,
+        "limitation": "Validates the token authorization, not PWR-Station settlement or delivery"
+      },
+      "authorizationExpiresAt": "2026-10-01T20:11:46.000Z",
+      "reconciliation": {
+        "checkedAt": "2026-10-01T20:15:10.152Z",
+        "blockNumber": "47558710",
+        "blockTime": "2026-10-01T20:15:08.000Z",
+        "authorizationExpired": true,
+        "authorizationUsed": false,
+        "testUsdcBalanceBeforeBaseUnits": "20000000",
+        "testUsdcBalanceAfterBaseUnits": "20000000",
+        "replacementAuthorizationsSigned": 0
+      }
+    },
+    "lastObservedOrderState": {
+      "paymentState": "awaiting",
+      "recordingState": "n_a",
+      "deliveryState": "not_started",
+      "refundState": "none",
+      "nextAction": "retry_same_request",
+      "receipt": null
+    }
+  },
+  "manifest": {
+    "chainId": "manifest-ledger-testnet",
+    "tenant": "manifest1z5ep5m3ka5v2fn5wyv93elqh5nqlfqww2u82f4",
+    "creditAddress": "manifest1u38rpxv2ynqy5fe8xsqyzp6w37qkmdcya9jmuqwfxqxrldru0wrqqd8yzt",
+    "denom": "factory/manifest1afk9zr2hn2jsac63h4hm60vl9z3e5u69gndzf7c99cqge3vzwjzsfmy9qj/upwr",
+    "availableBefore": "4343500",
+    "availableAfter": "4343500",
+    "newPwrDeliveryObserved": false
+  },
+  "acceptance": "blocked_at_signed_payment",
+  "teamRequest": "Investigate the QA origin handling of signed POST /api/v1/agent/orders/{id}/pay requests using the gateway timestamp and Ray ID. Reconcile the existing order before another authorization.",
+  "localValidation": {
+    "command": "npm run check",
+    "registryMetadata": "passed",
+    "typecheck": "passed",
+    "testsPassed": 405,
+    "testsFailed": 0,
+    "build": "passed"
+  },
+  "productionChanges": 0,
+  "mainnetTransactions": 0,
+  "liveVisits": 0
+}

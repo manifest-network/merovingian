@@ -23,6 +23,7 @@
     "mainnet": "node --import tsx scripts/mainnet.ts",
     "keyring:build": "node scripts/build-keyring.mjs",
     "keyring:check": "node --import tsx scripts/keyring-check.ts",
+    "pwr-station:probe": "node --import tsx scripts/pwr-station-probe.ts",
     "mainnet:preview": "node --import tsx scripts/mainnet-preview.ts",
     "mainnet:launch": "node --import tsx scripts/mainnet-launch.ts"
   },
@@ -34,6 +35,11 @@
     "cosmjs-types": "0.9.0",
     "express": "5.2.1",
     "zod": "4.6.5"
+  },
+  "overrides": {
+    "@manifest-network/manifest-mcp-core": {
+      "undici": "8.10.2"
+    }
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
