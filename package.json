@@ -30,19 +30,19 @@
     "@cosmjs/proto-signing": "0.32.4",
     "@manifest-network/manifest-sdk": "0.23.0",
     "@manifest-network/manifestjs": "4.0.0",
-    "@modelcontextprotocol/sdk": "1.30.0",
+    "@modelcontextprotocol/sdk": "1.31.0",
     "cosmjs-types": "0.9.0",
     "express": "5.2.1",
     "zod": "4.6.5"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
-    "@types/node": "^24.0.0",
+    "@types/node": "^24.19.0",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
     "cosmjs-amino-modern": "npm:@cosmjs/amino@0.34.0",
     "cosmjs-proto-signing-modern": "npm:@cosmjs/proto-signing@0.34.0",
-    "tsx": "4.23.13",
+    "tsx": "4.23.15",
     "typescript": "6.0.3"
   }
 }
