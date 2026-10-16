@@ -1,5 +1,6 @@
 import { parseAddress } from '@manifest-network/manifest-sdk';
 import { isDeepStrictEqual } from 'node:util';
+import { createHash } from 'node:crypto';
 
 /** Client-side purchase plumbing only. Never imported by the hosted refuge. */
 export const PWR_STATION_QA = 'https://testnet.pwr-station.com';
@@ -17,6 +18,8 @@ export interface StationOrder extends Omit<Quote, 'expires_at'> {
 }
 export interface OrderResult {
   order: StationOrder;
+  /** Station-reported delivery only. The host must independently verify the
+   * transaction, recipient and amount on Manifest before acknowledging credit. */
   receipt: null | { tx_hash: string; chain_id: string; denom: string; delivered_base_units: number };
 }
 export interface PaymentRequired {
@@ -29,7 +32,8 @@ export interface StationSigner {
   signArbitrary(address: string, message: string): Promise<{ signature: string; pub_key: { value: string } }>;
 }
 export class StationError extends Error {
-  constructor(readonly code: string, readonly status = 0) { super(code); this.name = 'StationError'; }
+  constructor(readonly code: string, readonly status = 0, readonly sent = false,
+    readonly authorizationValidBefore?: string) { super(code); this.name = 'StationError'; }
 }
 
 function record(value: unknown): Record<string, any> {
@@ -58,21 +62,24 @@ function equalTerms(actual: Record<string, any>, expected: Record<string, any>) 
 }
 
 /**
- * Testnet-only until QA end-to-end acceptance. A QA hostname or sandbox
+ * Testnet-only purchase client. A QA hostname or sandbox
  * flag never authorizes Base mainnet payments. No automatic retries or signing.
  * The caller must persist quote, idempotency key, order and exact signed payment
  * privately before the corresponding request, and reuse them after a timeout.
+ * On restart, restoreSubmittedPayment must precede any payment work for each
+ * journaled attempt. The spending limit is per order; the host owns total spend.
  */
 export class PwrStationClient {
   private token?: string;
   private readonly target: Readonly<PurchaseTarget>;
   private readonly fetcher: typeof fetch;
   private readonly now: () => number;
-  constructor(target: PurchaseTarget, private readonly maxTotalCents: number,
+  private readonly submitted = new Map<string, { digest: string; validBefore: string }>();
+  constructor(target: PurchaseTarget, private readonly maxOrderCents: number,
     options: { fetch?: typeof fetch; now?: () => number } = {}) {
     address(target.recipient);
     if (target.chainId !== 'manifest-ledger-testnet' || !/^[a-zA-Z][a-zA-Z0-9/:._-]{2,255}$/.test(target.denom)) throw new StationError('TESTNET_REQUIRED');
-    integer(maxTotalCents, true);
+    integer(maxOrderCents, true);
     this.target = Object.freeze({ ...target });
     this.fetcher = options.fetch ?? fetch;
     this.now = options.now ?? Date.now;
@@ -81,6 +88,7 @@ export class PwrStationClient {
   private async request(path: string, body?: object, payment?: string) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15_000);
+    let status = 0;
     try {
       const response = await this.fetcher(PWR_STATION_QA + path, {
         method: body === undefined ? 'GET' : 'POST', redirect: 'error', signal: controller.signal,
@@ -88,7 +96,15 @@ export class PwrStationClient {
           ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}), ...(payment ? { 'PAYMENT-SIGNATURE': payment } : {}) },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
-      if (!response.body) throw new StationError('INVALID_RESPONSE');
+      status = response.status;
+      // x402 v2 permits a header-only challenge, regardless of the body format.
+      const header = response.headers.get('PAYMENT-REQUIRED');
+      if (status === 402 && header) {
+        if (header.length > 16384) throw new StationError('INVALID_PAYMENT_REQUIREMENTS', status);
+        try { return { status, data: JSON.parse(Buffer.from(header, 'base64').toString('utf8')) }; }
+        catch { throw new StationError('INVALID_PAYMENT_REQUIREMENTS', status); }
+      }
+      if (!response.body) throw new StationError(response.ok ? 'INVALID_RESPONSE' : 'STATION_UNAVAILABLE', status);
       const reader = response.body.getReader();
       const chunks: Uint8Array[] = [];
       let size = 0;
@@ -101,11 +117,11 @@ export class PwrStationClient {
           chunks.push(value);
         }
       } finally { reader.releaseLock(); }
-      const envelope = record(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+      let envelope;
+      try { envelope = record(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
+      catch { throw new StationError(response.ok ? 'INVALID_RESPONSE' : 'STATION_UNAVAILABLE', status); }
       if (response.status === 402 && envelope.error?.code === 'AGENT_PAYMENT_REQUIRED') {
-        const header = response.headers.get('PAYMENT-REQUIRED');
-        const required = header ? JSON.parse(Buffer.from(header, 'base64').toString('utf8')) : envelope.error?.details?.payment_required;
-        return { status: 402, data: required };
+        return { status: 402, data: envelope.error?.details?.payment_required };
       }
       if (!response.ok || envelope.success !== true) {
         const code = envelope.error?.code;
@@ -115,8 +131,8 @@ export class PwrStationClient {
     } catch (error) {
       // Remote errors and fetch diagnostics may contain credentials or signed
       // authorizations. Only stable, locally constructed codes leave this client.
-      if (error instanceof StationError) throw error;
-      throw new StationError('REQUEST_OUTCOME_UNKNOWN');
+      if (error instanceof StationError) throw new StationError(error.code, error.status || status);
+      throw new StationError('REQUEST_OUTCOME_UNKNOWN', status);
     } finally { clearTimeout(timer); controller.abort(); }
   }
 
@@ -149,7 +165,7 @@ export class PwrStationClient {
     identifier(q.package, 'apk');
     if (!['x402', 'checkout'].includes(q.payment_path)) throw new StationError('INVALID_PAYMENT_PATH');
     integer(q.price_cents); integer(q.fees_cents); integer(q.total_cents, true); integer(q.net_pwr_base_units, true);
-    if (BigInt(q.total_cents) !== BigInt(q.price_cents) + BigInt(q.fees_cents) || q.total_cents > this.maxTotalCents) throw new StationError('SPEND_LIMIT_EXCEEDED');
+    if (BigInt(q.total_cents) !== BigInt(q.price_cents) + BigInt(q.fees_cents) || q.total_cents > this.maxOrderCents) throw new StationError('SPEND_LIMIT_EXCEEDED');
     return q;
   }
 
@@ -162,12 +178,12 @@ export class PwrStationClient {
     return structuredClone(q) as Quote;
   }
 
-  private result(value: unknown, expected: Quote | StationOrder): OrderResult {
+  private result(value: unknown, expected: { quote: Quote } | { order: StationOrder }): OrderResult {
     const data = record(value), order = this.terms(data.order);
     identifier(order.id, 'aor'); identifier(order.quote, 'aqt');
-    equalTerms(order, expected);
-    if (order.quote !== ('quote' in expected ? expected.quote : expected.id)
-      || ('quote' in expected && order.id !== expected.id)) throw new StationError('ORDER_MISMATCH');
+    equalTerms(order, 'order' in expected ? expected.order : expected.quote);
+    if (order.quote !== ('order' in expected ? expected.order.quote : expected.quote.id)
+      || ('order' in expected && order.id !== expected.order.id)) throw new StationError('ORDER_MISMATCH');
     time(order.payment_deadline);
     const states = { payment_state: ['awaiting', 'attempt_pending', 'outcome_unknown', 'settled', 'failed'],
       recording_state: ['n_a', 'pending', 'confirmed', 'reconciliation_required'],
@@ -193,12 +209,21 @@ export class PwrStationClient {
     if (!idempotencyKey || idempotencyKey.length > 128) throw new StationError('INVALID_IDEMPOTENCY_KEY');
     // Do not reject an expired quote locally: replaying a previously submitted
     // request must remain possible after expiry to recover an existing order.
-    return this.result((await this.request('/api/v1/agent/orders', { quote: quote.id, idempotency_key: idempotencyKey })).data, quote);
+    let status = 0;
+    try {
+      const response = await this.request('/api/v1/agent/orders', { quote: quote.id, idempotency_key: idempotencyKey });
+      status = response.status;
+      return this.result(response.data, { quote });
+    } catch (error) {
+      // Even invalid JSON, a misleading remote code or a mismatched 200 body
+      // cannot prove that order creation did not happen. Recover the same key.
+      throw new StationError('REQUEST_OUTCOME_UNKNOWN', error instanceof StationError ? error.status || status : status, true);
+    }
   }
 
   async getOrder(order: StationOrder): Promise<OrderResult> {
     identifier(order.id, 'aor');
-    return this.result((await this.request(`/api/v1/agent/orders/${order.id}`)).data, order);
+    return this.result((await this.request(`/api/v1/agent/orders/${order.id}`)).data, { order });
   }
 
   validatePayment(required: unknown, order: StationOrder): PaymentRequired {
@@ -220,6 +245,8 @@ export class PwrStationClient {
   async paymentRequirements(order: StationOrder): Promise<PaymentRequired> {
     identifier(order.id, 'aor');
     this.terms(order);
+    const submitted = this.submitted.get(order.id);
+    if (submitted) throw new StationError('PAYMENT_ALREADY_SUBMITTED', 0, false, submitted.validBefore);
     if (!['awaiting', 'failed'].includes(order.payment_state) || order.refund_state !== 'none') throw new StationError('POLL_ORDER_BEFORE_PAYING');
     if (time(order.payment_deadline) <= this.now()) throw new StationError('ORDER_EXPIRED');
     const response = await this.request(`/api/v1/agent/orders/${order.id}/pay`, {});
@@ -227,7 +254,7 @@ export class PwrStationClient {
     return this.validatePayment(response.data, order);
   }
 
-  async submitPayment(order: StationOrder, required: PaymentRequired, signedPayment: string): Promise<OrderResult> {
+  private authorization(order: StationOrder, required: PaymentRequired, signedPayment: string) {
     const terms = this.validatePayment(required, order).accepts[0]!;
     identifier(order.id, 'aor');
     if (!signedPayment || signedPayment.length > 16384) throw new StationError('INVALID_PAYMENT_SIGNATURE');
@@ -244,9 +271,35 @@ export class PwrStationClient {
       || typeof auth.validBefore !== 'string' || !/^[1-9][0-9]{0,11}$/.test(auth.validBefore)
       || BigInt(auth.validBefore) <= BigInt(auth.validAfter)
       || BigInt(auth.validBefore) > BigInt(Math.floor(this.now() / 1000) + terms.maxTimeoutSeconds)) throw new StationError('INVALID_PAYMENT_AUTHORIZATION');
-    // Exact replay only; this method never generates a nonce, signature or order.
-    const response = await this.request(`/api/v1/agent/orders/${order.id}/pay`, {}, signedPayment);
-    if (response.status === 402) throw new StationError('PAYMENT_REJECTED_POLL_ORDER');
-    return this.result(response.data, order);
+    return { digest: createHash('sha256').update(signedPayment).digest('hex'), validBefore: auth.validBefore as string };
+  }
+
+  /** Restore a private journaled attempt before using a fresh client instance.
+   * Expiry alone does not prove nonsettlement, so this guard never auto-clears. */
+  restoreSubmittedPayment(order: StationOrder, required: PaymentRequired, signedPayment: string): void {
+    const authorization = this.authorization(order, required, signedPayment);
+    const previous = this.submitted.get(order.id);
+    if (previous && previous.digest !== authorization.digest) {
+      throw new StationError('PAYMENT_REPLACEMENT_FORBIDDEN', 0, false, previous.validBefore);
+    }
+    this.submitted.set(order.id, authorization);
+  }
+
+  async submitPayment(order: StationOrder, required: PaymentRequired, signedPayment: string): Promise<OrderResult> {
+    // All local validation precedes dispatch. Record the exact attempt before
+    // awaiting transport so overlapping callers cannot replace it or re-challenge.
+    this.restoreSubmittedPayment(order, required, signedPayment);
+    const { validBefore } = this.submitted.get(order.id)!;
+    let status = 0;
+    try {
+      const response = await this.request(`/api/v1/agent/orders/${order.id}/pay`, {}, signedPayment);
+      status = response.status;
+      if (status === 402) throw new StationError('PAYMENT_REJECTED_POLL_ORDER', status);
+      return this.result(response.data, { order });
+    } catch (error) {
+      // Every post-dispatch failure, including result validation, is uncertain.
+      // Expose no remote diagnostics or reusable authorization material.
+      throw new StationError('REQUEST_OUTCOME_UNKNOWN', error instanceof StationError ? error.status || status : status, true, validBefore);
+    }
   }
 }

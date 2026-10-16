@@ -19,13 +19,14 @@ import { MsgSend } from 'cosmjs-types/cosmos/bank/v1beta1/tx.js';
 import { createApp, REQUEST_LIMITS, type AppOptions } from '../src/app.js';
 import { loadConfig, type Config } from '../src/config.js';
 import { VisitCounter } from '../src/counts.js';
+import { deriveCreditAddress } from '../src/credit-address.js';
 import { FUND_CREDIT_TYPE, SupportService, type ChainGateway, type ChainTransaction, type FundingHistoryPage, type SupportInfo, type ContributionHistory, type VerificationResult } from '../src/support.js';
 import { API_MESSAGES, BANK_SEND_TYPE, MAX_VISIT_OUTPUT_BYTES, OPENAPI_MEDIA_TYPE } from '../src/protocol.js';
 
 // Synthetic addresses and indexed transaction bytes; no keys, signing or network access.
 const tenant = 'manifest1qyqszqgpqyqszqgpqyqszqgpqyqszqgpn3rfe5';
 const sender = 'manifest1qgpqyqszqgpqyqszqgpqyqszqgpqyqszz49vjz';
-const creditAddress = 'manifest1u38rpxv2ynqy5fe8xsqyzp6w37qkmdcya9jmuqwfxqxrldru0wrqqd8yzt';
+const creditAddress = deriveCreditAddress(tenant);
 const checkedAt = '2026-09-21T00:00:00.000Z';
 const pwrDenom = loadConfig({}).pwrDenom;
 const config: Config = {

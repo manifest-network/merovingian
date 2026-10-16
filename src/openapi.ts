@@ -105,7 +105,7 @@ export function httpApiDocument(config: Config, description: string) {
     }] },
     Coin: object({ denom: nonempty, amount: { ...integer, description: 'Amount in integer base units, encoded as a string to preserve precision.' } }),
     HostingCredit: object({
-      creditAddress: { ...nonempty, description: 'Existing tenant credit account verified on the configured chain. Direct PWR bank transfers to this address fund hosting; the tenant wallet and provider payout are different destinations.' },
+      creditAddress: { ...nonempty, description: 'Derived locally from the configured tenant and checked against its existing billing account after chain identity verification. Direct PWR bank transfers to this address fund hosting; the tenant wallet and provider payout are different destinations.' },
       available: array(ref('Coin')), reserved: array(ref('Coin')),
       activeLeases: { ...integer, description: 'Active lease count as a decimal integer string. Settlement can lag usage.' },
     }),
@@ -139,7 +139,7 @@ export function httpApiDocument(config: Config, description: string) {
       otherAmount: { ...integer, description: 'Deposits from all other funding wallets.' },
     }),
     ContributionHistory: {
-      description: 'All fields are required. Cached for up to 60 seconds. The transfer.recipient index covers MsgFundCredit and direct bank deposits to the existing credit account, counted once. Entries aggregate by transaction and sender, so one transaction can produce multiple entries. Unavailable or unconfigured means unknown history, not zero deposits.',
+      description: 'All fields are required. Cached for up to 60 seconds. The transfer.recipient index covers MsgFundCredit and direct bank deposits to the locally derived credit address, counted once, without a credit-account lookup. Entries aggregate by transaction and sender, so one transaction can produce multiple entries. Unavailable or unconfigured means unknown history, not zero deposits.',
       oneOf: [
         object({ ...supportFields, status: { type: 'string', const: 'available' }, checkedAt: dateTime,
           entries: array(ref('ContributionEntry')), totals: ref('ContributionTotals'),

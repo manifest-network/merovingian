@@ -49,5 +49,6 @@ export const SUPPORT_MESSAGES = Object.freeze({
   failed: 'This transaction failed on chain. It did not make a contribution.',
   undecodable: 'A valid signed PWR hosting-credit contribution could not be decoded from this transaction.',
   notAContribution: 'This transaction contains no matching PWR credit contribution to this refuge tenant from the requested sender.',
+  unsupportedTransfer: 'This receipt verifier supports only direct MsgFundCredit and MsgSend messages. Wrapped or batched deliveries may appear in contribution history; inspect that history or the chain transaction. Do not resend a payment because this verifier cannot acknowledge it.',
   receipt: 'The sauna glows a little warmer. Thank you for contributing hosting credit. This public receipt is a souvenir; it proves no wallet ownership and grants no balance or entitlement.',
 });

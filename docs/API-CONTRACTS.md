@@ -69,16 +69,22 @@ grants no entitlement. A pending or unavailable result is a reason to check the
 original transaction, never to blindly pay again.
 
 History queries use `GetTxsEvent` with `query`, `order_by`, `page` and `limit`.
-The prepared direct-deposit update resolves the existing credit account first,
-then queries `transfer.recipient='<creditAddress>'`. It counts PWR bank movements
+The direct-deposit update derives the credit address locally from the configured
+tenant, then queries `transfer.recipient='<creditAddress>'`. It counts PWR bank movements
 from both `MsgSend` and `MsgFundCredit` once, with billing events used only for
 consistency checks. History includes executed wrapped transfers; individual
-receipt verification supports direct root messages. A missing credit account or
-an inconsistent event response yields unavailable history.
+receipt verification supports direct root messages. Wrapped or batched deliveries
+receive an explicit verifier-scope explanation; that result is not a reason to
+resend. History and receipt verification do not query the credit account. An empty
+index is available empty history even before the account exists; an inconsistent
+event response yields unavailable history.
 
 `hostingCredit.creditAddress` is a required string whenever `hostingCredit` is
-present. It is the verified existing account's destination for direct PWR
-delivery; neither the tenant wallet nor the provider payout wallet is a substitute.
+present. It is derived locally using the ledger's billing-address algorithm, and
+the REST account must agree with it before support information is available.
+Derivation alone does not prove the billing account exists: create a missing
+account with `MsgFundCredit` before arranging direct PWR delivery. Neither the
+tenant wallet nor the provider payout wallet is a substitute.
 Distributor addresses identify the on-chain sender, not their customers. The
 [PWR-Station testnet notes](PWR-STATION.md) describe the unreleased integration.
 
@@ -93,6 +99,19 @@ Accordingly, the gateway accepts a null or omitted deprecated `pagination` and
 uses top-level `total` for `indexedTransactions`. Substituting the page length
 would incorrectly label a truncated history complete. Missing or inconsistent
 top-level totals remain unavailable instead of publishing misleading totals.
+
+### Compatibility for the prepared 0.5.0 release
+
+The required `hostingCredit.creditAddress` field is a breaking contract change
+for strict clients. The 0.4.7 schema rejects it as an extra property, and the 0.5.0
+schema rejects a non-null credit object without it. The application and OpenAPI
+version advance to 0.5.0; the route prefix remains `/api/v1`.
+
+Before upgrading, regenerate validators and typed clients from the new contract.
+Clients supporting both deployments need to select the matching schema by
+application version or explicitly handle both credit-object shapes. Release
+preparation is recorded in [the 0.5.0 notes](RELEASE-0.5.0.md); publication and
+deployment remain separate actions.
 
 ## HTTP errors
 

@@ -12,7 +12,7 @@ Existing visits stay free. These are two separate destinations:
 
 | Purpose | PWR recipient | Effect |
 | --- | --- | --- |
-| Optional hosting contribution | Existing tenant credit address returned by the verified chain | Adds nonwithdrawable hosting credit |
+| Optional hosting contribution | Locally derived tenant credit address, checked against the existing billing account | Adds nonwithdrawable hosting credit |
 | Future gifts or paid extras | Infrastructure hosting provider's verified payout wallet | Pays that provider; does not replenish tenant credit or generate studio revenue |
 
 ## Why direct delivery works
@@ -31,6 +31,14 @@ reads that bank balance, and the
 [credit query](https://github.com/manifest-network/manifest-ledger/blob/a6e964a61ca848c3ff10bb8b86da142dba4ccbf3/x/billing/keeper/querier.go#L237)
 reports available credit after reservations.
 
+Merovingian derives the destination from the configured tenant bytes using
+[DeriveCreditAddress](https://github.com/manifest-network/manifest-ledger/blob/a6e964a61ca848c3ff10bb8b86da142dba4ccbf3/x/billing/types/credit.go)
+and the pinned SDK's
+[module-address hash](https://github.com/manifest-network/cosmos-sdk/blob/v0.50.14-liftedinit.1/types/address/hash.go).
+The REST credit query must return that same address. A syntactically valid but
+different REST address is rejected. Local derivation identifies a destination;
+it does not establish that a billing account has been created there.
+
 The October 1 test sent **100,000 base units (0.1 test PWR)** in one `MsgSend`.
 Available credit increased from **4,243,500 to 4,343,500** base units. The fixed fee
 was **330,000 umfx (0.33 test MFX)**. The temporary sender used only faucet funds;
@@ -44,22 +52,29 @@ This proves the Manifest receiving leg. It was not a PWR-Station purchase.
 ## Prepared implementation
 
 - `GET /api/v1/support` and MCP `hosting_support` expose
-  `hostingCredit.creditAddress` only after RPC/REST chain and credit-account checks.
+  the locally derived `hostingCredit.creditAddress` only after RPC/REST chain and
+  credit-account consistency checks. The required field changes the strict API
+  contract; see the [0.5.0 migration note](API-CONTRACTS.md#compatibility-for-the-prepared-050-release).
   The original `MsgFundCredit` instruction template remains available. A missing
   account must be created before attempting distributor delivery.
 - HTTP/MCP receipt verification accepts a successful, signed, indexed root
-  `MsgSend` with the configured PWR denomination and the existing credit address.
+  `MsgSend` with the configured PWR denomination and the derived credit address.
   It also accepts `MsgFundCredit`, combines matching messages with integer
   arithmetic, and rejects provider payouts, tenant-wallet sends and self-transfers.
 - History uses the single `transfer.recipient` index and counts bank movements
   once. `MsgFundCredit` emits both bank and billing events; billing events check
   consistency instead of adding the same amount again. Executed wrapped transfers
   are supported in history. The latest-100 limit and partial-history notices remain.
-  Receipt verification still supports direct root messages only.
+  Receipt verification supports direct root messages only and explains that limit
+  for wrapped/batched deliveries, including a warning against resending. History
+  and verification need no credit-account query. An empty index remains available
+  before the first funding; a missing account does not trip their circuit breaker.
 - [Client](../scripts/pwr-station-client.ts): QA wallet authentication, catalog,
   quotes, idempotent order creation, payment challenge validation, exact signed
-  payment submission, order polling and delivery receipt validation. It requires a
-  caller-supplied budget, Manifest signer, and externally signed x402 authorization.
+  payment submission, order polling and validation of station-reported receipts.
+  Those receipts require independent on-chain verification by the host. The client
+  requires a per-order spending ceiling, Manifest signer, and externally signed
+  x402 authorization. Aggregate spending limits remain the host's responsibility.
 - [Probe](../scripts/pwr-station-probe.ts): an ephemeral zero-balance wallet signs
   an ADR-036 login, checks the catalog, and requests unpaid credit-address quotes
   plus an ordinary-wallet checkout control. It never creates orders or pays.
@@ -80,8 +95,9 @@ There is no public buying/signing MCP tool or paid-gift endpoint in this change.
    recipient and `payment_path: "x402"`. Validate the echoed immutable terms,
    environment, network, expiry and total before creating an order.
 4. Persist the quote and a fresh idempotency key **privately before** creating the
-   order. On an uncertain response, retry the same quote/key to recover the same
-   order. Never replace them just because a request timed out.
+   order. Every failure after dispatch is `REQUEST_OUTCOME_UNKNOWN` with
+   `sent: true`, including invalid responses. Retry the same quote/key to recover the
+   same order. Never replace them just because a request timed out.
 5. Request the order's payment challenge. Before any EVM signing, require x402 v2,
    `exact`, `eip155:84532`, and Circle's Base Sepolia test USDC contract
    `0x036CbD53842c5426634e7929541eC2318f3dCF7e`. Require the quoted cents converted
@@ -92,6 +108,9 @@ There is no public buying/signing MCP tool or paid-gift endpoint in this change.
    before the pay request. An uncertain payment means poll that order; an explicit
    retry must reuse the identical signature and nonce. Do not generate a second
    authorization, buy another package, or fall back to checkout automatically.
+   After a process restart, call `restoreSubmittedPayment` with the saved order,
+   requirements and exact signed authorization for each journaled attempt before
+   doing any payment work.
 7. Require settled payment, confirmed PWR delivery, no refund, and a receipt with
    the expected Manifest chain, denomination, amount and transaction hash. The
    action `complete` alone is insufficient: a refunded order can also be complete.
@@ -101,9 +120,25 @@ There is no public buying/signing MCP tool or paid-gift endpoint in this change.
 
 PWR-Station controls the settlement and delivery legs; they are not an atomic
 cross-chain transfer. Interrupted or refunded orders need explicit reconciliation.
-The low-level client never automatically retries, signs, or increases the budget.
-The host must persist recovery state across process restarts. Those files must
-remain private and outside source, Git history, images, and public reports.
+The low-level client never automatically retries, signs, or increases its
+per-order ceiling. All failures after dispatching a signed pay request, including
+HTTP errors, malformed bodies and inconsistent receipts, produce
+`REQUEST_OUTCOME_UNKNOWN` with `sent: true`, the observed HTTP `status` (zero when
+unknown), and `authorizationValidBefore` as Unix seconds. A local validation
+failure has `sent: false`, meaning that call did not submit a signed payment;
+earlier journaled attempts may still be unresolved. Remote error text and signed
+material are never included in these errors.
+
+The client remembers the exact authorization before dispatch. It blocks fresh
+challenges and replacement signatures for that order, even if polling says
+`awaiting` or `failed`, and exposes the original expiry on those blocked calls.
+Exact replay remains possible. The guard does not clear on expiry: the old
+authorization could already have settled. After a restart, the host must restore
+each journaled attempt as described above; the client does not provide durable
+storage. Starting a new order requires host reconciliation of the old payment,
+including finalized authorization use/expiry and order/settlement state. Recovery
+files must remain private and outside source, Git history, images, and public
+reports.
 
 ## Testnet acceptance
 
@@ -212,14 +247,18 @@ entitlement. Provider payouts must remain outside the hosting contribution ledge
 
 ## Acceptance remaining
 
-`npm run check` passed the registry metadata check, TypeScript check, all **405
-local tests**, and production build. Tests used isolated local fixtures and did
-not publish, deploy or perform live visits.
+After the October 16 review fixes, `npm run check` passed the registry metadata
+check, TypeScript check, all **420 local tests**, and production build. Tests used
+isolated local fixtures and did not publish, deploy or perform live visits.
 
-Local tests cover success, wrong chain/recipient/token, budgets, idempotent order
-recovery, exact payment replay after unknown outcomes and gateway 502s, refunds,
-receipt mismatches, direct credit verification, mixed-message accounting and
-HTTP/MCP agreement.
+Local tests cover exact quote/order/payment terms, per-order limits, USDC domain
+and authorization validation, header-only challenges, uncertain post-dispatch
+errors, restored-attempt guards, exact replay, refund-state gates and receipt
+field mismatches. Contribution fixtures check local address derivation, account
+mismatches/absence, fee-only index errors, malformed matching events, unrelated
+transfer events, mixed-message accounting, wrapped/batched verifier limits and
+HTTP/MCP agreement. These are protocol fixtures; they do not exercise a live
+refund or establish an aggregate spending cap.
 
 The private acceptance harness completed the testnet purchase with a host-owned
 EVM signer and durable recovery storage. Live checks covered expired-order

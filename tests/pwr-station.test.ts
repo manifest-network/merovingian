@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, { afterEach } from 'node:test';
 import {
   PWR_STATION_QA, TEST_USDC, PwrStationClient, StationError,
   type PaymentRequired, type Quote, type StationOrder, type StationSigner,
@@ -28,15 +28,24 @@ const challenge = (header = true) => Response.json({ success: false, error: { co
   details: { payment_required: required } } }, { status: 402,
   headers: header ? { 'PAYMENT-REQUIRED': Buffer.from(JSON.stringify(required)).toString('base64') } : {} });
 
-function fixture(responses: (() => Response)[], selectedTarget = target) {
+const transportChecks: (() => void)[] = [];
+afterEach(() => { for (const check of transportChecks.splice(0)) check(); });
+
+function fixture(responses: (() => Response | Promise<Response>)[], selectedTarget = target, clock = () => now) {
+  const violations: string[] = [];
+  transportChecks.push(() => {
+    assert.deepEqual(violations, [], 'Transport assertions must escape the client error sanitizer');
+    assert.equal(responses.length, 0, 'Expected transport calls were skipped');
+  });
   const calls: { path: string; method: string; body: any; headers: Headers; redirect?: RequestRedirect }[] = [];
-  const client = new PwrStationClient(selectedTarget, 100, { now: () => now, fetch: async (input, init) => {
+  const client = new PwrStationClient(selectedTarget, 100, { now: clock, fetch: async (input, init) => {
     const url = new URL(String(input));
-    assert.equal(url.origin, PWR_STATION_QA);
+    if (url.origin !== PWR_STATION_QA) violations.push('Wrong origin');
+    if (init?.redirect !== 'error') violations.push('Redirects were allowed');
     calls.push({ path: url.pathname + url.search, method: init?.method ?? 'GET', body: init?.body ? JSON.parse(String(init.body)) : undefined,
       headers: new Headers(init?.headers), redirect: init?.redirect });
     const next = responses.shift();
-    assert.ok(next, 'Unexpected network request');
+    if (!next) { violations.push('Unexpected network request'); throw new Error('Unexpected network request'); }
     return next();
   } });
   return { client, calls };
@@ -99,7 +108,7 @@ test('unknown outcomes recover the same order and replay the exact authorization
   await assert.rejects(f.client.submitPayment(recovered.order, payment, exactAuthorization), { code: 'REQUEST_OUTCOME_UNKNOWN' });
   assert.equal(f.calls.length, 4);
   const polled = await f.client.getOrder(recovered.order);
-  await assert.rejects(f.client.paymentRequirements(polled.order), { code: 'POLL_ORDER_BEFORE_PAYING' });
+  await assert.rejects(f.client.paymentRequirements(polled.order), { code: 'PAYMENT_ALREADY_SUBMITTED' });
   const result = await f.client.submitPayment(polled.order, payment, exactAuthorization);
   assert.equal(result.receipt?.delivered_base_units, 1000000);
   assert.equal(f.calls[3]!.headers.get('PAYMENT-SIGNATURE'), f.calls[5]!.headers.get('PAYMENT-SIGNATURE'));
@@ -112,12 +121,14 @@ test('gateway 502 responses require explicit replay and do not confirm an awaiti
   { status: 502, headers: { 'Content-Type': 'application/problem+json' } });
   const f = fixture([gateway, () => ok({ order, receipt: null }), gateway, () => ok({ order, receipt: null })]);
   const exactAuthorization = signedPayment();
-  const expectedError = { code: 'STATION_UNAVAILABLE', status: 502, message: 'STATION_UNAVAILABLE' };
+  const expectedError = { code: 'REQUEST_OUTCOME_UNKNOWN', status: 502, message: 'REQUEST_OUTCOME_UNKNOWN', sent: true };
   await assert.rejects(f.client.submitPayment(order, required, exactAuthorization), expectedError);
   assert.equal(f.calls.length, 1, 'A retryable gateway error must not trigger an automatic payment retry');
   const polled = await f.client.getOrder(order);
   assert.equal(polled.order.payment_state, 'awaiting');
   assert.equal(polled.receipt, null);
+  await assert.rejects(f.client.paymentRequirements(polled.order), { code: 'PAYMENT_ALREADY_SUBMITTED', sent: false });
+  assert.equal(f.calls.length, 2);
   await assert.rejects(f.client.submitPayment(polled.order, required, exactAuthorization), expectedError);
   assert.equal(f.calls.length, 3);
   const afterReplay = await f.client.getOrder(polled.order);
@@ -143,6 +154,7 @@ test('QA origin and sandbox flags never authorize Base mainnet, another token or
     { network: 'eip155:8453' }, { asset: '0x' + '44'.repeat(20) }, { scheme: 'upto' },
     { extra: { assetTransferMethod: 'eip3009', name: 'USD Coin', version: '2' } },
     { extra: { assetTransferMethod: 'permit2', name: 'USDC', version: '2' } },
+    { extra: { assetTransferMethod: 'eip3009', name: 'USDC', version: '1' } },
     { amount: '1000001' }, { maxTimeoutSeconds: 301 }, { payTo: 'bad' },
   ]) {
     assert.throws(() => f.client.validatePayment({ ...required, accepts: [{ ...required.accepts[0], ...patch }] }, order), StationError);
@@ -150,6 +162,7 @@ test('QA origin and sandbox flags never authorize Base mainnet, another token or
   assert.throws(() => f.client.validatePayment({ ...required, x402Version: 1 }, order), StationError);
   assert.throws(() => f.client.validatePayment({ ...required, accepts: [required.accepts[0], required.accepts[0]] }, order), StationError);
   assert.throws(() => new PwrStationClient({ ...target, chainId: 'manifest-ledger-mainnet' as any }, 100), { code: 'TESTNET_REQUIRED' });
+  assert.throws(() => f.client.validatePayment(required, { ...order, payment_path: 'checkout' }), { code: 'X402_ORDER_REQUIRED' });
   assert.equal(f.calls.length, 0);
 });
 
@@ -178,23 +191,35 @@ test('refunded completion is not delivery; mismatched orders or receipts never b
     { order: delivered.order, receipt: null },
     { ...delivered, receipt: { ...delivered.receipt, delivered_base_units: 999999 } },
     { ...delivered, receipt: { ...delivered.receipt, chain_id: 'manifest-ledger-mainnet' } },
+    { ...delivered, receipt: { ...delivered.receipt, denom: 'umfx' } },
+    { ...delivered, order: { ...delivered.order, delivery_state: 'queued' } },
     { ...delivered, order: { ...delivered.order, recipient: wallet } },
     { ...delivered, order: { ...delivered.order, id: 'aor_different' } },
     { ...delivered, order: { ...delivered.order, quote: 'aqt_different' } },
     { ...delivered, order: { ...delivered.order, refund_state: 'pending' } },
     { ...delivered, order: { ...delivered.order, payment_state: 'outcome_unknown' } },
-  ]) await assert.rejects(fixture([() => ok(data)]).client.getOrder(order), StationError);
+  ]) {
+    const f = fixture([() => ok(data)]);
+    await assert.rejects(f.client.getOrder(order), StationError);
+    assert.equal(f.calls.length, 1);
+  }
 });
 
 test('signed authorization must match the exact approved test-USDC terms before transport', async () => {
   const f = fixture([]);
   const original = JSON.parse(Buffer.from(signedPayment(), 'base64').toString('utf8'));
   for (const changes of [
+    { x402Version: 1 },
     { accepted: { ...required.accepts[0], network: 'eip155:8453' } },
     { accepted: { ...required.accepts[0], extra: { name: 'Different', version: '2' } } },
     { payload: { ...original.payload, authorization: { ...original.payload.authorization, value: '2000000' } } },
     { payload: { ...original.payload, authorization: { ...original.payload.authorization, validBefore: String(now / 1000 + 301) } } },
     { payload: { ...original.payload, authorization: { ...original.payload.authorization, nonce: 'bad' } } },
+    { payload: { ...original.payload, signature: 'bad' } },
+    ...[
+      { to: '0x' + '44'.repeat(20) }, { from: 'bad' },
+      { validBefore: original.payload.authorization.validAfter },
+    ].map(patch => ({ payload: { ...original.payload, authorization: { ...original.payload.authorization, ...patch } } })),
   ]) await assert.rejects(f.client.submitPayment(order, required, signedPayment(changes)), StationError);
   await assert.rejects(f.client.paymentRequirements({ ...order, payment_deadline: '2026-09-30T00:00:00Z' }), { code: 'ORDER_EXPIRED' });
   assert.equal(f.calls.length, 0);
@@ -207,6 +232,129 @@ test('upstream blockers and malformed responses expose stable codes without remo
     assert.equal(f.calls.length, 1);
   }
   await assert.rejects(fixture([() => error('private remote detail', 500)]).client.quote(pack.id), { message: 'STATION_UNAVAILABLE' });
-  await assert.rejects(fixture([() => new Response('<html>private details</html>')]).client.packages(), { message: 'REQUEST_OUTCOME_UNKNOWN' });
+  await assert.rejects(fixture([() => new Response('<html>private details</html>')]).client.packages(), { message: 'INVALID_RESPONSE', status: 200 });
   await assert.rejects(fixture([() => new Response(' '.repeat(256 * 1024 + 1))]).client.packages(), { message: 'RESPONSE_TOO_LARGE' });
+});
+
+test('quote extensions do not change quote identity and changed order amounts are rejected after dispatch', async () => {
+  const f = fixture([() => ok({ ...quote, quote: null }), () => ok({ order, receipt: null })]);
+  const extended = await f.client.quote(pack.id);
+  assert.equal((await f.client.createOrder(extended, 'durable-key')).order.id, order.id);
+  for (const patch of [
+    { net_pwr_base_units: 1 }, { price_cents: 90, total_cents: 90 },
+    { price_cents: 99, fees_cents: 1 }, { package: 'apk_other' }, { payment_path: 'checkout' },
+  ]) {
+    const changed = fixture([() => ok({ order: { ...order, ...patch }, receipt: null })]);
+    await assert.rejects(changed.client.createOrder(quote, 'durable-key'), { code: 'REQUEST_OUTCOME_UNKNOWN', sent: true, status: 200 });
+    assert.equal(changed.calls.length, 1);
+  }
+});
+
+test('all failures after a signed POST or order creation are marked sent and uncertain', async () => {
+  const failures: [() => Response, number][] = [
+    [() => { throw new Error('private transport diagnostics'); }, 0],
+    [() => new Response(null, { status: 200 }), 200],
+    [() => new Response(' '.repeat(256 * 1024 + 1)), 200],
+    [() => new Response('<html>private proxy details</html>', { status: 502 }), 502],
+    [() => error('SIGNED_TERMS_MISMATCH', 409), 409],
+    [() => ok(null), 200],
+    [() => ok({ order: { ...order, net_pwr_base_units: 1 }, receipt: null }), 200],
+    [() => ok({ order: { ...order, id: 'aor_other' }, receipt: null }), 200],
+    [() => ok({ order: { ...order, quote: 'aqt_other' }, receipt: null }), 200],
+  ];
+  for (const [response, status] of failures) {
+    const f = fixture([response]);
+    await assert.rejects(f.client.submitPayment(order, required, signedPayment()), {
+      code: 'REQUEST_OUTCOME_UNKNOWN', message: 'REQUEST_OUTCOME_UNKNOWN', sent: true, status,
+      authorizationValidBefore: String(now / 1000 + 60),
+    });
+    assert.equal(f.calls.length, 1);
+  }
+  // A created order's ID is assigned by the service, so only quote identity is
+  // checked there. Use the other response failures for creation recovery.
+  for (const [response, status] of failures.filter((_, index) => index !== 7)) {
+    const f = fixture([response]);
+    await assert.rejects(f.client.createOrder(quote, 'durable-key'), { code: 'REQUEST_OUTCOME_UNKNOWN', sent: true, status });
+    assert.equal(f.calls.length, 1);
+  }
+  const before = fixture([]);
+  await assert.rejects(before.client.submitPayment(order, required, signedPayment({ accepted: null })), { code: 'INVALID_RESPONSE', sent: false });
+  await assert.rejects(before.client.createOrder(quote, ''), { code: 'INVALID_IDEMPOTENCY_KEY', sent: false });
+  assert.equal(before.calls.length, 0);
+});
+
+test('an attempt restored after restart permits exact replay but no fresh challenge or replacement', async () => {
+  let current = now;
+  const f = fixture([() => ok(delivered)], target, () => current);
+  const signed = signedPayment();
+  f.client.restoreSubmittedPayment(order, required, signed);
+  const original = JSON.parse(Buffer.from(signed, 'base64').toString('utf8'));
+  const replacement = signedPayment({ payload: { ...original.payload,
+    authorization: { ...original.payload.authorization, nonce: '0x' + '44'.repeat(32) } } });
+  for (const payment_state of ['awaiting', 'failed', 'outcome_unknown']) {
+    await assert.rejects(f.client.paymentRequirements({ ...order, payment_state }), { code: 'PAYMENT_ALREADY_SUBMITTED', sent: false });
+    await assert.rejects(f.client.submitPayment({ ...order, payment_state }, required, replacement), { code: 'PAYMENT_REPLACEMENT_FORBIDDEN', sent: false });
+  }
+  assert.equal(f.calls.length, 0);
+  current += 61_000;
+  await assert.rejects(f.client.paymentRequirements(order), { code: 'PAYMENT_ALREADY_SUBMITTED' });
+  assert.equal((await f.client.submitPayment(order, required, signed)).receipt?.tx_hash, delivered.receipt.tx_hash.toUpperCase());
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls[0]!.headers.get('PAYMENT-SIGNATURE'), signed);
+});
+
+test('a signed submission blocks overlapping fresh challenges and replacement authorizations', async () => {
+  let respond!: (response: Response) => void;
+  const pending = new Promise<Response>(resolve => { respond = resolve; });
+  const f = fixture([() => pending]);
+  const signed = signedPayment();
+  const first = f.client.submitPayment(order, required, signed);
+  const original = JSON.parse(Buffer.from(signed, 'base64').toString('utf8'));
+  const replacement = signedPayment({ payload: { ...original.payload,
+    authorization: { ...original.payload.authorization, nonce: '0x' + '44'.repeat(32) } } });
+  try {
+    await assert.rejects(f.client.paymentRequirements(order), { code: 'PAYMENT_ALREADY_SUBMITTED',
+      authorizationValidBefore: String(now / 1000 + 60), sent: false });
+    await assert.rejects(f.client.submitPayment(order, required, replacement), { code: 'PAYMENT_REPLACEMENT_FORBIDDEN', sent: false });
+    assert.equal(f.calls.length, 1);
+  } finally { respond(ok(delivered)); }
+  assert.equal((await first).receipt?.tx_hash, delivered.receipt.tx_hash.toUpperCase());
+});
+
+test('refund and in-flight states cannot request payment terms', async () => {
+  const f = fixture([]);
+  for (const refund_state of ['pending', 'succeeded', 'failed']) {
+    await assert.rejects(f.client.paymentRequirements({ ...order, refund_state }), { code: 'POLL_ORDER_BEFORE_PAYING', sent: false });
+  }
+  for (const payment_state of ['attempt_pending', 'outcome_unknown', 'settled']) {
+    await assert.rejects(f.client.paymentRequirements({ ...order, payment_state }), { code: 'POLL_ORDER_BEFORE_PAYING', sent: false });
+  }
+  assert.equal(f.calls.length, 0);
+});
+
+test('header-only payment challenges work; read-only gateway failures retain HTTP status', async () => {
+  const headers = { 'PAYMENT-REQUIRED': Buffer.from(JSON.stringify(required)).toString('base64') };
+  for (const body of [null, '<html>Payment required</html>', '']) {
+    const f = fixture([() => new Response(body, { status: 402, headers })]);
+    assert.deepEqual(await f.client.paymentRequirements(order), required);
+    assert.equal(f.calls.length, 1);
+  }
+  for (const status of [502, 503]) {
+    for (const body of [null, '<html>private details</html>']) {
+      const f = fixture([() => new Response(body, { status })]);
+      await assert.rejects(f.client.getOrder(order), { code: 'STATION_UNAVAILABLE', status, sent: false });
+      assert.equal(f.calls.length, 1);
+    }
+  }
+  const rejected = fixture([() => new Response(null, { status: 402, headers })]);
+  await assert.rejects(rejected.client.submitPayment(order, required, signedPayment()), { code: 'REQUEST_OUTCOME_UNKNOWN', sent: true, status: 402 });
+});
+
+test('login rejects another wallet identity and never keeps its token', async () => {
+  const f = fixture([() => ok({ nonce: 'ab'.repeat(16) }), () => ok({ wallet_address: creditAddress, token: 'private-token' }), () => ok([pack])]);
+  const signer = { getAddress: async () => wallet, signArbitrary: async () => ({ signature: 'fixture', pub_key: { value: 'fixture' } }) };
+  await assert.rejects(f.client.login(signer), { code: 'INVALID_LOGIN' });
+  await f.client.packages();
+  assert.equal(f.calls.length, 3);
+  assert.equal(f.calls[2]!.headers.has('Authorization'), false);
 });
