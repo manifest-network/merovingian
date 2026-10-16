@@ -31,6 +31,10 @@ journaled attempts after restart, enforce aggregate spending and independently
 verify delivery on chain. See the [purchase and recovery contract](PWR-STATION.md#purchase-and-recovery-contract)
 and its local and historical testnet validation.
 
+The MCP SDK advances to 1.31.0, including Manifest's transitive copies, to clear
+the advisory found by the October 16 image scan. The scoped `undici` security
+override remains. See [dependency details](DEPENDENCIES.md#dependency-overrides).
+
 Run `npm run check` for registry metadata, TypeScript, local fixture tests and the
 build. Image publication, deployment and any real-money validation require a
 separate reviewed release procedure and explicit authorization.

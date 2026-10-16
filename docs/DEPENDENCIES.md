@@ -6,7 +6,17 @@ The published SDK differs from the development checkout. Runtime contribution ve
 
 ## Dependency overrides
 
-The lockfile applies one scoped override: `@manifest-network/manifest-mcp-core` uses `undici@8.10.2` instead of the SDK's exact `8.10.0` pin. The October 1 final-image scan blocked eleven advisories in that HTTP dependency, all fixed by the [8.10.2 security release](https://github.com/nodejs/undici/releases/tag/v8.10.2). This patch keeps the published SDK at 0.23.0; remove the override when its upstream dependency pin includes the fixes.
+The lockfile overrides `@manifest-network/manifest-mcp-core`'s `undici` dependency to `8.10.2` instead of the SDK's exact `8.10.0` pin. The October 1 final-image scan blocked eleven advisories in that HTTP dependency, all fixed by the [8.10.2 security release](https://github.com/nodejs/undici/releases/tag/v8.10.2). This patch keeps the published SDK at 0.23.0; remove the override when its upstream dependency pin includes the fixes.
+
+The October 16 image scan also blocked MCP SDK 1.30.0 for
+[GHSA-6qxp-vccf-f47h / CVE-2026-104850](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-6qxp-vccf-f47h).
+The direct dependency is now `@modelcontextprotocol/sdk@1.31.0`, the patched 1.x
+release. Scoped overrides under `manifest-mcp-core` and `manifest-mcp-fred` refer
+to that same direct pin, replacing their exact 1.30.0 dependencies without
+retaining vulnerable nested copies. Remove those overrides when the Manifest
+packages adopt the fix. Merovingian uses the SDK as a server and supplies no
+OAuth client credentials; the advisory concerns OAuth clients, but the image
+policy still rejects the affected installed package.
 
 The `axios` and `protobufjs` overrides used with SDK 0.22.0 were removed with the 0.23.0 upgrade: manifestjs 4.0.0 depends on Manifest's published forks, which declare the patched lines directly.
 
