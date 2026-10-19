@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test, { afterEach } from 'node:test';
 import {
-  PWR_STATION_QA, TEST_USDC, PwrStationClient, StationError,
+  PwrStationClient, StationError,
   type PaymentRequired, type PurchaseTarget, type Quote, type StationOrder, type StationSigner,
 } from '../scripts/pwr-station-client.js';
 import { PWR_STATION_PROFILES, type PwrStationNetwork } from '../scripts/pwr-station-config.js';
@@ -19,7 +19,8 @@ const { expires_at: _expiry, ...orderTerms } = quote;
 const order: StationOrder = { ...orderTerms, id: 'aor_fixture', quote: quote.id, payment_state: 'awaiting',
   recording_state: 'n_a', delivery_state: 'not_started', refund_state: 'none', next_action: 'retry_same_request',
   payment_deadline: '2026-10-01T00:10:00Z' };
-const required: PaymentRequired = { x402Version: 2, accepts: [{ scheme: 'exact', network: 'eip155:84532', asset: TEST_USDC,
+const required: PaymentRequired = { x402Version: 2, accepts: [{ scheme: 'exact', network: 'eip155:84532',
+  asset: '0x036cbd53842c5426634e7929541ec2318f3dcf7e',
   amount: '1000000', payTo: '0x' + '11'.repeat(20), maxTimeoutSeconds: 60,
   extra: { assetTransferMethod: 'eip3009', name: 'USDC', version: '2' } }] };
 const delivered = { order: { ...order, payment_state: 'settled', recording_state: 'confirmed', delivery_state: 'confirmed',
@@ -586,8 +587,6 @@ test('mainnet requires explicit selection and invalid profiles or targets fail b
 });
 
 test('profiles are immutable and mutating caller options cannot switch an existing client', async () => {
-  assert.equal(PWR_STATION_QA, 'https://testnet.pwr-station.com');
-  assert.equal(TEST_USDC, '0x036cbd53842c5426634e7929541ec2318f3dcf7e');
   assert.equal(Reflect.set(PWR_STATION_PROFILES, 'testnet', PWR_STATION_PROFILES.mainnet), false);
   for (const profile of Object.values(PWR_STATION_PROFILES)) {
     assert.throws(() => Object.assign(profile, { baseUrl: 'https://untrusted.example' }), TypeError);
@@ -609,16 +608,19 @@ for (const scenario of scenarios) {
     const opposite = scenario.network === 'testnet' ? mainnetRequired : required;
     const terms = scenario.required.accepts[0]!;
     const f = fixture([], scenario.target, () => now, 100, scenario.network);
-    for (const patch of [
-      { network: opposite.accepts[0]!.network }, { asset: opposite.accepts[0]!.asset },
-      { scheme: 'upto' }, { extra: opposite.accepts[0]!.extra },
-      { extra: { ...(terms.extra as object), assetTransferMethod: 'permit2' } },
-      { extra: { ...(terms.extra as object), version: '1' } },
-      { amount: '1000001' }, { maxTimeoutSeconds: 301 },
-    ]) {
+    for (const [patch, code] of [
+      [{ network: opposite.accepts[0]!.network }, 'USDC_REQUIRED'],
+      [{ asset: opposite.accepts[0]!.asset }, 'USDC_REQUIRED'],
+      [{ scheme: 'upto' }, 'USDC_REQUIRED'],
+      [{ extra: opposite.accepts[0]!.extra }, 'USDC_DOMAIN_REQUIRED'],
+      [{ extra: { ...(terms.extra as object), assetTransferMethod: 'permit2' } }, 'USDC_DOMAIN_REQUIRED'],
+      [{ extra: { ...(terms.extra as object), version: '1' } }, 'USDC_DOMAIN_REQUIRED'],
+      [{ amount: '1000001' }, 'INVALID_PAYMENT_TERMS'],
+      [{ maxTimeoutSeconds: 301 }, 'AUTHORIZATION_WINDOW_TOO_LONG'],
+    ] as const) {
       const payment = { ...scenario.required, accepts: [{ ...terms, ...patch }] } as PaymentRequired;
-      assert.throws(() => f.client.validatePayment(payment, scenario.order), StationError);
-      await assert.rejects(f.client.submitPayment(scenario.order, payment, signedPayment({}, payment)), { sent: false });
+      assert.throws(() => f.client.validatePayment(payment, scenario.order), { code, sent: false });
+      await assert.rejects(f.client.submitPayment(scenario.order, payment, signedPayment({}, payment)), { code, sent: false });
     }
     assert.equal(f.calls.length, 0);
   });
@@ -660,13 +662,22 @@ for (const scenario of scenarios) {
 
   test(`${scenario.network}: uncertain payment recovery retains the selected profile and exact authorization`, async () => {
     const signed = signedPayment({}, scenario.required);
+    // Synthetic serialization models the host's private, integrity-checked journal.
+    const saved = JSON.parse(JSON.stringify({ network: scenario.network, target: scenario.target,
+      order: scenario.order, required: scenario.required, signed }));
     const initial = fixture([() => { throw new Error('fixture lost response'); }], scenario.target, () => now, 100, scenario.network);
     await assert.rejects(initial.client.submitPayment(scenario.order, scenario.required, signed), {
       code: 'REQUEST_OUTCOME_UNKNOWN', sent: true, authorizationValidBefore: String(now / 1000 + 60),
     });
     assert.equal(initial.calls.length, 1);
-    const restarted = fixture([() => ok(scenario.delivered)], scenario.target, () => now, 100, scenario.network);
-    restarted.client.restoreSubmittedPayment(scenario.order, scenario.required, signed);
+    if (saved.network === 'mainnet') {
+      const wrongNetwork = fixture([]);
+      assert.throws(() => wrongNetwork.client.restoreSubmittedPayment(saved.order, saved.required, saved.signed), { code: 'TARGET_MISMATCH' });
+      await assert.rejects(wrongNetwork.client.getOrder(saved.order), { code: 'TARGET_MISMATCH' });
+      assert.equal(wrongNetwork.calls.length, 0);
+    }
+    const restarted = fixture([() => ok(scenario.delivered)], saved.target, () => now, 100, saved.network);
+    restarted.client.restoreSubmittedPayment(saved.order, saved.required, saved.signed);
     await assert.rejects(restarted.client.paymentRequirements(scenario.order), { code: 'PAYMENT_ALREADY_SUBMITTED', sent: false });
     const replacement = JSON.parse(Buffer.from(signed, 'base64').toString('utf8'));
     replacement.payload.authorization.nonce = '0x' + '44'.repeat(32);
@@ -676,5 +687,69 @@ for (const scenario of scenarios) {
     assert.equal(result.receipt?.chain_id, scenario.target.chainId);
     assert.equal(restarted.calls.length, 1);
     assert.equal(restarted.calls[0]!.headers.get('PAYMENT-SIGNATURE'), initial.calls[0]!.headers.get('PAYMENT-SIGNATURE'));
+  });
+
+  test(`${scenario.network}: checksum and lowercase USDC addresses validate without rewriting signed terms`, async () => {
+    const configured = PWR_STATION_PROFILES[scenario.network].usdcContract;
+    assert.notEqual(configured, configured.toLowerCase(), 'Exercise a checksum-cased profile contract');
+    for (const asset of [configured, configured.toLowerCase(), '0x' + configured.slice(2).toUpperCase()]) {
+      const payment: PaymentRequired = { ...scenario.required, accepts: [{ ...scenario.required.accepts[0]!, asset }] };
+      const f = fixture([() => ok(scenario.delivered)], scenario.target, () => now, 100, scenario.network);
+      assert.equal(f.client.validatePayment(payment, scenario.order).accepts[0]!.asset, asset);
+      const signed = signedPayment({}, payment);
+      assert.ok((await f.client.submitPayment(scenario.order, payment, signed)).receipt);
+      assert.equal(f.calls[0]!.headers.get('PAYMENT-SIGNATURE'), signed);
+    }
+  });
+
+  test(`${scenario.network}: a lower spending ceiling permits reconciliation reads but blocks all payment work`, async () => {
+    const pending = { ...scenario.order, payment_state: 'outcome_unknown', next_action: 'poll' } as StationOrder;
+    const signed = signedPayment({}, scenario.required);
+    const recovery = fixture([() => ok({ order: pending, receipt: null }), () => ok(scenario.delivered)],
+      scenario.target, () => now, 99, scenario.network);
+    assert.throws(() => recovery.client.restoreSubmittedPayment(scenario.order, scenario.required, signed), { code: 'SPEND_LIMIT_EXCEEDED' });
+    const polled = await recovery.client.getOrder(scenario.order);
+    assert.equal(polled.order.payment_state, 'outcome_unknown');
+    assert.equal(polled.receipt, null);
+    const complete = await recovery.client.getOrder(polled.order);
+    assert.equal(complete.receipt?.delivered_base_units, 1000000);
+    await assert.rejects(recovery.client.paymentRequirements(scenario.order), { code: 'PAYMENT_ALREADY_SUBMITTED', sent: false });
+    await assert.rejects(recovery.client.submitPayment(scenario.order, scenario.required, signed), { code: 'PAYMENT_RESTORE_REQUIRED', sent: false });
+    assert.equal(recovery.calls.length, 2);
+    assert.ok(recovery.calls.every(call => call.method === 'GET' && !call.headers.has('PAYMENT-SIGNATURE')));
+
+    const fresh = fixture([], scenario.target, () => now, 99, scenario.network);
+    const blocked = { code: 'SPEND_LIMIT_EXCEEDED', sent: false };
+    await assert.rejects(fresh.client.createOrder(scenario.quote, 'fixture-key'), blocked);
+    await assert.rejects(fresh.client.paymentRequirements(scenario.order), blocked);
+    assert.throws(() => fresh.client.validatePayment(scenario.required, scenario.order), blocked);
+    await assert.rejects(fresh.client.submitPayment(scenario.order, scenario.required, signed), blocked);
+    assert.equal(fresh.calls.length, 0);
+  });
+
+  test(`${scenario.network}: reads above the spending ceiling still reject malformed or changed order terms`, async () => {
+    const opposite = scenarios.find(value => value.network !== scenario.network)!;
+    const before = fixture([], scenario.target, () => now, 99, scenario.network);
+    for (const [patch, code] of [
+      [{ chain_id: opposite.target.chainId }, 'TARGET_MISMATCH'],
+      [{ recipient: wallet }, 'TARGET_MISMATCH'], [{ denom: 'umfx' }, 'TARGET_MISMATCH'],
+      [{ total_cents: 99 }, 'INVALID_AMOUNT'], [{ price_cents: -1 }, 'INVALID_AMOUNT'],
+    ] as const) await assert.rejects(before.client.getOrder({ ...scenario.order, ...patch }), { code, sent: false });
+    assert.equal(before.calls.length, 0);
+
+    for (const [patch, code] of [
+      [{ id: 'aor_other' }, 'ORDER_MISMATCH'], [{ quote: 'aqt_other' }, 'ORDER_MISMATCH'],
+      [{ recipient: wallet }, 'TARGET_MISMATCH'], [{ environment: opposite.order.environment }, 'TARGET_MISMATCH'],
+      [{ price_cents: 101, total_cents: 101 }, 'ORDER_TERMS_CHANGED'],
+      [{ total_cents: 99 }, 'INVALID_AMOUNT'],
+    ] as const) {
+      const f = fixture([() => ok({ order: { ...scenario.order, ...patch }, receipt: null })], scenario.target, () => now, 99, scenario.network);
+      await assert.rejects(f.client.getOrder(scenario.order), { code });
+      assert.equal(f.calls.length, 1);
+      assert.equal(f.calls[0]!.method, 'GET');
+    }
+    const invalidReceipt = fixture([() => ok({ ...scenario.delivered, receipt: { ...scenario.delivered.receipt, delivered_base_units: 1 } })],
+      scenario.target, () => now, 99, scenario.network);
+    await assert.rejects(invalidReceipt.client.getOrder(scenario.order), { code: 'INVALID_DELIVERY_RECEIPT' });
   });
 }

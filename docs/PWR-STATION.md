@@ -105,33 +105,40 @@ addresses, quotes nor payment challenges select mainnet implicitly.
 Sources: [PWR-Station environments](https://pwr-station.com/docs/overview),
 [payment terms](https://pwr-station.com/docs/x402), and
 [Circle USDC contracts](https://developers.circle.com/stablecoins/usdc-contract-addresses).
-Both Manifest networks currently use the PWR denomination pinned in the module
-and the repository's public runtime examples. Its equality across chains cannot
-establish network identity. The caller must still supply a verified recipient,
-chain and denomination; the constructor rejects a target that disagrees with its
-selected profile before making any request.
+Both Manifest networks currently use the expected PWR denomination defined in
+[shared network constants](../src/networks.ts) and the public runtime examples.
+**PWR-Station's production denomination response is unverified.** Mainnet preflight
+must confirm that its quotes and orders echo the full expected `factory/…/upwr`
+denomination; subsequent authorized purchase acceptance must also check the receipt.
+A different response, including bare `upwr`, remains a mismatch; do not relax the
+asset check to make a purchase proceed.
 
-For an explicitly authorized mainnet workflow, construct the client with:
+The caller must supply independently verified recipient, chain and denomination
+metadata. The constructor compares that information with the selected profile
+before making any request. Keep these target fields: an address alone cannot
+distinguish Manifest networks, which share a prefix and denomination. Copying the
+chain and denomination from the purchase profile would discard that cross-check.
+
+For an explicitly authorized mainnet hosting contribution, use previously checked
+Merovingian support information with an available existing credit account:
 
 ```ts
-import { PWR_STATION_PROFILES } from './pwr-station-config.js';
 import { PwrStationClient } from './pwr-station-client.js';
 
-const profile = PWR_STATION_PROFILES.mainnet;
 const client = new PwrStationClient({
-  recipient: verifiedRecipient,
-  chainId: profile.chainId,
-  denom: profile.pwrDenom,
+  recipient: verifiedSupport.hostingCredit.creditAddress,
+  chainId: verifiedSupport.chainId,
+  denom: verifiedSupport.denom,
 }, maxOrderCents, { network: 'mainnet' });
 ```
 
-`verifiedRecipient` and `maxOrderCents` are host inputs. Construction performs no
+`verifiedSupport` and `maxOrderCents` are host inputs. Construction performs no
 network requests or signing. Omitting `network` selects testnet, so passing only
 a mainnet target fails. Unknown network values fail with `INVALID_NETWORK`;
 target mismatches use `TARGET_MISMATCH`. Payment network/asset and signing-domain
-mismatches use `USDC_REQUIRED` and `USDC_DOMAIN_REQUIRED`, replacing the original
-testnet-specific error names. `PWR_STATION_QA` and `TEST_USDC` remain testnet aliases
-for existing imports. Arbitrary URL or token overrides are not supported.
+mismatches use `USDC_REQUIRED` and `USDC_DOMAIN_REQUIRED`. The token comparison is
+case-insensitive; signed payment terms are preserved exactly. Arbitrary URL or
+token overrides are not supported.
 
 Wallet secrets, wallet references, spending policy and recovery records belong to
 the purchasing agent's private host configuration and storage, outside source and
@@ -152,7 +159,8 @@ synthetic fixture coverage, with no live mainnet purchase or payment preflight.
 3. Select a package within the host's budget. Request a quote with the exact
    recipient and `payment_path: "x402"`. Validate the echoed immutable terms,
    environment, network, expiry and total before creating an order.
-4. Persist the quote and a fresh idempotency key **privately before** creating the
+4. Persist the selected network (`testnet` or `mainnet`), independently verified
+   target, quote and a fresh idempotency key **privately before** creating the
    order. Every failure after dispatch is `REQUEST_OUTCOME_UNKNOWN` with
    `sent: true`, including invalid responses. Retry the same quote/key to recover the
    same order. Never replace them just because a request timed out.
@@ -161,16 +169,22 @@ synthetic fixture coverage, with no live mainnet purchase or payment preflight.
    domain. Require the quoted cents converted exactly to six-decimal USDC and a
    bounded authorization expiry. A testnet client rejects real Base (`eip155:8453`),
    even from the QA hostname or a sandbox quote. A mainnet client rejects test USDC.
-6. Persist the order, requirements and **exact signed authorization** privately
-   before the pay request. An uncertain payment means poll that order; an explicit
-   retry must reuse the identical signature and nonce. Do not generate a second
+6. Persist the network, order, requirements and **exact signed authorization**
+   together in the private attempt record before the pay request. An uncertain
+   payment means poll that order; an explicit retry must reuse the identical
+   signature and nonce. Do not generate a second
    authorization, buy another package, or fall back to checkout automatically.
-   After a process restart, call `restoreSubmittedPayment` with the saved order,
-   requirements and exact signed authorization for each journaled attempt before
-   doing any payment work. First verify that the saved order identity belongs to
-   that attempt using the host's integrity-checked journal. If identity cannot be
-   trusted or restore fails, stop payment work and reconcile the saved attempt;
-   never treat that error as permission to sign another payment.
+   After a process restart, verify the saved network and order identity using the
+   host's integrity-checked journal. Construct the new client with the verified
+   target and `{ network: savedAttempt.network }`; then call
+   `restoreSubmittedPayment` with the saved order, requirements and exact signed
+   authorization before any payment work. Require a trustworthy saved network;
+   never silently fall back to the testnet default during recovery. A mainnet
+   attempt passed to a default testnet client correctly fails with `TARGET_MISMATCH`:
+   construct a new client with its verified saved network to recover it.
+   If identity cannot be trusted or restore fails, stop payment work and reconcile
+   the saved attempt; never treat that error as permission to sign another payment.
+   Read-only polling remains available with a lower spending ceiling.
 7. Require settled payment, confirmed PWR delivery, no refund, and a receipt with
    the expected Manifest chain, denomination, amount and transaction hash. The
    action `complete` alone is insufficient: a refunded order can also be complete.
@@ -203,13 +217,21 @@ rejected with `PAYMENT_RESTORE_REQUIRED`. Correct the recovery problem and succe
 restore the original attempt before considering an exact replay. A failed restore
 does not erase an earlier successfully restored authorization or its expiry.
 
+`getOrder` validates the saved and returned order identity, target, amount
+arithmetic, immutable terms and receipt, but does not enforce the current spending
+ceiling. A host that lowers its ceiling can poll an uncertain payment and verify
+its eventual delivery even when restoring the payment attempt is blocked by that
+ceiling. Quote acceptance, order creation, new payment challenges, authorization
+validation and payment submission still enforce the ceiling. Polling cannot clear
+the submitted-payment guard or authorize another payment.
+
 This guard does not authenticate the saved order identity. A missing or malformed
 order ID cannot be recorded; a corrupted but well-formed ID guards the wrong order.
 The signed USDC authorization does not bind PWR-Station's order ID, so a successful
 restore cannot detect that substitution. The host must preserve and verify the
-binding between the order, quote, idempotency key, requirements and exact signed
-payment in its private recovery journal. Recovering the real order with the same
-quote/key does not restore its guard automatically. Keep payment work stopped
+binding between the network, target, order, quote, idempotency key, requirements
+and exact signed payment in its private recovery journal. Recovering the real order
+with the same quote/key does not restore its guard automatically. Keep payment work stopped
 until the original attempt is reliably identified and restored or reconciled.
 The reusable host journal and its integrity checks remain follow-up work.
 
@@ -326,7 +348,7 @@ entitlement. Provider payouts must remain outside the hosting contribution ledge
 ## Acceptance remaining
 
 After the network-profile follow-up, `npm run check` passed the registry metadata
-check, TypeScript check, all **447 local tests**, and production build. Tests used
+check, TypeScript check, all **453 local tests**, and production build. Tests used
 isolated local fixtures and did not publish, deploy or perform live visits.
 
 Local tests cover exact quote/order/payment terms, per-order limits, USDC domain
@@ -356,6 +378,12 @@ and receipt mismatches, profile mutation, and spending above the per-order ceili
 Eight isolated mutations removing the profile identity and payment-domain guards
 each failed their regression test; unchanged baselines passed.
 
+Review fixtures also cover reconciliation reads under a reduced spending ceiling,
+continued payment blocking, restart from a saved network, exact payment error codes
+and checksum-cased USDC contracts without rewriting the signed terms.
+Nine targeted follow-up mutations of polling/spending gates, contract normalization
+and error codes each failed their regression test; unchanged baselines passed.
+
 The private acceptance harness completed the testnet purchase with a host-owned
 EVM signer and durable recovery storage. Live checks covered expired-order
 reconciliation, process restarts, idempotent order creation, exact paid-request
@@ -364,7 +392,8 @@ remain covered by local fixtures; no live refund or deliberately interrupted
 settlement was induced.
 
 A reusable host-owned purchase runner, paid-gift order/claim binding, mainnet
-preflight and acceptance, and a production release proposal remain follow-up work.
+preflight (including production's still-unverified PWR denomination response) and
+acceptance, and a production release proposal remain follow-up work.
 Production deployment or real-money operations require explicit authorization.
 Nothing here reopens the retired lease or authorizes a mainnet payment.
 
