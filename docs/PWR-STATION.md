@@ -110,8 +110,10 @@ There is no public buying/signing MCP tool or paid-gift endpoint in this change.
    authorization, buy another package, or fall back to checkout automatically.
    After a process restart, call `restoreSubmittedPayment` with the saved order,
    requirements and exact signed authorization for each journaled attempt before
-   doing any payment work. If restore fails, stop payment work and reconcile the
-   saved attempt; never treat that error as permission to sign another payment.
+   doing any payment work. First verify that the saved order identity belongs to
+   that attempt using the host's integrity-checked journal. If identity cannot be
+   trusted or restore fails, stop payment work and reconcile the saved attempt;
+   never treat that error as permission to sign another payment.
 7. Require settled payment, confirmed PWR delivery, no refund, and a receipt with
    the expected Manifest chain, denomination, amount and transaction hash. The
    action `complete` alone is insufficient: a refunded order can also be complete.
@@ -136,12 +138,24 @@ challenges and replacement signatures for that order, even if polling says
 Exact replay remains possible. The guard does not clear on expiry: the old
 authorization could already have settled. After a restart, the host must restore
 each journaled attempt as described above; the client does not provide durable
-storage. Restore records a blocking entry for the order before validating the
-saved payment. A backward clock step, a lower spending ceiling or damaged journal
-data therefore leaves fresh challenges blocked and signed submissions rejected
-with `PAYMENT_RESTORE_REQUIRED`. Correct the recovery problem and successfully
+storage. After accepting a syntactically valid order ID, restore records a blocking
+entry for that ID before validating the saved requirements and signed payment.
+With a trustworthy order identity, a backward clock step, a lower spending ceiling
+or damaged requirements/payment data leaves fresh challenges blocked and submissions
+rejected with `PAYMENT_RESTORE_REQUIRED`. Correct the recovery problem and successfully
 restore the original attempt before considering an exact replay. A failed restore
 does not erase an earlier successfully restored authorization or its expiry.
+
+This guard does not authenticate the saved order identity. A missing or malformed
+order ID cannot be recorded; a corrupted but well-formed ID guards the wrong order.
+The signed USDC authorization does not bind PWR-Station's order ID, so a successful
+restore cannot detect that substitution. The host must preserve and verify the
+binding between the order, quote, idempotency key, requirements and exact signed
+payment in its private recovery journal. Recovering the real order with the same
+quote/key does not restore its guard automatically. Keep payment work stopped
+until the original attempt is reliably identified and restored or reconciled.
+The reusable host journal and its integrity checks remain follow-up work.
+
 Starting a new order requires host reconciliation of the old payment,
 including finalized authorization use/expiry and order/settlement state. Recovery
 files must remain private and outside source, Git history, images, and public
@@ -255,7 +269,7 @@ entitlement. Provider payouts must remain outside the hosting contribution ledge
 ## Acceptance remaining
 
 After the October 19 review follow-up, `npm run check` passed the registry metadata
-check, TypeScript check, all **431 local tests**, and production build. Tests used
+check, TypeScript check, all **436 local tests**, and production build. Tests used
 isolated local fixtures and did not publish, deploy or perform live visits.
 
 Local tests cover exact quote/order/payment terms, per-order limits, USDC domain
@@ -268,10 +282,15 @@ HTTP/MCP agreement. These are protocol fixtures; they do not exercise a live
 refund or establish an aggregate spending cap.
 
 Follow-up fixtures cover failed restores after clock drift, a reduced spending
-ceiling or damaged saved data, plus group proposal/vote execution warnings.
-Ten isolated mutations removing the seven reviewed client guards and three
-history guards each failed the corresponding regression test; their unchanged
-baselines passed.
+ceiling or damaged requirements/payment data with a valid order ID, plus group
+proposal/vote execution warnings. A separate fixture demonstrates that the host
+must authenticate the saved order identity before using restore.
+Additional fixtures cover canonical `validBefore` formatting, transport-error
+sanitization, original expiry on replacement rejection, and the 16 KiB signed-payment
+cap. Seven isolated mutations removing those four client guards and three history
+guards each failed the corresponding regression test; their unchanged baselines
+passed. The nested-history fixture uses a real `MsgSend`, and the body-cancellation
+concurrency test uses a controlled clock so CI load cannot consume its cleanup grace.
 
 The private acceptance harness completed the testnet purchase with a host-owned
 EVM signer and durable recovery storage. Live checks covered expired-order

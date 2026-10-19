@@ -558,6 +558,9 @@ test('REST identity and history errors abort transport and cancel bodies without
 });
 
 test('credit deadline retains concurrency slots during bounded body cancellation cleanup', async (context) => {
+  // Advance deadlines explicitly so a busy CI runner cannot exhaust the cleanup
+  // grace while the test is still filling the four concurrency slots.
+  context.mock.timers.enable({ apis: ['setTimeout'] });
   let credits = 0;
   let aborted = 0;
   let succeed = false;
@@ -574,12 +577,18 @@ test('credit deadline retains concurrency slots during bounded body cancellation
     }));
   });
   const service = new SupportService({ ...config, restUrl: 'https://rest.example.com' }, undefined, { timeoutMs: 15, circuitMs: 0 });
+  const expireRequest = async () => {
+    const pending = service.getInfo();
+    await new Promise<void>(resolve => setImmediate(resolve));
+    context.mock.timers.tick(15);
+    return pending;
+  };
   try {
-    for (let i = 0; i < 4; i++) assert.equal((await service.getInfo()).status, 'unavailable');
+    for (let i = 0; i < 4; i++) assert.equal((await expireRequest()).status, 'unavailable');
     assert.equal(credits, 4);
     assert.equal(aborted, 4);
     assert.equal(finishCancellation.length, 4);
-    assert.equal((await service.getInfo()).status, 'unavailable');
+    assert.equal((await expireRequest()).status, 'unavailable');
     assert.equal(credits, 4);
     succeed = true;
     finishCancellation.forEach((finish) => finish());
@@ -868,16 +877,16 @@ test('history rejects missing or inconsistent billing events and malformed index
 
 test('nested history rows still require billing events and valid indexed and billing credit addresses', async () => {
   const bank = bankHistory('10');
-  const nested = { '@type': '/cosmos.authz.v1beta1.MsgExec', grantee: tenant, msgs: [] };
-  const valid = historyRecord(1, [historyMessage(), nested], { events: fundingEvents(historyEvent()) });
+  const nested = { '@type': '/cosmos.authz.v1beta1.MsgExec', grantee: tenant, msgs: [bank.message] };
+  const valid = historyRecord(1, [historyMessage(), nested], { events: [...fundingEvents(historyEvent()), bank.event] });
   const control = await historyFixture({ total: '1', txResponses: [valid] }).service.getHistory();
   assert.equal(control.status, 'available');
-  assert.equal(control.totals?.amount, '10');
+  assert.equal(control.totals?.amount, '20');
   for (const row of [
-    historyRecord(1, [historyMessage(), nested], { events: [bank.event] }),
+    historyRecord(1, [historyMessage(), nested], { events: [bank.event, bank.event] }),
     historyRecord(1, [{ ...bank.message, to_address: 'invalid' }, nested], { events: [bank.event] }),
     ...[sender, 'invalid'].map(credit_address => historyRecord(1, [historyMessage(), nested], {
-      events: [bank.event, historyEvent({ credit_address })],
+      events: [bank.event, bank.event, historyEvent({ credit_address })],
     })),
   ]) {
     const result = await historyFixture({ total: '1', txResponses: [row] }).service.getHistory();

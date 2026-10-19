@@ -284,12 +284,13 @@ export class PwrStationClient {
   }
 
   /** Restore a private journaled attempt before using a fresh client instance.
-   * A failed restore keeps this order blocked until its original attempt can be
-   * restored successfully. Expiry alone never clears a submitted-payment guard. */
+   * The host must first authenticate the saved order identity: the payment
+   * signature does not bind it. Once a valid ID is supplied, failed payment
+   * validation keeps that ID blocked. Expiry alone never clears the guard. */
   restoreSubmittedPayment(order: StationOrder, required: PaymentRequired, signedPayment: string): void {
-    identifier(order.id, 'aor');
-    // Clock drift, a reduced spending ceiling or damaged journal data cannot
-    // establish that an earlier payment was never submitted. Block before parsing.
+    identifier(order?.id, 'aor');
+    // With a trusted order ID, clock drift, a reduced ceiling or damaged payment
+    // data cannot establish non-submission. Block before validating the payment.
     if (!this.submitted.has(order.id)) this.submitted.set(order.id, null);
     this.rememberSubmission(order.id, this.authorization(order, required, signedPayment));
   }

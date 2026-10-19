@@ -467,3 +467,81 @@ test('invalid order identifiers cannot dispatch a poll request', async () => {
   }
   assert.equal(f.calls.length, 0);
 });
+
+test('restore guards the supplied order ID and relies on the host to authenticate its identity', async () => {
+  const f = fixture([() => challenge()]);
+  for (const saved of [undefined, null, 'garbage', {}, { ...order, id: 'damaged' }]) {
+    assert.throws(() => f.client.restoreSubmittedPayment(saved as StationOrder, required, signedPayment()), { code: 'INVALID_ID' });
+  }
+  const damaged = { ...order, id: 'aor_different' };
+  f.client.restoreSubmittedPayment(damaged, required, signedPayment());
+  await assert.rejects(f.client.paymentRequirements(damaged), { code: 'PAYMENT_ALREADY_SUBMITTED' });
+  assert.equal(f.calls.length, 0);
+  // A well-formed but incorrect ID cannot be detected from this signature.
+  // The host must verify journal identity and stop on corruption before paying.
+  assert.deepEqual(await f.client.paymentRequirements(order), required);
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls[0]!.headers.has('PAYMENT-SIGNATURE'), false);
+});
+
+test('authorization validBefore requires a canonical positive decimal string before transport', async () => {
+  const original = JSON.parse(Buffer.from(signedPayment(), 'base64').toString('utf8'));
+  const expiry = original.payload.authorization.validBefore as string;
+  const f = fixture([]);
+  for (const validBefore of ['0x' + BigInt(expiry).toString(16), expiry + '.0', ' ' + expiry, '0' + expiry]) {
+    const signed = signedPayment({ payload: { ...original.payload,
+      authorization: { ...original.payload.authorization, validBefore } } });
+    await assert.rejects(f.client.submitPayment(order, required, signed), { code: 'INVALID_PAYMENT_AUTHORIZATION', sent: false });
+  }
+  assert.equal(f.calls.length, 0);
+});
+
+test('transport errors on reads, unsigned challenges and login expose only sanitized errors', async () => {
+  const failure = () => { throw new Error('fixture-private-transport-diagnostic', { cause: 'fixture-private-cause' }); };
+  const signer = { getAddress: async () => wallet, signArbitrary: async () => ({ signature: 'fixture', pub_key: { value: 'fixture' } }) };
+  for (const operation of ['getOrder', 'paymentRequirements', 'nonce', 'walletLogin']) {
+    const f = fixture(operation === 'walletLogin' ? [() => ok({ nonce: 'ab'.repeat(16) }), failure] : [failure]);
+    const result = operation === 'getOrder' ? f.client.getOrder(order)
+      : operation === 'paymentRequirements' ? f.client.paymentRequirements(order) : f.client.login(signer);
+    await assert.rejects(result, error => {
+      assert.ok(error instanceof StationError);
+      assert.equal(error.code, 'REQUEST_OUTCOME_UNKNOWN');
+      assert.equal(error.message, 'REQUEST_OUTCOME_UNKNOWN');
+      assert.equal(error.status, 0);
+      assert.equal(error.sent, false);
+      assert.equal(error.cause, undefined);
+      assert.doesNotMatch(String(error.stack), /fixture-private/);
+      return true;
+    });
+    assert.equal(f.calls.length, operation === 'walletLogin' ? 2 : 1);
+    assert.ok(f.calls.every(call => !call.headers.has('PAYMENT-SIGNATURE')));
+  }
+});
+
+test('replacement errors retain the original authorization expiry', async () => {
+  const signed = signedPayment();
+  const original = JSON.parse(Buffer.from(signed, 'base64').toString('utf8'));
+  const replacement = signedPayment({ payload: { ...original.payload, authorization: { ...original.payload.authorization,
+    nonce: '0x' + '44'.repeat(32), validBefore: String(now / 1000 + 30) } } });
+  const f = fixture([]);
+  f.client.restoreSubmittedPayment(order, required, signed);
+  const expected = { code: 'PAYMENT_REPLACEMENT_FORBIDDEN', sent: false, authorizationValidBefore: String(now / 1000 + 60) };
+  assert.throws(() => f.client.restoreSubmittedPayment(order, required, replacement), expected);
+  await assert.rejects(f.client.submitPayment(order, required, replacement), expected);
+  assert.equal(f.calls.length, 0);
+});
+
+test('signed payment size is bounded at 16 KiB before transport', async () => {
+  const emptySize = Buffer.from(signedPayment({ padding: '' }), 'base64').byteLength;
+  const padding = 'x'.repeat(12 * 1024 - emptySize);
+  const atLimit = signedPayment({ padding });
+  assert.equal(atLimit.length, 16 * 1024);
+  const accepted = fixture([() => ok(delivered)]);
+  assert.ok((await accepted.client.submitPayment(order, required, atLimit)).receipt);
+  assert.equal(accepted.calls.length, 1);
+  const oversized = signedPayment({ padding: padding + 'x' });
+  assert.ok(oversized.length > 16 * 1024);
+  const rejected = fixture([]);
+  await assert.rejects(rejected.client.submitPayment(order, required, oversized), { code: 'INVALID_PAYMENT_SIGNATURE', sent: false });
+  assert.equal(rejected.calls.length, 0);
+});
