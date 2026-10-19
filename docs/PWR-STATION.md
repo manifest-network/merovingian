@@ -162,8 +162,9 @@ synthetic fixture coverage, with no live mainnet purchase or payment preflight.
 4. Persist the selected network (`testnet` or `mainnet`), independently verified
    target, quote and a fresh idempotency key **privately before** creating the
    order. Every failure after dispatch is `REQUEST_OUTCOME_UNKNOWN` with
-   `sent: true`, including invalid responses. Retry the same quote/key to recover the
-   same order. Never replace them just because a request timed out.
+   `sent: true`, including invalid responses. While the current spending ceiling
+   covers the quote, retry the same quote/key to recover the same order. Never
+   replace them just because a request timed out.
 5. Request the order's payment challenge. Before any EVM signing, require x402 v2,
    `exact`, and the selected profile's payment network, USDC contract and signing
    domain. Require the quoted cents converted exactly to six-decimal USDC and a
@@ -224,6 +225,13 @@ its eventual delivery even when restoring the payment attempt is blocked by that
 ceiling. Quote acceptance, order creation, new payment challenges, authorization
 validation and payment submission still enforce the ceiling. Polling cannot clear
 the submitted-payment guard or authorize another payment.
+
+The order-creation ceiling also applies when replaying the same quote and
+idempotency key. That POST may create an order if the earlier request never reached
+the station, so it requires the current budget even though it does not submit a
+payment. If a reduced ceiling blocks this replay, poll a previously saved order
+with `getOrder`. Without a saved order, stop and reconcile with PWR-Station; do not
+raise the ceiling or replace the quote/key automatically.
 
 This guard does not authenticate the saved order identity. A missing or malformed
 order ID cannot be recorded; a corrupted but well-formed ID guards the wrong order.
