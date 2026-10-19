@@ -1,0 +1,70 @@
+{
+  "checkedAt": "2026-10-01T19:24:30.761Z",
+  "scope": "Testnet QA readiness and Manifest direct-credit delivery; not a PWR-Station end-to-end purchase.",
+  "qa": {
+    "checkedAt": "2026-10-01T19:16:36.811Z",
+    "origin": "https://testnet.pwr-station.com",
+    "authentication": "ADR-036 with a temporary zero-balance wallet",
+    "package": "apk_pwrtest02",
+    "priceCents": 100,
+    "feesCents": 0,
+    "pwrBaseUnits": "1000000",
+    "results": [
+      {
+        "recipientKind": "existing_credit_account",
+        "paymentPath": "x402",
+        "httpStatus": 501,
+        "code": "AGENT_X402_UNAVAILABLE"
+      },
+      {
+        "recipientKind": "existing_credit_account",
+        "paymentPath": "checkout",
+        "httpStatus": 400,
+        "code": "WALLET_ADDRESS_INVALID"
+      },
+      {
+        "recipientKind": "ordinary_wallet_control",
+        "paymentPath": "checkout",
+        "status": "quote_validated",
+        "environment": "sandbox",
+        "chainId": "manifest-ledger-testnet"
+      }
+    ],
+    "ordersCreated": 0,
+    "paymentsSubmitted": 0
+  },
+  "manifest": {
+    "chainId": "manifest-ledger-testnet",
+    "tenant": "manifest1z5ep5m3ka5v2fn5wyv93elqh5nqlfqww2u82f4",
+    "creditAddress": "manifest1u38rpxv2ynqy5fe8xsqyzp6w37qkmdcya9jmuqwfxqxrldru0wrqqd8yzt",
+    "denom": "factory/manifest1afk9zr2hn2jsac63h4hm60vl9z3e5u69gndzf7c99cqge3vzwjzsfmy9qj/upwr",
+    "transactionHash": "388046AF8E87B5E2BCA9C6C9BD368B7EDA7DFFEBF573FA37A9250FAAFAA26355",
+    "height": "11425127",
+    "code": 0,
+    "messageType": "/cosmos.bank.v1beta1.MsgSend",
+    "amountBaseUnits": "100000",
+    "fee": {
+      "denom": "umfx",
+      "amount": "330000",
+      "gasLimit": "300000",
+      "gasUsed": "95427"
+    },
+    "availableBefore": "4243500",
+    "availableAfter": "4343500",
+    "localVerification": "confirmed",
+    "historyEntryAmount": "100000",
+    "activeLeases": "0",
+    "fundingSource": "Testnet faucet; fresh wallet held in memory"
+  },
+  "localValidation": {
+    "command": "npm run check",
+    "registryMetadata": "passed",
+    "typecheck": "passed",
+    "testsPassed": 404,
+    "testsFailed": 0,
+    "build": "passed"
+  },
+  "productionChanges": 0,
+  "mainnetTransactions": 0,
+  "liveVisits": 0
+}

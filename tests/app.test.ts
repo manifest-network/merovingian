@@ -662,6 +662,7 @@ function dashboardSupport(historyOverrides: Partial<ContributionHistory> = {}, i
     tenant: dashboardTenant, denom: 'upwr', optional: true, testTokensOnly: true,
     message: 'Hosting credit is available.', instructions: null,
     hostingCredit: {
+      creditAddress: 'manifest1u38rpxv2ynqy5fe8xsqyzp6w37qkmdcya9jmuqwfxqxrldru0wrqqd8yzt',
       available: [{ denom: 'upwr', amount: '123456789000000001' }, { denom: 'other-token', amount: '999999999999' }],
       reserved: [{ denom: 'upwr', amount: '2000001' }], activeLeases: '1',
     },

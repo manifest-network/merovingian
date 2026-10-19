@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import { parseAddress } from '@manifest-network/manifest-sdk';
 import { liftedinit } from '@manifest-network/manifestjs';
 import { TxBody, TxRaw } from 'cosmjs-types/cosmos/tx/v1beta1/tx.js';
-import { FUND_CREDIT_TYPE, FUNDING_PLACEHOLDERS, HISTORY_LIMIT, SUPPORT_MESSAGES } from './protocol.js';
+import { MsgSend } from 'cosmjs-types/cosmos/bank/v1beta1/tx.js';
+import { BANK_SEND_TYPE, FUND_CREDIT_TYPE, FUNDING_PLACEHOLDERS, HISTORY_LIMIT, SUPPORT_MESSAGES } from './protocol.js';
+import { deriveCreditAddress, fundingHistoryUrl } from './credit-address.js';
 
 export { FUND_CREDIT_TYPE } from './protocol.js';
 const HASH = /^[0-9a-fA-F]{64}$/;
@@ -30,6 +32,7 @@ export interface ChainTransaction {
 }
 
 export interface HostingCredit {
+  creditAddress: string;
   available: { denom: string; amount: string }[];
   reserved: { denom: string; amount: string }[];
   activeLeases: string;
@@ -67,7 +70,7 @@ export interface ChainGateway {
   getChainId(signal: AbortSignal): Promise<string>;
   getTransaction(hash: string, signal: AbortSignal): Promise<ChainTransaction | null>;
   getCredit(tenant: string, signal: AbortSignal): Promise<HostingCredit | null>;
-  getFundingHistory?(tenant: string, signal: AbortSignal): Promise<FundingHistoryPage>;
+  getFundingHistory?(creditAddress: string, signal: AbortSignal): Promise<FundingHistoryPage>;
   dispose?(): void;
 }
 
@@ -138,28 +141,33 @@ function fundingCoin(value: unknown): { amount: bigint; denom: string } {
   return { amount: BigInt(coin[1]!), denom: coin[2]! };
 }
 
-function fundingEvent(value: unknown, tenant: string) {
+function eventAttributes(values: unknown[], critical: readonly string[]): Map<string, string> {
+  const attributes = new Map<string, string>();
+  for (const value of values) {
+    const attribute = object(value);
+    if (!attribute || typeof attribute.key !== 'string' || typeof attribute.value !== 'string') {
+      throw new Error('Invalid event attribute');
+    }
+    if (!critical.includes(attribute.key)) continue;
+    if (attributes.has(attribute.key)) throw new Error('Duplicate event attribute');
+    attributes.set(attribute.key, attribute.value);
+  }
+  return attributes;
+}
+
+function fundingEvent(value: unknown, tenant: string, expectedCreditAddress: string) {
   const event = object(value);
   if (!event || typeof event.type !== 'string') throw new Error('Invalid transaction event');
   if (event.type !== 'credit_funded') return null;
   if (!Array.isArray(event.attributes)) throw new Error('Missing funding event attributes');
-  const critical = new Set(['tenant', 'sender', 'amount', 'credit_address', 'new_balance']);
-  const attributes = new Map<string, string>();
-  for (const value of event.attributes) {
-    const attribute = object(value);
-    if (!attribute || typeof attribute.key !== 'string' || typeof attribute.value !== 'string') {
-      throw new Error('Invalid funding event attribute');
-    }
-    if (!critical.has(attribute.key)) continue;
-    if (attributes.has(attribute.key)) throw new Error('Duplicate funding event attribute');
-    attributes.set(attribute.key, attribute.value);
-  }
+  const attributes = eventAttributes(event.attributes, ['tenant', 'sender', 'amount', 'credit_address', 'new_balance']);
   const eventTenant = attributes.get('tenant');
   if (!addressIsValid(eventTenant)) throw new Error('Invalid funding event tenant');
   if (eventTenant.toLowerCase() !== tenant) return null;
   const sender = attributes.get('sender');
   const creditAddress = attributes.get('credit_address');
-  if (!addressIsValid(sender) || !addressIsValid(creditAddress)) throw new Error('Invalid funding event address');
+  if (!addressIsValid(sender) || !addressIsValid(creditAddress)
+    || creditAddress.toLowerCase() !== expectedCreditAddress) throw new Error('Invalid funding event address');
   const amount = fundingCoin(attributes.get('amount'));
   const balance = fundingCoin(attributes.get('new_balance'));
   if (balance.denom !== amount.denom) throw new Error('Inconsistent funding event denomination');
@@ -167,7 +175,30 @@ function fundingEvent(value: unknown, tenant: string) {
   return { sender: sender.toLowerCase(), ...amount };
 }
 
-function summarizeHistory(page: FundingHistoryPage, config: Readonly<SupportConfig>) {
+function transferEvent(value: unknown, creditAddress: string) {
+  const event = object(value);
+  if (!event || typeof event.type !== 'string') throw new Error('Invalid transaction event');
+  if (event.type !== 'transfer') return null;
+  if (!Array.isArray(event.attributes)) throw new Error('Missing transfer attributes');
+  // Ignore unrelated module events, including ones with missing/malformed
+  // recipients. Once any recipient targets us, all critical attributes must be
+  // valid and unique; a second recipient must not hide an ambiguous deposit.
+  if (!event.attributes.some(value => {
+    const attribute = object(value);
+    return attribute?.key === 'recipient' && typeof attribute.value === 'string'
+      && attribute.value.toLowerCase() === creditAddress;
+  })) return null;
+  const attributes = eventAttributes(event.attributes, ['sender', 'recipient', 'amount']);
+  const sender = attributes.get('sender');
+  if (!addressIsValid(sender)) throw new Error('Invalid transfer sender');
+  const amount = attributes.get('amount');
+  if (typeof amount !== 'string') throw new Error('Missing transfer amount');
+  const coins = amount.split(',').map(fundingCoin);
+  if (new Set(coins.map(coin => coin.denom)).size !== coins.length) throw new Error('Duplicate transfer denomination');
+  return { sender: sender.toLowerCase(), coins };
+}
+
+function summarizeHistory(page: FundingHistoryPage, config: Readonly<SupportConfig>, creditAddress: string) {
   if (typeof page.total !== 'string' || !INTEGER.test(page.total)
     || BigInt(page.total) > BigInt(Number.MAX_SAFE_INTEGER)
     || !Array.isArray(page.txResponses) || page.txResponses.length > HISTORY_LIMIT) {
@@ -203,24 +234,48 @@ function summarizeHistory(page: FundingHistoryPage, config: Readonly<SupportConf
     if (response.code !== 0) continue;
     const amounts = new Map<string, bigint>();
     const executed = new Map<string, bigint>();
-    let hasFundingEvent = false;
+    const funded = new Map<string, bigint>();
+    const add = (map: Map<string, bigint>, sender: string, denom: string, amount: bigint) => {
+      const key = JSON.stringify([sender.toLowerCase(), denom]);
+      map.set(key, (map.get(key) ?? 0n) + amount);
+    };
+    let hasTransferEvent = false;
     for (const value of response.events) {
-      if (object(value)?.type === 'credit_funded') hasFundingEvent = true;
-      const funding = fundingEvent(value, historyTenant);
-      if (!funding) continue;
-      const key = JSON.stringify([funding.sender, funding.denom]);
-      executed.set(key, (executed.get(key) ?? 0n) + funding.amount);
-      if (funding.denom === config.pwrDenom) {
-        amounts.set(funding.sender, (amounts.get(funding.sender) ?? 0n) + funding.amount);
+      const funding = fundingEvent(value, historyTenant, creditAddress);
+      if (funding) add(funded, funding.sender, funding.denom, funding.amount);
+      const transfer = transferEvent(value, creditAddress);
+      if (transfer) hasTransferEvent = true;
+      if (!transfer || transfer.sender === creditAddress) continue;
+      for (const coin of transfer.coins) {
+        add(executed, transfer.sender, coin.denom, coin.amount);
+        if (coin.denom === config.pwrDenom) {
+          amounts.set(transfer.sender, (amounts.get(transfer.sender) ?? 0n) + coin.amount);
+        }
       }
     }
-    if (!hasFundingEvent) throw new Error('Indexed funding transaction has no funding events');
+    if (!hasTransferEvent) throw new Error('Indexed deposit has no matching transfer event');
+    // FundCredit also emits transfer. Count the bank movement once, and use the
+    // billing event only to check consistency; never sum both event types.
+    for (const [key, amount] of funded) if ((executed.get(key) ?? 0n) < amount) {
+      throw new Error('Funding event disagrees with bank transfer');
+    }
     // Direct messages provide an additional consistency check. Wrapped executions are
     // accounted for by their emitted events, even when their bodies live in group state.
     const direct = new Map<string, bigint>();
+    const directFunding = new Map<string, bigint>();
     let mayExecuteNested = false;
     for (const value of messages) {
       const funding = object(value)!;
+      if (funding['@type'] === BANK_SEND_TYPE) {
+        if (!addressIsValid(funding.to_address)) throw new Error('Invalid indexed transfer recipient');
+        if (funding.to_address.toLowerCase() !== creditAddress) continue;
+        if (!addressIsValid(funding.from_address)) throw new Error('Invalid indexed transfer sender');
+        const coins = transferCoins(funding.amount);
+        if (funding.from_address.toLowerCase() !== creditAddress) {
+          for (const coin of coins) add(direct, funding.from_address, coin.denom, BigInt(coin.amount));
+        }
+        continue;
+      }
       if (funding['@type'] !== FUND_CREDIT_TYPE) { mayExecuteNested = true; continue; }
       if (!addressIsValid(funding.tenant)) throw new Error('Invalid indexed funding tenant');
       if (funding.tenant.toLowerCase() !== historyTenant) continue;
@@ -228,14 +283,16 @@ function summarizeHistory(page: FundingHistoryPage, config: Readonly<SupportConf
       if (!addressIsValid(funding.sender) || typeof amount?.denom !== 'string' || typeof amount.amount !== 'string'
         || !INTEGER.test(amount.amount) || BigInt(amount.amount) <= 0n) throw new Error('Invalid indexed funding message');
       const coin = fundingCoin(`${amount.amount}${amount.denom}`);
-      const key = JSON.stringify([funding.sender.toLowerCase(), coin.denom]);
-      direct.set(key, (direct.get(key) ?? 0n) + coin.amount);
+      add(direct, funding.sender, coin.denom, coin.amount);
+      add(directFunding, funding.sender, coin.denom, coin.amount);
     }
+    for (const [key, amount] of directFunding) if ((funded.get(key) ?? 0n) < amount) throw new Error('Missing billing funding event');
     for (const [key, amount] of direct) {
       if ((executed.get(key) ?? 0n) < amount) throw new Error('Funding event disagrees with transaction body');
     }
     if (!mayExecuteNested && (direct.size !== executed.size
-      || [...executed].some(([key, amount]) => direct.get(key) !== amount))) {
+      || [...executed].some(([key, amount]) => direct.get(key) !== amount)
+      || directFunding.size !== funded.size || [...funded].some(([key, amount]) => directFunding.get(key) !== amount))) {
       throw new Error('Funding event disagrees with transaction body');
     }
     for (const [sender, amount] of [...amounts].sort(([a], [b]) => a.localeCompare(b))) {
@@ -272,15 +329,23 @@ function creditCoins(value: unknown): HostingCredit['available'] {
   });
 }
 
+function transferCoins(value: unknown): HostingCredit['available'] {
+  const coins = creditCoins(value);
+  if (!coins.length || coins.some(coin => BigInt(coin.amount) <= 0n)) throw new Error('Invalid transfer amount');
+  return coins;
+}
+
 function hostingCredit(value: unknown, tenant: string): HostingCredit {
   const response = object(value);
   const account = object(response?.credit_account);
   const activeLeases = account?.active_lease_count === undefined ? '0' : account.active_lease_count;
+  const creditAddress = deriveCreditAddress(tenant);
   if (!account || !addressIsValid(account.tenant) || account.tenant.toLowerCase() !== tenant.toLowerCase()
-    || !addressIsValid(account.credit_address)
+    || !addressIsValid(account.credit_address) || account.credit_address.toLowerCase() !== creditAddress
     || typeof activeLeases !== 'string' || !INTEGER.test(activeLeases)
     || BigInt(activeLeases) > UINT64_MAX) throw new Error('Invalid credit account');
   return {
+    creditAddress,
     available: creditCoins(response?.available_balances),
     reserved: creditCoins(account.reserved_amounts),
     activeLeases,
@@ -410,15 +475,12 @@ class ManifestChainGateway implements ChainGateway {
     return hostingCredit(body, tenant);
   }
 
-  async getFundingHistory(tenant: string, signal: AbortSignal): Promise<FundingHistoryPage> {
+  async getFundingHistory(creditAddress: string, signal: AbortSignal): Promise<FundingHistoryPage> {
     if (!this.config.restUrl) throw new Error('REST endpoint is not configured');
     // Manifest's GetTxsEvent uses page/limit and returns CometBFT's count in
     // top-level total. Deprecated pagination.count_total is not consulted.
     // Keep total distinct from this page's length; see docs/API-CONTRACTS.md.
-    const query = new URLSearchParams({
-      query: `credit_funded.tenant='${tenant}'`, order_by: 'ORDER_BY_DESC', limit: String(HISTORY_LIMIT), page: '1',
-    });
-    const { body: page } = await this.query(`${this.config.restUrl.replace(/\/$/, '')}/cosmos/tx/v1beta1/txs?${query}`, signal);
+    const { body: page } = await this.query(fundingHistoryUrl(this.config.restUrl, creditAddress), signal);
     if (typeof page.total !== 'string' || !Array.isArray(page.tx_responses)) throw new Error('Invalid contribution index response');
     return { total: page.total, txResponses: page.tx_responses };
   }
@@ -508,7 +570,12 @@ export class SupportService {
     };
     if (!this.configured) return info;
     try {
-      info.hostingCredit = await this.read((signal) => this.gateway.getCredit(this.config.tenant, signal));
+      info.hostingCredit = await this.read(async signal => {
+        const credit = await this.gateway.getCredit(this.config.tenant, signal);
+        const creditAddress = deriveCreditAddress(this.config.tenant);
+        if (credit && credit.creditAddress.toLowerCase() !== creditAddress) throw new Error('Credit address mismatch');
+        return credit ? { ...credit, creditAddress } : null;
+      });
       info.status = 'available';
       info.checkedAt = new Date(this.now()).toISOString();
       info.message = SUPPORT_MESSAGES.available(this.config.network);
@@ -550,7 +617,8 @@ export class SupportService {
     try {
       const summary = await this.read(async (signal) => {
         if (!this.gateway.getFundingHistory) throw new Error('History query is unavailable');
-        return summarizeHistory(await this.gateway.getFundingHistory(this.config.tenant, signal), this.config);
+        const creditAddress = deriveCreditAddress(this.config.tenant);
+        return summarizeHistory(await this.gateway.getFundingHistory(creditAddress, signal), this.config, creditAddress);
       });
       Object.assign(history, summary);
       history.status = 'available';
@@ -587,22 +655,47 @@ export class SupportService {
     }
     if (tx.code !== 0) return { status: 'failed', message: SUPPORT_MESSAGES.failed };
     const amounts = new Map<string, bigint>();
+    let messages;
     try {
       const raw = TxRaw.decode(tx.bytes);
       if (!raw.signatures.length || raw.signatures.some((signature) => signature.length === 0)) throw new Error('Unsigned transaction');
-      for (const message of TxBody.decode(raw.bodyBytes).messages) {
+      messages = TxBody.decode(raw.bodyBytes).messages;
+    } catch {
+      return { status: 'not_a_contribution', message: SUPPORT_MESSAGES.undecodable };
+    }
+    const creditAddress = deriveCreditAddress(this.config.tenant);
+    try {
+      for (const message of messages) {
+        if (message.typeUrl === BANK_SEND_TYPE) {
+          const send = MsgSend.decode(message.value);
+          if (send.toAddress.toLowerCase() !== creditAddress) continue;
+          if (!addressIsValid(send.fromAddress) || !addressIsValid(send.toAddress)) throw new Error('Invalid bank send');
+          const coins = transferCoins(send.amount);
+          // A self-transfer does not add credit. The on-chain sender can be a
+          // distributor such as PWR-Station; it is not proof of donor identity.
+          const sender = send.fromAddress.toLowerCase();
+          if (sender === creditAddress) continue;
+          for (const coin of coins) if (coin.denom === this.config.pwrDenom) {
+            amounts.set(sender, (amounts.get(sender) ?? 0n) + BigInt(coin.amount));
+          }
+          continue;
+        }
         if (message.typeUrl !== FUND_CREDIT_TYPE) continue;
         const funding = liftedinit.billing.v1.MsgFundCredit.decode(message.value);
-        if (funding.tenant !== this.config.tenant || funding.amount?.denom !== this.config.pwrDenom) continue;
+        if (funding.tenant.toLowerCase() !== this.config.tenant.toLowerCase() || funding.amount?.denom !== this.config.pwrDenom) continue;
         if (!addressIsValid(funding.sender) || !INTEGER.test(funding.amount.amount)
           || BigInt(funding.amount.amount) <= 0n) throw new Error('Invalid funding message');
-        amounts.set(funding.sender, (amounts.get(funding.sender) ?? 0n) + BigInt(funding.amount.amount));
+        const sender = funding.sender.toLowerCase();
+        amounts.set(sender, (amounts.get(sender) ?? 0n) + BigInt(funding.amount.amount));
       }
     } catch {
       return { status: 'not_a_contribution', message: SUPPORT_MESSAGES.undecodable };
     }
-    if (amounts.size === 0 || (input.expectedSender !== undefined && !amounts.has(input.expectedSender))) {
-      return { status: 'not_a_contribution', message: SUPPORT_MESSAGES.notAContribution };
+    if (amounts.size === 0 || (input.expectedSender !== undefined && !amounts.has(input.expectedSender.toLowerCase()))) {
+      const unsupported = messages.some(message => ['/cosmos.bank.v1beta1.MsgMultiSend',
+        '/cosmos.authz.v1beta1.MsgExec', '/cosmos.group.v1.MsgExec',
+        '/cosmos.group.v1.MsgSubmitProposal', '/cosmos.group.v1.MsgVote'].includes(message.typeUrl));
+      return { status: 'not_a_contribution', message: unsupported ? SUPPORT_MESSAGES.unsupportedTransfer : SUPPORT_MESSAGES.notAContribution };
     }
     const contributions = [...amounts].sort(([a], [b]) => a.localeCompare(b)).map(([sender, amount]) => ({ sender, amount: amount.toString() }));
     const total = [...amounts.values()].reduce((sum, amount) => sum + amount, 0n);

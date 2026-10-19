@@ -1,0 +1,115 @@
+{
+  "checkedAt": "2026-10-02T16:03:57.096Z",
+  "scope": "One testnet x402 purchase through USDC settlement, direct PWR delivery to hosting credit, and local HTTP/MCP verification; exact replay charged and delivered only once.",
+  "previousEvidence": [
+    "pwr-station-2026-10-01.json",
+    "pwr-station-2026-10-01-retest.json"
+  ],
+  "priorAttemptReconciliation": {
+    "checkedAt": "2026-10-02T15:57:49.886Z",
+    "blockNumber": "47593575",
+    "blockTime": "2026-10-02T15:37:18.000Z",
+    "blockTag": "finalized",
+    "authorizationUsed": false,
+    "authorizationExpired": true,
+    "previousPaymentState": "awaiting",
+    "previousNextAction": "requote",
+    "testUsdcBalanceBaseUnits": "20000000",
+    "hostingCreditBaseUnits": "4343500"
+  },
+  "qa": {
+    "origin": "https://testnet.pwr-station.com",
+    "package": "apk_pwrtest02",
+    "environment": "sandbox",
+    "priceCents": 100,
+    "feesCents": 0,
+    "maxTotalCents": 100,
+    "pwrBaseUnits": "1000000",
+    "uniqueOrdersCreatedThisRun": 1,
+    "uniqueAuthorizationsSignedThisRun": 1,
+    "signedSubmissionsThisRun": 2,
+    "idempotentOrderCreation": "same_order_recovered",
+    "differentAuthenticatedWalletOrderRead": {
+      "httpStatus": 404,
+      "code": "NOT_FOUND"
+    },
+    "paymentChallenge": {
+      "x402Version": 2,
+      "scheme": "exact",
+      "network": "eip155:84532",
+      "asset": "0x036cbd53842c5426634e7929541ec2318f3dcf7e",
+      "amount": "1000000",
+      "maxTimeoutSeconds": 300,
+      "signingDomain": {
+        "name": "USDC",
+        "version": "2"
+      },
+      "assetTransferMethod": "eip3009"
+    },
+    "paymentResult": {
+      "paymentState": "settled",
+      "deliveryState": "queued",
+      "nextAction": "poll"
+    },
+    "completedOrder": {
+      "paymentState": "settled",
+      "recordingState": "n_a",
+      "deliveryState": "confirmed",
+      "refundState": "none",
+      "nextAction": "complete"
+    },
+    "paidRequestReplay": {
+      "httpStatus": 200,
+      "authorization": "identical_saved_signature_and_nonce",
+      "sameDeliveryReceipt": true,
+      "testUsdcBalanceBaseUnits": "19000000",
+      "hostingCreditBaseUnits": "5343500"
+    }
+  },
+  "settlement": {
+    "checkedAt": "2026-10-02T16:00:03.189Z",
+    "paymentNetwork": "eip155:84532",
+    "asset": "0x036cbd53842c5426634e7929541ec2318f3dcf7e",
+    "transactionHash": "0x9ec7e2ae55d3e3bb225b46dc38e680d59104abeadb0fd63453f53f61a652d42e",
+    "blockNumber": "47594211",
+    "status": "success",
+    "transferBaseUnits": "1000000",
+    "matchingTransfers": 1,
+    "authorizationUsed": true,
+    "testUsdcBalanceBeforeBaseUnits": "20000000",
+    "testUsdcBalanceAfterBaseUnits": "19000000"
+  },
+  "manifest": {
+    "checkedAt": "2026-10-02T16:03:57.096Z",
+    "chainId": "manifest-ledger-testnet",
+    "tenant": "manifest1z5ep5m3ka5v2fn5wyv93elqh5nqlfqww2u82f4",
+    "creditAddress": "manifest1u38rpxv2ynqy5fe8xsqyzp6w37qkmdcya9jmuqwfxqxrldru0wrqqd8yzt",
+    "denom": "factory/manifest1afk9zr2hn2jsac63h4hm60vl9z3e5u69gndzf7c99cqge3vzwjzsfmy9qj/upwr",
+    "transactionHash": "5D166444D8552011055CD05C9BFCBA6B3912C250611B7BABBA18CF63EF5B19FF",
+    "height": "11438930",
+    "timestamp": "2026-10-02T15:58:30Z",
+    "code": 0,
+    "messageType": "/cosmos.bank.v1beta1.MsgSend",
+    "amountBaseUnits": "1000000",
+    "availableBefore": "4343500",
+    "availableAfter": "5343500",
+    "creditDeltaBaseUnits": "1000000",
+    "historyEntries": 1,
+    "historyEntryAmount": "1000000"
+  },
+  "localApplication": {
+    "environment": "loopback_only",
+    "httpReceipt": "confirmed",
+    "mcpReceipt": "confirmed",
+    "matchingHttpMcpReceipts": true,
+    "localServings": "0"
+  },
+  "acceptance": "passed_testnet_hosting_purchase",
+  "limitations": [
+    "No live refund or deliberately interrupted settlement was induced; those branches use local fixtures.",
+    "Paid gift issuance and a reusable host-owned purchase runner remain follow-up work."
+  ],
+  "productionChanges": 0,
+  "mainnetTransactions": 0,
+  "liveVisits": 0
+}

@@ -52,7 +52,7 @@ async function fixture(t: TestContext, network: Network = 'testnet', fault?: Fau
     getInfo: async () => ({
       ...environment, status: 'available', tenant: '', denom: 'upwr', optional: true,
       testTokensOnly: network === 'testnet', message: 'Local fixture', instructions: null,
-      hostingCredit: { available: [], reserved: [], activeLeases: '0' }, checkedAt: '2026-09-21T00:00:00Z',
+      hostingCredit: { creditAddress: '<local fixture>', available: [], reserved: [], activeLeases: '0' }, checkedAt: '2026-09-21T00:00:00Z',
     }),
     getHistory: async () => ({
       ...environment, status: 'available', tenant: '', denom: 'upwr', checkedAt: '2026-09-21T00:00:00Z',
