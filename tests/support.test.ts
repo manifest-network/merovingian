@@ -7,6 +7,8 @@ import { liftedinit } from '@manifest-network/manifestjs';
 import { TxBody, TxRaw } from 'cosmjs-types/cosmos/tx/v1beta1/tx.js';
 import { MsgSend, MsgMultiSend } from 'cosmjs-types/cosmos/bank/v1beta1/tx.js';
 import { MsgExec } from 'cosmjs-types/cosmos/authz/v1beta1/tx.js';
+import { Exec, MsgExec as MsgGroupExec, MsgSubmitProposal, MsgVote } from 'cosmjs-types/cosmos/group/v1/tx.js';
+import { VoteOption } from 'cosmjs-types/cosmos/group/v1/types.js';
 import { toBech32 } from '@cosmjs/encoding';
 import { deriveCreditAddress } from '../src/credit-address.js';
 import { BANK_SEND_TYPE } from '../src/protocol.js';
@@ -148,6 +150,13 @@ test('wrapped and batched receipts explain the supported scope without suggestin
     { typeUrl: '/cosmos.authz.v1beta1.MsgExec', value: MsgExec.encode({ grantee: tenant, msgs: [bankSend()] }).finish() },
     { typeUrl: '/cosmos.bank.v1beta1.MsgMultiSend', value: MsgMultiSend.encode({
       inputs: [{ address: sender, coins }], outputs: [{ address: creditAddress, coins }],
+    }).finish() },
+    { typeUrl: '/cosmos.group.v1.MsgExec', value: MsgGroupExec.encode({ proposalId: 1n, executor: sender }).finish() },
+    { typeUrl: '/cosmos.group.v1.MsgSubmitProposal', value: MsgSubmitProposal.encode(MsgSubmitProposal.fromPartial({
+      groupPolicyAddress: sender, proposers: [tenant], messages: [bankSend()], exec: Exec.EXEC_TRY,
+    })).finish() },
+    { typeUrl: '/cosmos.group.v1.MsgVote', value: MsgVote.encode({
+      proposalId: 1n, voter: tenant, option: VoteOption.VOTE_OPTION_YES, metadata: '', exec: Exec.EXEC_TRY,
     }).finish() },
   ]) {
     const tx = transaction([message]);
@@ -851,6 +860,26 @@ test('history rejects missing or inconsistent billing events and malformed index
     ].map(patch => historyRecord(1, [{ ...bank.message, ...patch }], { events: [bank.event] })),
   ];
   for (const row of records) {
+    const result = await historyFixture({ total: '1', txResponses: [row] }).service.getHistory();
+    assert.equal(result.status, 'unavailable');
+    assert.equal(result.totals, null);
+  }
+});
+
+test('nested history rows still require billing events and valid indexed and billing credit addresses', async () => {
+  const bank = bankHistory('10');
+  const nested = { '@type': '/cosmos.authz.v1beta1.MsgExec', grantee: tenant, msgs: [] };
+  const valid = historyRecord(1, [historyMessage(), nested], { events: fundingEvents(historyEvent()) });
+  const control = await historyFixture({ total: '1', txResponses: [valid] }).service.getHistory();
+  assert.equal(control.status, 'available');
+  assert.equal(control.totals?.amount, '10');
+  for (const row of [
+    historyRecord(1, [historyMessage(), nested], { events: [bank.event] }),
+    historyRecord(1, [{ ...bank.message, to_address: 'invalid' }, nested], { events: [bank.event] }),
+    ...[sender, 'invalid'].map(credit_address => historyRecord(1, [historyMessage(), nested], {
+      events: [bank.event, historyEvent({ credit_address })],
+    })),
+  ]) {
     const result = await historyFixture({ total: '1', txResponses: [row] }).service.getHistory();
     assert.equal(result.status, 'unavailable');
     assert.equal(result.totals, null);

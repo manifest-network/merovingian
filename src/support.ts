@@ -693,7 +693,8 @@ export class SupportService {
     }
     if (amounts.size === 0 || (input.expectedSender !== undefined && !amounts.has(input.expectedSender.toLowerCase()))) {
       const unsupported = messages.some(message => ['/cosmos.bank.v1beta1.MsgMultiSend',
-        '/cosmos.authz.v1beta1.MsgExec', '/cosmos.group.v1.MsgExec'].includes(message.typeUrl));
+        '/cosmos.authz.v1beta1.MsgExec', '/cosmos.group.v1.MsgExec',
+        '/cosmos.group.v1.MsgSubmitProposal', '/cosmos.group.v1.MsgVote'].includes(message.typeUrl));
       return { status: 'not_a_contribution', message: unsupported ? SUPPORT_MESSAGES.unsupportedTransfer : SUPPORT_MESSAGES.notAContribution };
     }
     const contributions = [...amounts].sort(([a], [b]) => a.localeCompare(b)).map(([sender, amount]) => ({ sender, amount: amount.toString() }));

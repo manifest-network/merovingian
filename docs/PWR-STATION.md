@@ -110,7 +110,8 @@ There is no public buying/signing MCP tool or paid-gift endpoint in this change.
    authorization, buy another package, or fall back to checkout automatically.
    After a process restart, call `restoreSubmittedPayment` with the saved order,
    requirements and exact signed authorization for each journaled attempt before
-   doing any payment work.
+   doing any payment work. If restore fails, stop payment work and reconcile the
+   saved attempt; never treat that error as permission to sign another payment.
 7. Require settled payment, confirmed PWR delivery, no refund, and a receipt with
    the expected Manifest chain, denomination, amount and transaction hash. The
    action `complete` alone is insufficient: a refunded order can also be complete.
@@ -135,7 +136,13 @@ challenges and replacement signatures for that order, even if polling says
 Exact replay remains possible. The guard does not clear on expiry: the old
 authorization could already have settled. After a restart, the host must restore
 each journaled attempt as described above; the client does not provide durable
-storage. Starting a new order requires host reconciliation of the old payment,
+storage. Restore records a blocking entry for the order before validating the
+saved payment. A backward clock step, a lower spending ceiling or damaged journal
+data therefore leaves fresh challenges blocked and signed submissions rejected
+with `PAYMENT_RESTORE_REQUIRED`. Correct the recovery problem and successfully
+restore the original attempt before considering an exact replay. A failed restore
+does not erase an earlier successfully restored authorization or its expiry.
+Starting a new order requires host reconciliation of the old payment,
 including finalized authorization use/expiry and order/settlement state. Recovery
 files must remain private and outside source, Git history, images, and public
 reports.
@@ -247,8 +254,8 @@ entitlement. Provider payouts must remain outside the hosting contribution ledge
 
 ## Acceptance remaining
 
-After the October 16 review fixes, `npm run check` passed the registry metadata
-check, TypeScript check, all **420 local tests**, and production build. Tests used
+After the October 19 review follow-up, `npm run check` passed the registry metadata
+check, TypeScript check, all **431 local tests**, and production build. Tests used
 isolated local fixtures and did not publish, deploy or perform live visits.
 
 Local tests cover exact quote/order/payment terms, per-order limits, USDC domain
@@ -259,6 +266,12 @@ mismatches/absence, fee-only index errors, malformed matching events, unrelated
 transfer events, mixed-message accounting, wrapped/batched verifier limits and
 HTTP/MCP agreement. These are protocol fixtures; they do not exercise a live
 refund or establish an aggregate spending cap.
+
+Follow-up fixtures cover failed restores after clock drift, a reduced spending
+ceiling or damaged saved data, plus group proposal/vote execution warnings.
+Ten isolated mutations removing the seven reviewed client guards and three
+history guards each failed the corresponding regression test; their unchanged
+baselines passed.
 
 The private acceptance harness completed the testnet purchase with a host-owned
 EVM signer and durable recovery storage. Live checks covered expired-order

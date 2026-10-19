@@ -74,7 +74,8 @@ export class PwrStationClient {
   private readonly target: Readonly<PurchaseTarget>;
   private readonly fetcher: typeof fetch;
   private readonly now: () => number;
-  private readonly submitted = new Map<string, { digest: string; validBefore: string }>();
+  // Null blocks a journaled order whose restore has not passed validation.
+  private readonly submitted = new Map<string, { digest: string; validBefore: string } | null>();
   constructor(target: PurchaseTarget, private readonly maxOrderCents: number,
     options: { fetch?: typeof fetch; now?: () => number } = {}) {
     address(target.recipient);
@@ -244,9 +245,9 @@ export class PwrStationClient {
 
   async paymentRequirements(order: StationOrder): Promise<PaymentRequired> {
     identifier(order.id, 'aor');
-    this.terms(order);
     const submitted = this.submitted.get(order.id);
-    if (submitted) throw new StationError('PAYMENT_ALREADY_SUBMITTED', 0, false, submitted.validBefore);
+    if (this.submitted.has(order.id)) throw new StationError('PAYMENT_ALREADY_SUBMITTED', 0, false, submitted?.validBefore);
+    this.terms(order);
     if (!['awaiting', 'failed'].includes(order.payment_state) || order.refund_state !== 'none') throw new StationError('POLL_ORDER_BEFORE_PAYING');
     if (time(order.payment_deadline) <= this.now()) throw new StationError('ORDER_EXPIRED');
     const response = await this.request(`/api/v1/agent/orders/${order.id}/pay`, {});
@@ -274,22 +275,33 @@ export class PwrStationClient {
     return { digest: createHash('sha256').update(signedPayment).digest('hex'), validBefore: auth.validBefore as string };
   }
 
-  /** Restore a private journaled attempt before using a fresh client instance.
-   * Expiry alone does not prove nonsettlement, so this guard never auto-clears. */
-  restoreSubmittedPayment(order: StationOrder, required: PaymentRequired, signedPayment: string): void {
-    const authorization = this.authorization(order, required, signedPayment);
-    const previous = this.submitted.get(order.id);
+  private rememberSubmission(orderId: string, authorization: { digest: string; validBefore: string }): void {
+    const previous = this.submitted.get(orderId);
     if (previous && previous.digest !== authorization.digest) {
       throw new StationError('PAYMENT_REPLACEMENT_FORBIDDEN', 0, false, previous.validBefore);
     }
-    this.submitted.set(order.id, authorization);
+    this.submitted.set(orderId, authorization);
+  }
+
+  /** Restore a private journaled attempt before using a fresh client instance.
+   * A failed restore keeps this order blocked until its original attempt can be
+   * restored successfully. Expiry alone never clears a submitted-payment guard. */
+  restoreSubmittedPayment(order: StationOrder, required: PaymentRequired, signedPayment: string): void {
+    identifier(order.id, 'aor');
+    // Clock drift, a reduced spending ceiling or damaged journal data cannot
+    // establish that an earlier payment was never submitted. Block before parsing.
+    if (!this.submitted.has(order.id)) this.submitted.set(order.id, null);
+    this.rememberSubmission(order.id, this.authorization(order, required, signedPayment));
   }
 
   async submitPayment(order: StationOrder, required: PaymentRequired, signedPayment: string): Promise<OrderResult> {
+    identifier(order.id, 'aor');
+    if (this.submitted.get(order.id) === null) throw new StationError('PAYMENT_RESTORE_REQUIRED');
     // All local validation precedes dispatch. Record the exact attempt before
     // awaiting transport so overlapping callers cannot replace it or re-challenge.
-    this.restoreSubmittedPayment(order, required, signedPayment);
-    const { validBefore } = this.submitted.get(order.id)!;
+    const authorization = this.authorization(order, required, signedPayment);
+    this.rememberSubmission(order.id, authorization);
+    const { validBefore } = authorization;
     let status = 0;
     try {
       const response = await this.request(`/api/v1/agent/orders/${order.id}/pay`, {}, signedPayment);

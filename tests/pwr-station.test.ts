@@ -31,14 +31,14 @@ const challenge = (header = true) => Response.json({ success: false, error: { co
 const transportChecks: (() => void)[] = [];
 afterEach(() => { for (const check of transportChecks.splice(0)) check(); });
 
-function fixture(responses: (() => Response | Promise<Response>)[], selectedTarget = target, clock = () => now) {
+function fixture(responses: (() => Response | Promise<Response>)[], selectedTarget = target, clock = () => now, maxOrderCents = 100) {
   const violations: string[] = [];
   transportChecks.push(() => {
     assert.deepEqual(violations, [], 'Transport assertions must escape the client error sanitizer');
     assert.equal(responses.length, 0, 'Expected transport calls were skipped');
   });
   const calls: { path: string; method: string; body: any; headers: Headers; redirect?: RequestRedirect }[] = [];
-  const client = new PwrStationClient(selectedTarget, 100, { now: clock, fetch: async (input, init) => {
+  const client = new PwrStationClient(selectedTarget, maxOrderCents, { now: clock, fetch: async (input, init) => {
     const url = new URL(String(input));
     if (url.origin !== PWR_STATION_QA) violations.push('Wrong origin');
     if (init?.redirect !== 'error') violations.push('Redirects were allowed');
@@ -321,6 +321,45 @@ test('a signed submission blocks overlapping fresh challenges and replacement au
   assert.equal((await first).receipt?.tx_hash, delivered.receipt.tx_hash.toUpperCase());
 });
 
+test('failed restores keep challenges and signed payments blocked despite clock or spending-policy changes', async () => {
+  for (const scenario of [
+    { clock: now - 1000, ceiling: 100, signed: signedPayment(), code: 'INVALID_PAYMENT_AUTHORIZATION' },
+    { clock: now, ceiling: 99, signed: signedPayment(), code: 'SPEND_LIMIT_EXCEEDED' },
+    { clock: now, ceiling: 100, signed: 'corrupt-fixture', code: 'INVALID_PAYMENT_SIGNATURE' },
+  ]) {
+    const f = fixture([], target, () => scenario.clock, scenario.ceiling);
+    assert.throws(() => f.client.restoreSubmittedPayment(order, required, scenario.signed), { code: scenario.code });
+    for (const payment_state of ['awaiting', 'failed']) {
+      await assert.rejects(f.client.paymentRequirements({ ...order, payment_state }), { code: 'PAYMENT_ALREADY_SUBMITTED', sent: false });
+      await assert.rejects(f.client.submitPayment({ ...order, payment_state }, required, signedPayment()), { code: 'PAYMENT_RESTORE_REQUIRED', sent: false });
+    }
+    assert.equal(f.calls.length, 0);
+  }
+});
+
+test('the original attempt can be restored after correcting the clock; a failed later restore preserves its guard', async () => {
+  let current = now - 1000;
+  const signed = signedPayment();
+  const f = fixture([() => ok(delivered)], target, () => current);
+  assert.throws(() => f.client.restoreSubmittedPayment(order, required, signed), { code: 'INVALID_PAYMENT_AUTHORIZATION' });
+  current = now;
+  f.client.restoreSubmittedPayment(order, required, signed);
+  assert.throws(() => f.client.restoreSubmittedPayment(order, required, 'corrupt-fixture'), { code: 'INVALID_PAYMENT_SIGNATURE' });
+  await assert.rejects(f.client.paymentRequirements(order), { code: 'PAYMENT_ALREADY_SUBMITTED',
+    authorizationValidBefore: String(now / 1000 + 60) });
+  assert.equal((await f.client.submitPayment(order, required, signed)).receipt?.tx_hash, delivered.receipt.tx_hash.toUpperCase());
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls[0]!.headers.get('PAYMENT-SIGNATURE'), signed);
+});
+
+test('a rejected fresh authorization does not mark an unsubmitted order as paid', async () => {
+  const f = fixture([() => challenge()]);
+  await assert.rejects(f.client.submitPayment(order, required, 'corrupt-fixture'), { code: 'INVALID_PAYMENT_SIGNATURE', sent: false });
+  assert.equal(f.calls.length, 0);
+  assert.deepEqual(await f.client.paymentRequirements(order), required);
+  assert.equal(f.calls.length, 1);
+});
+
 test('refund and in-flight states cannot request payment terms', async () => {
   const f = fixture([]);
   for (const refund_state of ['pending', 'succeeded', 'failed']) {
@@ -357,4 +396,74 @@ test('login rejects another wallet identity and never keeps its token', async ()
   await f.client.packages();
   assert.equal(f.calls.length, 3);
   assert.equal(f.calls[2]!.headers.has('Authorization'), false);
+});
+
+test('oversized valid PAYMENT-REQUIRED headers are refused before payment validation', async () => {
+  const header = Buffer.from(JSON.stringify({ ...required, padding: 'x'.repeat(16384) })).toString('base64');
+  assert.ok(header.length > 16384);
+  const f = fixture([() => new Response(null, { status: 402, headers: { 'PAYMENT-REQUIRED': header } })]);
+  await assert.rejects(f.client.paymentRequirements(order), { code: 'INVALID_PAYMENT_REQUIREMENTS', status: 402, sent: false });
+  assert.equal(f.calls.length, 1);
+});
+
+test('receipt transaction hashes must be exactly 32 hexadecimal bytes', async () => {
+  for (const tx_hash of ['g'.repeat(64), 'a'.repeat(63), 'a'.repeat(65)]) {
+    const f = fixture([() => ok({ ...delivered, receipt: { ...delivered.receipt, tx_hash } })]);
+    await assert.rejects(f.client.getOrder(order), { code: 'INVALID_DELIVERY_RECEIPT' });
+    assert.equal(f.calls.length, 1);
+  }
+});
+
+test('authorization validAfter requires a canonical nonnegative decimal string before transport', async () => {
+  const original = JSON.parse(Buffer.from(signedPayment(), 'base64').toString('utf8'));
+  const f = fixture([]);
+  for (const validAfter of ['-1', '01', ' 1', '0x1']) {
+    const signed = signedPayment({ payload: { ...original.payload,
+      authorization: { ...original.payload.authorization, validAfter } } });
+    await assert.rejects(f.client.submitPayment(order, required, signed), { code: 'INVALID_PAYMENT_AUTHORIZATION', sent: false });
+  }
+  assert.equal(f.calls.length, 0);
+});
+
+test('malformed login nonces never reach the signer or wallet authentication endpoint', async () => {
+  for (const nonce of ['g'.repeat(32), 'a'.repeat(31), 'a'.repeat(33)]) {
+    const f = fixture([() => ok({ nonce })]);
+    let signatures = 0;
+    const signer = { getAddress: async () => wallet, signArbitrary: async () => {
+      signatures++; return { signature: 'fixture', pub_key: { value: 'fixture' } };
+    } };
+    await assert.rejects(f.client.login(signer), { code: 'INVALID_NONCE' });
+    assert.equal(signatures, 0);
+    assert.equal(f.calls.length, 1);
+  }
+});
+
+test('unknown order states cannot become an accepted poll result', async () => {
+  for (const field of ['payment_state', 'recording_state', 'delivery_state', 'refund_state', 'next_action']) {
+    const f = fixture([() => ok({ order: { ...order, [field]: 'unrecognized' }, receipt: null })]);
+    await assert.rejects(f.client.getOrder(order), { code: 'INVALID_ORDER_STATE' });
+    assert.equal(f.calls.length, 1);
+  }
+});
+
+test('a failed repeat login clears the previous token before any further request', async () => {
+  const f = fixture([() => ok({ nonce: 'ab'.repeat(16) }), () => ok({ wallet_address: wallet, token: 'fixture-token' }),
+    () => ok([pack]), () => ok({ nonce: 'invalid' }), () => ok([pack])]);
+  const signer = { getAddress: async () => wallet, signArbitrary: async () => ({ signature: 'fixture', pub_key: { value: 'fixture' } }) };
+  await f.client.login(signer);
+  await f.client.packages();
+  assert.equal(f.calls[2]!.headers.get('Authorization'), 'Bearer fixture-token');
+  await assert.rejects(f.client.login(signer), { code: 'INVALID_NONCE' });
+  await f.client.packages();
+  assert.equal(f.calls.length, 5);
+  assert.equal(f.calls[3]!.headers.has('Authorization'), false);
+  assert.equal(f.calls[4]!.headers.has('Authorization'), false);
+});
+
+test('invalid order identifiers cannot dispatch a poll request', async () => {
+  const f = fixture([]);
+  for (const id of ['', 'aqt_fixture', 'aor_../fixture']) {
+    await assert.rejects(f.client.getOrder({ ...order, id }), { code: 'INVALID_ID', sent: false });
+  }
+  assert.equal(f.calls.length, 0);
 });

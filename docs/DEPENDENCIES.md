@@ -10,7 +10,7 @@ The lockfile overrides `@manifest-network/manifest-mcp-core`'s `undici` dependen
 
 The October 16 image scan also blocked MCP SDK 1.30.0 for
 [GHSA-6qxp-vccf-f47h / CVE-2026-104850](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-6qxp-vccf-f47h).
-The direct dependency is now `@modelcontextprotocol/sdk@1.31.0`, the patched 1.x
+The direct dependency is now `@modelcontextprotocol/sdk@1.31.0`, the first patched 1.x
 release. Scoped overrides under `manifest-mcp-core` and `manifest-mcp-fred` refer
 to that same direct pin, replacing their exact 1.30.0 dependencies without
 retaining vulnerable nested copies. Remove those overrides when the Manifest
@@ -28,6 +28,7 @@ The remaining low-severity audit finding is inherited through `elliptic` in the 
 [Dependabot](../.github/dependabot.yml) proposes npm, GitHub Actions and Docker updates. It does not cover:
 
 - the npm-aliased operator-signing packages `cosmjs-amino-modern` and `cosmjs-proto-signing-modern`;
+- updates of `@cosmjs/encoding` beyond 0.32.4, including patches: the direct dependency must match Manifest's exact encoding pin and move with an SDK migration to avoid a second production copy;
 - minor and major updates of `@cosmjs/proto-signing` and `cosmjs-types`, which must match the versions the Manifest SDK pins and move only in an SDK migration;
 - the move of the Docker base image to a new Alpine line (it follows only the pinned `-alpine3.24` tags).
 
