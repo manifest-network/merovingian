@@ -1,15 +1,16 @@
 import { parseAddress } from '@manifest-network/manifest-sdk';
 import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
+import { PWR_STATION_PROFILES, type PwrStationNetwork, type PwrStationProfile } from './pwr-station-config.js';
 
-/** Client-side purchase plumbing only. Never imported by the hosted refuge. */
-export const PWR_STATION_QA = 'https://testnet.pwr-station.com';
-export const TEST_USDC = '0x036cbd53842c5426634e7929541ec2318f3dcf7e';
-export interface PurchaseTarget { recipient: string; chainId: 'manifest-ledger-testnet'; denom: string }
+/** Existing testnet exports remain aliases for callers of the original client. */
+export const PWR_STATION_QA = PWR_STATION_PROFILES.testnet.baseUrl;
+export const TEST_USDC = PWR_STATION_PROFILES.testnet.usdcContract;
+export interface PurchaseTarget { recipient: string; chainId: PwrStationProfile['chainId']; denom: string }
 export interface StationPackage { id: string; price_cents: number; fees_cents: number; net_pwr_base_units: number }
 export interface Quote extends StationPackage {
   package: string; payment_path: 'x402' | 'checkout'; recipient: string; total_cents: number;
-  environment: 'sandbox'; chain_id: string; denom: string; expires_at: string;
+  environment: PwrStationProfile['environment']; chain_id: string; denom: string; expires_at: string;
 }
 export interface StationOrder extends Omit<Quote, 'expires_at'> {
   quote: string; payment_state: string; recording_state: string; delivery_state: string;
@@ -24,7 +25,7 @@ export interface OrderResult {
 }
 export interface PaymentRequired {
   x402Version: 2;
-  accepts: { scheme: 'exact'; network: 'eip155:84532'; asset: string; amount: string; payTo: string; maxTimeoutSeconds: number; [key: string]: unknown }[];
+  accepts: { scheme: 'exact'; network: PwrStationProfile['paymentNetwork']; asset: string; amount: string; payTo: string; maxTimeoutSeconds: number; [key: string]: unknown }[];
   [key: string]: unknown;
 }
 export interface StationSigner {
@@ -62,8 +63,9 @@ function equalTerms(actual: Record<string, any>, expected: Record<string, any>) 
 }
 
 /**
- * Testnet-only purchase client. A QA hostname or sandbox
- * flag never authorizes Base mainnet payments. No automatic retries or signing.
+ * Purchase client defaulting to testnet. Mainnet requires an explicit network
+ * option; targets and server responses cannot select it. No automatic retries
+ * or signing. Never imported by the hosted refuge.
  * The caller must persist quote, idempotency key, order and exact signed payment
  * privately before the corresponding request, and reuse them after a timeout.
  * On restart, restoreSubmittedPayment must precede any payment work for each
@@ -71,15 +73,19 @@ function equalTerms(actual: Record<string, any>, expected: Record<string, any>) 
  */
 export class PwrStationClient {
   private token?: string;
+  private readonly profile: PwrStationProfile;
   private readonly target: Readonly<PurchaseTarget>;
   private readonly fetcher: typeof fetch;
   private readonly now: () => number;
   // Null blocks a journaled order whose restore has not passed validation.
   private readonly submitted = new Map<string, { digest: string; validBefore: string } | null>();
   constructor(target: PurchaseTarget, private readonly maxOrderCents: number,
-    options: { fetch?: typeof fetch; now?: () => number } = {}) {
+    options: { network?: PwrStationNetwork; fetch?: typeof fetch; now?: () => number } = {}) {
+    const network = options.network === undefined ? 'testnet' : options.network;
+    if (network !== 'testnet' && network !== 'mainnet') throw new StationError('INVALID_NETWORK');
+    this.profile = PWR_STATION_PROFILES[network];
     address(target.recipient);
-    if (target.chainId !== 'manifest-ledger-testnet' || !/^[a-zA-Z][a-zA-Z0-9/:._-]{2,255}$/.test(target.denom)) throw new StationError('TESTNET_REQUIRED');
+    if (target.chainId !== this.profile.chainId || target.denom !== this.profile.pwrDenom) throw new StationError('TARGET_MISMATCH');
     integer(maxOrderCents, true);
     this.target = Object.freeze({ ...target });
     this.fetcher = options.fetch ?? fetch;
@@ -91,7 +97,7 @@ export class PwrStationClient {
     const timer = setTimeout(() => controller.abort(), 15_000);
     let status = 0;
     try {
-      const response = await this.fetcher(PWR_STATION_QA + path, {
+      const response = await this.fetcher(this.profile.baseUrl + path, {
         method: body === undefined ? 'GET' : 'POST', redirect: 'error', signal: controller.signal,
         headers: { Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
           ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}), ...(payment ? { 'PAYMENT-SIGNATURE': payment } : {}) },
@@ -162,7 +168,7 @@ export class PwrStationClient {
 
   private terms(value: unknown): Record<string, any> {
     const q = record(value);
-    if (q.environment !== 'sandbox' || q.chain_id !== this.target.chainId || q.denom !== this.target.denom || q.recipient !== this.target.recipient) throw new StationError('TARGET_MISMATCH');
+    if (q.environment !== this.profile.environment || q.chain_id !== this.target.chainId || q.denom !== this.target.denom || q.recipient !== this.target.recipient) throw new StationError('TARGET_MISMATCH');
     identifier(q.package, 'apk');
     if (!['x402', 'checkout'].includes(q.payment_path)) throw new StationError('INVALID_PAYMENT_PATH');
     integer(q.price_cents); integer(q.fees_cents); integer(q.total_cents, true); integer(q.net_pwr_base_units, true);
@@ -224,6 +230,7 @@ export class PwrStationClient {
 
   async getOrder(order: StationOrder): Promise<OrderResult> {
     identifier(order.id, 'aor');
+    this.terms(order);
     return this.result((await this.request(`/api/v1/agent/orders/${order.id}`)).data, { order });
   }
 
@@ -233,9 +240,9 @@ export class PwrStationClient {
     const payment = record(required);
     if (payment.x402Version !== 2 || !Array.isArray(payment.accepts) || payment.accepts.length !== 1) throw new StationError('INVALID_PAYMENT_REQUIREMENTS');
     const a = record(payment.accepts[0]);
-    if (a.scheme !== 'exact' || a.network !== 'eip155:84532' || typeof a.asset !== 'string' || a.asset.toLowerCase() !== TEST_USDC) throw new StationError('TEST_USDC_REQUIRED');
+    if (a.scheme !== 'exact' || a.network !== this.profile.paymentNetwork || typeof a.asset !== 'string' || a.asset.toLowerCase() !== this.profile.usdcContract) throw new StationError('USDC_REQUIRED');
     const extra = record(a.extra);
-    if (extra.assetTransferMethod !== 'eip3009' || extra.name !== 'USDC' || extra.version !== '2') throw new StationError('TEST_USDC_DOMAIN_REQUIRED');
+    if (extra.assetTransferMethod !== 'eip3009' || extra.name !== this.profile.usdcDomainName || extra.version !== this.profile.usdcDomainVersion) throw new StationError('USDC_DOMAIN_REQUIRED');
     if (a.amount !== (BigInt(order.total_cents) * 10000n).toString()
       || typeof a.payTo !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(a.payTo)) throw new StationError('INVALID_PAYMENT_TERMS');
     integer(a.maxTimeoutSeconds, true);

@@ -2,13 +2,15 @@ import assert from 'node:assert/strict';
 import test, { afterEach } from 'node:test';
 import {
   PWR_STATION_QA, TEST_USDC, PwrStationClient, StationError,
-  type PaymentRequired, type Quote, type StationOrder, type StationSigner,
+  type PaymentRequired, type PurchaseTarget, type Quote, type StationOrder, type StationSigner,
 } from '../scripts/pwr-station-client.js';
+import { PWR_STATION_PROFILES, type PwrStationNetwork } from '../scripts/pwr-station-config.js';
 
 // Protocol fixtures only: signatures below are synthetic and cannot authorize a payment.
 const wallet = 'manifest19rl4cm2hmr8afy4kldpxz3fka4jguq0aaz02ta';
 const creditAddress = 'manifest1u38rpxv2ynqy5fe8xsqyzp6w37qkmdcya9jmuqwfxqxrldru0wrqqd8yzt';
-const target = { recipient: creditAddress, chainId: 'manifest-ledger-testnet' as const, denom: 'upwr' };
+const target = { recipient: creditAddress, chainId: 'manifest-ledger-testnet' as const,
+  denom: 'factory/manifest1afk9zr2hn2jsac63h4hm60vl9z3e5u69gndzf7c99cqge3vzwjzsfmy9qj/upwr' };
 const now = Date.parse('2026-10-01T00:00:00Z');
 const pack = { id: 'apk_fixture', price_cents: 100, fees_cents: 0, net_pwr_base_units: 1000000 };
 const quote: Quote = { ...pack, id: 'aqt_fixture', package: pack.id, payment_path: 'x402', recipient: creditAddress,
@@ -22,25 +24,42 @@ const required: PaymentRequired = { x402Version: 2, accepts: [{ scheme: 'exact',
   extra: { assetTransferMethod: 'eip3009', name: 'USDC', version: '2' } }] };
 const delivered = { order: { ...order, payment_state: 'settled', recording_state: 'confirmed', delivery_state: 'confirmed',
   next_action: 'complete' }, receipt: { tx_hash: 'a'.repeat(64), chain_id: target.chainId, denom: target.denom, delivered_base_units: 1000000 } };
+// Independent wire fixtures pin the documented production terms, rather than
+// obtaining expected network/token/domain values from the configuration under test.
+const mainnetTarget: PurchaseTarget = { ...target, chainId: 'manifest-ledger-mainnet' };
+const mainnetQuote: Quote = { ...quote, environment: 'production', chain_id: mainnetTarget.chainId };
+const mainnetOrder: StationOrder = { ...order, environment: 'production', chain_id: mainnetTarget.chainId };
+const mainnetRequired: PaymentRequired = { ...required, accepts: [{ ...required.accepts[0]!,
+  network: 'eip155:8453', asset: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
+  extra: { assetTransferMethod: 'eip3009', name: 'USD Coin', version: '2' } }] };
+const mainnetDelivered = { order: { ...delivered.order, environment: 'production', chain_id: mainnetTarget.chainId },
+  receipt: { ...delivered.receipt, chain_id: mainnetTarget.chainId } };
+const scenarios = [
+  { network: 'testnet' as const, target, quote, order, required, delivered },
+  { network: 'mainnet' as const, target: mainnetTarget, quote: mainnetQuote, order: mainnetOrder,
+    required: mainnetRequired, delivered: mainnetDelivered },
+];
 const ok = (data: unknown) => Response.json({ success: true, data });
 const error = (code: string, status: number) => Response.json({ success: false, error: { code, message: 'private remote details' } }, { status });
-const challenge = (header = true) => Response.json({ success: false, error: { code: 'AGENT_PAYMENT_REQUIRED',
-  details: { payment_required: required } } }, { status: 402,
-  headers: header ? { 'PAYMENT-REQUIRED': Buffer.from(JSON.stringify(required)).toString('base64') } : {} });
+const challenge = (header = true, payment = required) => Response.json({ success: false, error: { code: 'AGENT_PAYMENT_REQUIRED',
+  details: { payment_required: payment } } }, { status: 402,
+  headers: header ? { 'PAYMENT-REQUIRED': Buffer.from(JSON.stringify(payment)).toString('base64') } : {} });
 
 const transportChecks: (() => void)[] = [];
 afterEach(() => { for (const check of transportChecks.splice(0)) check(); });
 
-function fixture(responses: (() => Response | Promise<Response>)[], selectedTarget = target, clock = () => now, maxOrderCents = 100) {
+function fixture(responses: (() => Response | Promise<Response>)[], selectedTarget: PurchaseTarget = target,
+  clock = () => now, maxOrderCents = 100, network?: PwrStationNetwork) {
   const violations: string[] = [];
   transportChecks.push(() => {
     assert.deepEqual(violations, [], 'Transport assertions must escape the client error sanitizer');
     assert.equal(responses.length, 0, 'Expected transport calls were skipped');
   });
   const calls: { path: string; method: string; body: any; headers: Headers; redirect?: RequestRedirect }[] = [];
-  const client = new PwrStationClient(selectedTarget, maxOrderCents, { now: clock, fetch: async (input, init) => {
+  const client = new PwrStationClient(selectedTarget, maxOrderCents, { network, now: clock, fetch: async (input, init) => {
     const url = new URL(String(input));
-    if (url.origin !== PWR_STATION_QA) violations.push('Wrong origin');
+    const expectedOrigin = network === 'mainnet' ? 'https://pwr-station.com' : 'https://testnet.pwr-station.com';
+    if (url.origin !== expectedOrigin) violations.push('Wrong origin');
     if (init?.redirect !== 'error') violations.push('Redirects were allowed');
     calls.push({ path: url.pathname + url.search, method: init?.method ?? 'GET', body: init?.body ? JSON.parse(String(init.body)) : undefined,
       headers: new Headers(init?.headers), redirect: init?.redirect });
@@ -51,48 +70,52 @@ function fixture(responses: (() => Response | Promise<Response>)[], selectedTarg
   return { client, calls };
 }
 
-function signedPayment(changes: Record<string, unknown> = {}) {
-  return Buffer.from(JSON.stringify({ x402Version: 2, accepted: required.accepts[0], payload: {
+function signedPayment(changes: Record<string, unknown> = {}, payment = required) {
+  return Buffer.from(JSON.stringify({ x402Version: 2, accepted: payment.accepts[0], payload: {
     signature: '0x' + '55'.repeat(65), authorization: {
-      from: '0x' + '22'.repeat(20), to: required.accepts[0]!.payTo, value: '1000000', nonce: '0x' + '33'.repeat(32),
+      from: '0x' + '22'.repeat(20), to: payment.accepts[0]!.payTo, value: payment.accepts[0]!.amount, nonce: '0x' + '33'.repeat(32),
       validAfter: String(now / 1000 - 1), validBefore: String(now / 1000 + 60),
     },
   }, ...changes })).toString('base64');
 }
 
-test('authenticates with ADR-036, quotes a 32-byte recipient and follows test-USDC delivery to a receipt', async () => {
-  const nonce = 'ab'.repeat(16);
-  const f = fixture([
-    () => ok({ nonce }), () => ok({ wallet_address: wallet, token: 'fixture-token' }),
-    () => ok([pack]), () => ok(quote), () => ok({ order, receipt: null }),
-    () => challenge(), () => ok({ order: { ...order, payment_state: 'settled', delivery_state: 'queued', next_action: 'poll' }, receipt: null }),
-    () => ok(delivered),
-  ]);
-  const signedMessages: string[] = [];
-  const signer: StationSigner = { getAddress: async () => wallet, signArbitrary: async (address, message) => {
-    assert.equal(address, wallet); signedMessages.push(message);
-    return { signature: 'fixture-signature', pub_key: { value: 'fixture-pubkey' } };
-  } };
-  await f.client.login(signer);
-  assert.deepEqual(signedMessages, ['powerstation:nonce=' + nonce]);
-  assert.deepEqual(await f.client.packages(), [pack]);
-  const q = await f.client.quote(pack.id);
-  const created = await f.client.createOrder(q, 'persisted-fixture-key');
-  const payment = await f.client.paymentRequirements(created.order);
-  const settled = await f.client.submitPayment(created.order, payment, signedPayment());
-  assert.equal(settled.receipt, null, 'USDC settlement alone does not prove PWR delivery');
-  const complete = await f.client.getOrder(settled.order);
-  assert.equal(complete.receipt?.tx_hash, 'A'.repeat(64));
-  assert.equal(complete.receipt?.delivered_base_units, 1000000);
-  assert.deepEqual(f.calls[1]!.body, { address: wallet, message: 'powerstation:nonce=' + nonce,
-    signature: 'fixture-signature', pub_key: 'fixture-pubkey' });
-  assert.deepEqual(f.calls[3]!.body, { package: pack.id, payment_path: 'x402', recipient: creditAddress });
-  assert.deepEqual(f.calls[4]!.body, { quote: q.id, idempotency_key: 'persisted-fixture-key' });
-  assert.equal(f.calls[5]!.headers.has('PAYMENT-SIGNATURE'), false);
-  assert.equal(f.calls[6]!.headers.get('PAYMENT-SIGNATURE'), signedPayment());
-  assert.ok(f.calls.every(c => c.redirect === 'error'));
-  assert.ok(f.calls.slice(2).every(c => c.headers.get('Authorization') === 'Bearer fixture-token'));
-});
+for (const scenario of scenarios) {
+  test(`${scenario.network}: authenticates with ADR-036, quotes a 32-byte recipient and follows USDC delivery to a receipt`, async () => {
+    const { target, quote, order, required, delivered } = scenario;
+    const signed = signedPayment({}, required);
+    const nonce = 'ab'.repeat(16);
+    const f = fixture([
+      () => ok({ nonce }), () => ok({ wallet_address: wallet, token: 'fixture-token' }),
+      () => ok([pack]), () => ok(quote), () => ok({ order, receipt: null }),
+      () => challenge(true, required), () => ok({ order: { ...order, payment_state: 'settled', delivery_state: 'queued', next_action: 'poll' }, receipt: null }),
+      () => ok(delivered),
+    ], target, () => now, 100, scenario.network);
+    const signedMessages: string[] = [];
+    const signer: StationSigner = { getAddress: async () => wallet, signArbitrary: async (address, message) => {
+      assert.equal(address, wallet); signedMessages.push(message);
+      return { signature: 'fixture-signature', pub_key: { value: 'fixture-pubkey' } };
+    } };
+    await f.client.login(signer);
+    assert.deepEqual(signedMessages, ['powerstation:nonce=' + nonce]);
+    assert.deepEqual(await f.client.packages(), [pack]);
+    const q = await f.client.quote(pack.id);
+    const created = await f.client.createOrder(q, 'persisted-fixture-key');
+    const payment = await f.client.paymentRequirements(created.order);
+    const settled = await f.client.submitPayment(created.order, payment, signed);
+    assert.equal(settled.receipt, null, 'USDC settlement alone does not prove PWR delivery');
+    const complete = await f.client.getOrder(settled.order);
+    assert.equal(complete.receipt?.tx_hash, 'A'.repeat(64));
+    assert.equal(complete.receipt?.delivered_base_units, 1000000);
+    assert.deepEqual(f.calls[1]!.body, { address: wallet, message: 'powerstation:nonce=' + nonce,
+      signature: 'fixture-signature', pub_key: 'fixture-pubkey' });
+    assert.deepEqual(f.calls[3]!.body, { package: pack.id, payment_path: 'x402', recipient: creditAddress });
+    assert.deepEqual(f.calls[4]!.body, { quote: q.id, idempotency_key: 'persisted-fixture-key' });
+    assert.equal(f.calls[5]!.headers.has('PAYMENT-SIGNATURE'), false);
+    assert.equal(f.calls[6]!.headers.get('PAYMENT-SIGNATURE'), signed);
+    assert.ok(f.calls.every(c => c.redirect === 'error'));
+    assert.ok(f.calls.slice(2).every(c => c.headers.get('Authorization') === 'Bearer fixture-token'));
+  });
+}
 
 test('unknown outcomes recover the same order and replay the exact authorization, without automatic retries', async () => {
   const pending = { ...order, payment_state: 'outcome_unknown', next_action: 'poll' } as StationOrder;
@@ -161,7 +184,7 @@ test('QA origin and sandbox flags never authorize Base mainnet, another token or
   }
   assert.throws(() => f.client.validatePayment({ ...required, x402Version: 1 }, order), StationError);
   assert.throws(() => f.client.validatePayment({ ...required, accepts: [required.accepts[0], required.accepts[0]] }, order), StationError);
-  assert.throws(() => new PwrStationClient({ ...target, chainId: 'manifest-ledger-mainnet' as any }, 100), { code: 'TESTNET_REQUIRED' });
+  assert.throws(() => new PwrStationClient({ ...target, chainId: 'manifest-ledger-mainnet' }, 100), { code: 'TARGET_MISMATCH' });
   assert.throws(() => f.client.validatePayment(required, { ...order, payment_path: 'checkout' }), { code: 'X402_ORDER_REQUIRED' });
   assert.equal(f.calls.length, 0);
 });
@@ -545,3 +568,113 @@ test('signed payment size is bounded at 16 KiB before transport', async () => {
   await assert.rejects(rejected.client.submitPayment(order, required, oversized), { code: 'INVALID_PAYMENT_SIGNATURE', sent: false });
   assert.equal(rejected.calls.length, 0);
 });
+
+test('mainnet requires explicit selection and invalid profiles or targets fail before transport', () => {
+  let requests = 0;
+  const fetcher: typeof fetch = async () => { requests++; return ok([]); };
+  assert.throws(() => new PwrStationClient(mainnetTarget, 100, { fetch: fetcher }), { code: 'TARGET_MISMATCH' });
+  for (const network of ['', 'production', 'MAINNET', 'toString', '__proto__', null, {}, PWR_STATION_PROFILES.mainnet]) {
+    assert.throws(() => new PwrStationClient(mainnetTarget, 100, { network: network as PwrStationNetwork, fetch: fetcher }), { code: 'INVALID_NETWORK' });
+  }
+  for (const scenario of scenarios) {
+    const opposite = scenario.network === 'testnet' ? mainnetTarget : target;
+    for (const invalid of [opposite, { ...scenario.target, denom: 'upwr' }, { ...scenario.target, denom: 'umfx' }]) {
+      assert.throws(() => new PwrStationClient(invalid, 100, { network: scenario.network, fetch: fetcher }), { code: 'TARGET_MISMATCH' });
+    }
+  }
+  assert.equal(requests, 0);
+});
+
+test('profiles are immutable and mutating caller options cannot switch an existing client', async () => {
+  assert.equal(PWR_STATION_QA, 'https://testnet.pwr-station.com');
+  assert.equal(TEST_USDC, '0x036cbd53842c5426634e7929541ec2318f3dcf7e');
+  assert.equal(Reflect.set(PWR_STATION_PROFILES, 'testnet', PWR_STATION_PROFILES.mainnet), false);
+  for (const profile of Object.values(PWR_STATION_PROFILES)) {
+    assert.throws(() => Object.assign(profile, { baseUrl: 'https://untrusted.example' }), TypeError);
+  }
+  const calls: string[] = [];
+  const options = { network: 'mainnet' as PwrStationNetwork, now: () => now,
+    fetch: async (input: string | URL | Request) => { calls.push(String(input)); return ok(mainnetQuote); } };
+  const selectedTarget = { ...mainnetTarget };
+  const client = new PwrStationClient(selectedTarget, 100, options);
+  options.network = 'testnet';
+  selectedTarget.chainId = 'manifest-ledger-testnet';
+  selectedTarget.recipient = wallet;
+  assert.deepEqual(await client.quote(pack.id), mainnetQuote);
+  assert.deepEqual(calls, ['https://pwr-station.com/api/v1/agent/quotes']);
+});
+
+for (const scenario of scenarios) {
+  test(`${scenario.network}: rejects mixed payment networks, contracts and signing domains`, async () => {
+    const opposite = scenario.network === 'testnet' ? mainnetRequired : required;
+    const terms = scenario.required.accepts[0]!;
+    const f = fixture([], scenario.target, () => now, 100, scenario.network);
+    for (const patch of [
+      { network: opposite.accepts[0]!.network }, { asset: opposite.accepts[0]!.asset },
+      { scheme: 'upto' }, { extra: opposite.accepts[0]!.extra },
+      { extra: { ...(terms.extra as object), assetTransferMethod: 'permit2' } },
+      { extra: { ...(terms.extra as object), version: '1' } },
+      { amount: '1000001' }, { maxTimeoutSeconds: 301 },
+    ]) {
+      const payment = { ...scenario.required, accepts: [{ ...terms, ...patch }] } as PaymentRequired;
+      assert.throws(() => f.client.validatePayment(payment, scenario.order), StationError);
+      await assert.rejects(f.client.submitPayment(scenario.order, payment, signedPayment({}, payment)), { sent: false });
+    }
+    assert.equal(f.calls.length, 0);
+  });
+
+  test(`${scenario.network}: quote and receipt validation preserve network identity and the spending ceiling`, async () => {
+    const opposite = scenario.network === 'testnet' ? mainnetQuote : quote;
+    for (const patch of [
+      { environment: opposite.environment }, { chain_id: opposite.chain_id },
+      { denom: 'umfx' }, { recipient: wallet },
+    ]) {
+      const f = fixture([() => ok({ ...scenario.quote, ...patch })], scenario.target, () => now, 100, scenario.network);
+      await assert.rejects(f.client.quote(pack.id), { code: 'TARGET_MISMATCH' });
+      assert.equal(f.calls.length, 1);
+    }
+    const limited = fixture([() => ok(scenario.quote)], scenario.target, () => now, 99, scenario.network);
+    await assert.rejects(limited.client.quote(pack.id), { code: 'SPEND_LIMIT_EXCEEDED' });
+    await assert.rejects(limited.client.submitPayment(scenario.order, scenario.required, signedPayment({}, scenario.required)), {
+      code: 'SPEND_LIMIT_EXCEEDED', sent: false,
+    });
+    assert.equal(limited.calls.length, 1);
+    const wrongReceipt = { ...scenario.delivered, receipt: { ...scenario.delivered.receipt, chain_id: opposite.chain_id } };
+    const receipt = fixture([() => ok(wrongReceipt)], scenario.target, () => now, 100, scenario.network);
+    await assert.rejects(receipt.client.getOrder(scenario.order), { code: 'INVALID_DELIVERY_RECEIPT' });
+    assert.equal(receipt.calls.length, 1);
+  });
+
+  test(`${scenario.network}: orders and signed payments from another profile cannot dispatch`, async () => {
+    const opposite = scenarios.find(value => value.network !== scenario.network)!;
+    const f = fixture([], scenario.target, () => now, 100, scenario.network);
+    await assert.rejects(f.client.createOrder(opposite.quote, 'fixture-key'), { code: 'TARGET_MISMATCH', sent: false });
+    await assert.rejects(f.client.getOrder(opposite.order), { code: 'TARGET_MISMATCH', sent: false });
+    await assert.rejects(f.client.paymentRequirements(opposite.order), { code: 'TARGET_MISMATCH', sent: false });
+    const otherSignature = signedPayment({}, opposite.required);
+    await assert.rejects(f.client.submitPayment(opposite.order, opposite.required, otherSignature), { code: 'TARGET_MISMATCH', sent: false });
+    await assert.rejects(f.client.submitPayment(scenario.order, scenario.required, otherSignature), { code: 'SIGNED_TERMS_MISMATCH', sent: false });
+    assert.throws(() => f.client.restoreSubmittedPayment(opposite.order, opposite.required, otherSignature), { code: 'TARGET_MISMATCH', sent: false });
+    assert.equal(f.calls.length, 0);
+  });
+
+  test(`${scenario.network}: uncertain payment recovery retains the selected profile and exact authorization`, async () => {
+    const signed = signedPayment({}, scenario.required);
+    const initial = fixture([() => { throw new Error('fixture lost response'); }], scenario.target, () => now, 100, scenario.network);
+    await assert.rejects(initial.client.submitPayment(scenario.order, scenario.required, signed), {
+      code: 'REQUEST_OUTCOME_UNKNOWN', sent: true, authorizationValidBefore: String(now / 1000 + 60),
+    });
+    assert.equal(initial.calls.length, 1);
+    const restarted = fixture([() => ok(scenario.delivered)], scenario.target, () => now, 100, scenario.network);
+    restarted.client.restoreSubmittedPayment(scenario.order, scenario.required, signed);
+    await assert.rejects(restarted.client.paymentRequirements(scenario.order), { code: 'PAYMENT_ALREADY_SUBMITTED', sent: false });
+    const replacement = JSON.parse(Buffer.from(signed, 'base64').toString('utf8'));
+    replacement.payload.authorization.nonce = '0x' + '44'.repeat(32);
+    await assert.rejects(restarted.client.submitPayment(scenario.order, scenario.required,
+      Buffer.from(JSON.stringify(replacement)).toString('base64')), { code: 'PAYMENT_REPLACEMENT_FORBIDDEN', sent: false });
+    const result = await restarted.client.submitPayment(scenario.order, scenario.required, signed);
+    assert.equal(result.receipt?.chain_id, scenario.target.chainId);
+    assert.equal(restarted.calls.length, 1);
+    assert.equal(restarted.calls[0]!.headers.get('PAYMENT-SIGNATURE'), initial.calls[0]!.headers.get('PAYMENT-SIGNATURE'));
+  });
+}

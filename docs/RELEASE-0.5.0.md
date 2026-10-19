@@ -1,8 +1,8 @@
 # Release 0.5.0 — prepared, unreleased
 
 This version prepares direct PWR deposits into Merovingian's hosting credit and
-testnet PWR-Station purchase tooling. Visits remain free. No image, registry
-publication or production deployment is included in this preparation.
+PWR-Station purchase tooling that defaults to testnet. Visits remain free. No image,
+registry publication or production deployment is included in this preparation.
 
 ## Contract migration
 
@@ -24,9 +24,11 @@ in receipt verification and contribution history. History counts executed wrappe
 and batched transfers; receipt verification explains its direct-message limit.
 History and verification no longer depend on a credit-account lookup.
 
-The testnet purchase client validates per-order spending, payment terms and
-station-reported receipts. It marks every failed signed submission as uncertain
-and permits only the same authorization for that order. Hosts must restore
+The purchase client defaults to testnet and requires explicit selection of its
+pinned mainnet profile. It validates per-order spending, payment terms and
+station-reported receipts. Mainnet behavior has synthetic fixture coverage only.
+The client marks every failed signed submission as uncertain and permits only the
+same authorization for that order. Hosts must restore
 journaled attempts after restart, enforce aggregate spending and independently
 verify delivery on chain. See the [purchase and recovery contract](PWR-STATION.md#purchase-and-recovery-contract)
 and its local and historical testnet validation.
