@@ -64,8 +64,9 @@ function equalTerms(actual: Record<string, any>, expected: Record<string, any>) 
  * Purchase client defaulting to testnet. Mainnet requires an explicit network
  * option; targets and server responses cannot select it. No automatic retries
  * or signing. Never imported by the hosted refuge.
- * The caller must persist the network, quote, idempotency key, order and exact
- * signed payment privately before the corresponding request, and reuse them
+ * The host must supply a separate Manifest login wallet for each network.
+ * The caller must persist the network, login wallet address, quote, idempotency
+ * key, order and exact signed payment privately before the request, and reuse them
  * after a timeout. On restart, select the saved network; restoreSubmittedPayment
  * must precede any payment work for each journaled attempt. The spending limit
  * is per order; the host owns total spend.

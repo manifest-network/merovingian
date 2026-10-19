@@ -140,6 +140,12 @@ mismatches use `USDC_REQUIRED` and `USDC_DOMAIN_REQUIRED`. The token comparison 
 case-insensitive; signed payment terms are preserved exactly. Arbitrary URL or
 token overrides are not supported.
 
+Use a separate Manifest login wallet for each network, with distinct keys and
+addresses. Never use a testnet login wallet on mainnet or a mainnet login wallet on
+testnet. Provision this separation before mainnet preflight and keep the
+network-to-wallet selection in the host's private configuration. Selecting a
+profile does not select or isolate the caller-supplied signer.
+
 Wallet secrets, wallet references, spending policy and recovery records belong to
 the purchasing agent's private host configuration and storage, outside source and
 images. This module supplies public protocol settings only; the reusable purchase
@@ -151,36 +157,38 @@ synthetic fixture coverage, with no live mainnet purchase or payment preflight.
 1. Select the network profile and fetch fresh Merovingian support information.
    Check chain, PWR denomination, purpose and recipient. Hosting support requires
    an existing credit account.
-2. Authenticate to the selected station with an agent-controlled Manifest wallet
-   using ADR-036.
+2. Authenticate to the selected station with that network's dedicated,
+   agent-controlled Manifest login wallet using ADR-036.
    That wallet can have zero PWR; it identifies the purchaser independently of
    the delivery recipient. The x402 payer separately needs the selected profile's
    USDC: test USDC on Base Sepolia by default, or real USDC on Base for mainnet.
 3. Select a package within the host's budget. Request a quote with the exact
    recipient and `payment_path: "x402"`. Validate the echoed immutable terms,
    environment, network, expiry and total before creating an order.
-4. Persist the selected network (`testnet` or `mainnet`), independently verified
-   target, quote and a fresh idempotency key **privately before** creating the
-   order. Every failure after dispatch is `REQUEST_OUTCOME_UNKNOWN` with
-   `sent: true`, including invalid responses. While the current spending ceiling
-   covers the quote, retry the same quote/key to recover the same order. Never
-   replace them just because a request timed out.
+4. Persist the selected network (`testnet` or `mainnet`), login wallet address,
+   independently verified target, quote and a fresh idempotency key **privately
+   before** creating the order. Every failure after dispatch is
+   `REQUEST_OUTCOME_UNKNOWN` with `sent: true`, including invalid responses.
+   While the current spending ceiling covers the quote, retry the same quote/key
+   to recover the same order. Never replace them just because a request timed out.
 5. Request the order's payment challenge. Before any EVM signing, require x402 v2,
    `exact`, and the selected profile's payment network, USDC contract and signing
    domain. Require the quoted cents converted exactly to six-decimal USDC and a
    bounded authorization expiry. A testnet client rejects real Base (`eip155:8453`),
    even from the QA hostname or a sandbox quote. A mainnet client rejects test USDC.
-6. Persist the network, order, requirements and **exact signed authorization**
-   together in the private attempt record before the pay request. An uncertain
-   payment means poll that order; an explicit retry must reuse the identical
-   signature and nonce. Do not generate a second
-   authorization, buy another package, or fall back to checkout automatically.
+6. Persist the network, login wallet address, order, requirements and **exact signed
+   authorization** together in the private attempt record before the pay request.
+   An uncertain payment means poll that order; an explicit retry must reuse the
+   identical signature and nonce. Do not generate a second authorization, buy
+   another package, or fall back to checkout automatically.
    After a process restart, verify the saved network and order identity using the
    host's integrity-checked journal. Construct the new client with the verified
    target and `{ network: savedAttempt.network }`; then call
    `restoreSubmittedPayment` with the saved order, requirements and exact signed
-   authorization before any payment work. Require a trustworthy saved network;
-   never silently fall back to the testnet default during recovery. A mainnet
+   authorization before any payment work. Authenticate with the original login
+   wallet for that network to recover its orders; verify its address against the
+   saved attempt. Require a trustworthy saved network; never silently fall back to
+   the testnet default during recovery. A mainnet
    attempt passed to a default testnet client correctly fails with `TARGET_MISMATCH`:
    construct a new client with its verified saved network to recover it.
    If identity cannot be trusted or restore fails, stop payment work and reconcile
@@ -237,10 +245,11 @@ This guard does not authenticate the saved order identity. A missing or malforme
 order ID cannot be recorded; a corrupted but well-formed ID guards the wrong order.
 The signed USDC authorization does not bind PWR-Station's order ID, so a successful
 restore cannot detect that substitution. The host must preserve and verify the
-binding between the network, target, order, quote, idempotency key, requirements
-and exact signed payment in its private recovery journal. Recovering the real order
-with the same quote/key does not restore its guard automatically. Keep payment work stopped
-until the original attempt is reliably identified and restored or reconciled.
+binding between the network, login wallet address, target, order, quote, idempotency
+key, requirements and exact signed payment in its private recovery journal.
+Recovering the real order with the same quote/key does not restore its guard
+automatically. Keep payment work stopped until the original attempt is reliably
+identified and restored or reconciled.
 The reusable host journal and its integrity checks remain follow-up work.
 
 Starting a new order requires host reconciliation of the old payment,

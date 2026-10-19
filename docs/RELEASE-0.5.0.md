@@ -30,8 +30,9 @@ station-reported receipts. Mainnet behavior has synthetic fixture coverage only;
 the station's production PWR denomination response still needs preflight confirmation.
 The client marks every failed signed submission as uncertain and permits only the
 same authorization for that order. Status polling remains available after the host
-lowers its spending ceiling. Hosts must restore journaled attempts using their saved
-network after restart, enforce aggregate spending and independently
+lowers its spending ceiling. Hosts must use separate Manifest login wallets for
+testnet and mainnet, restore journaled attempts using their saved network and
+original login wallet after restart, enforce aggregate spending and independently
 verify delivery on chain. See the [purchase and recovery contract](PWR-STATION.md#purchase-and-recovery-contract)
 and its local and historical testnet validation.
 
