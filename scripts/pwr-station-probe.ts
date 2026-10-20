@@ -3,9 +3,11 @@ import { Secp256k1HdWallet } from 'cosmjs-amino-modern';
 import { loadConfig } from '../src/config.js';
 import { SupportService } from '../src/support.js';
 import { PwrStationClient, StationError, type StationSigner } from './pwr-station-client.js';
+import { PWR_STATION_PROFILES } from './pwr-station-config.js';
 
 /** Creates a temporary QA login and unpaid quotes; never creates orders or pays. */
 export async function probeStation(tenant: string) {
+  const profile = PWR_STATION_PROFILES.testnet;
   const config = loadConfig({ NETWORK: 'testnet', REFUGE_TENANT: tenant });
   const support = new SupportService(config);
   try {
@@ -22,8 +24,8 @@ export async function probeStation(tenant: string) {
         return signature;
       },
     };
-    const target = { chainId: 'manifest-ledger-testnet' as const, denom: info.denom, recipient: info.hostingCredit.creditAddress };
-    const client = new PwrStationClient(target, 100);
+    const target = { chainId: info.chainId, denom: info.denom, recipient: info.hostingCredit.creditAddress };
+    const client = new PwrStationClient(target, 100, { network: 'testnet' });
     await client.login(signer);
     const packages = await client.packages();
     const selected = packages.filter(p => p.price_cents + p.fees_cents <= 100)
@@ -44,10 +46,10 @@ export async function probeStation(tenant: string) {
     await quote(client, 'existing_credit_account', 'checkout');
     // Control changes only the recipient type: it distinguishes a credit-address
     // validation failure from a generally unavailable package/checkout service.
-    const control = new PwrStationClient({ ...target, recipient: account.address }, 100);
+    const control = new PwrStationClient({ ...target, recipient: account.address }, 100, { network: 'testnet' });
     await control.login(signer);
     await quote(control, 'ordinary_wallet_control', 'checkout');
-    return { checkedAt: new Date().toISOString(), network: 'manifest-ledger-testnet',
+    return { checkedAt: new Date().toISOString(), network: profile.chainId,
       creditAddress: target.recipient, packages, results, ordersCreated: 0, paymentsSubmitted: 0, servings: 0 };
   } finally { support.dispose(); }
 }

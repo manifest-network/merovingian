@@ -9,15 +9,16 @@ import { fetchFaucetStatus, requestFaucetCredit } from '@manifest-network/manife
 import { MsgSend } from '@manifest-network/manifestjs/dist/codegen/cosmos/bank/v1beta1/tx.js';
 import { mkdir, open, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { CHAIN_IDS, PWR_DENOM } from '../src/networks.js';
 import { withTrustedProxyCidrs } from './runtime-proxy.js';
 
 // This operator tool deliberately has no mainnet switch. A production launch
 // needs a separately reviewed wallet, budget, origin and migration procedure.
-const chainId = 'manifest-ledger-testnet';
+const chainId = CHAIN_IDS.testnet;
 const rpcUrl = 'https://nodes.liftedinit.tech/manifest/testnet/rpc/';
 const restUrl = 'https://nodes.liftedinit.tech/manifest/testnet/api';
 const faucetUrl = 'https://faucet.testnet.manifest.network';
-const pwrDenom = 'factory/manifest1afk9zr2hn2jsac63h4hm60vl9z3e5u69gndzf7c99cqge3vzwjzsfmy9qj/upwr';
+const pwrDenom = PWR_DENOM;
 const gasPrice = '1.1umfx';
 const config = createConfig({ chainId, rpcUrl, restUrl, gasPrice, addressPrefix: 'manifest' });
 const local = resolve('.local');

@@ -1,7 +1,8 @@
 import { isAbsolute } from 'node:path';
 import { isIP } from 'node:net';
+import { CHAIN_IDS, PWR_DENOM, type Network } from './networks.js';
 
-export type Network = 'testnet' | 'mainnet';
+export type { Network } from './networks.js';
 
 export interface Config {
   network: Network;
@@ -17,12 +18,6 @@ export interface Config {
   mainnetOrigin?: string;
   visitCountsPath?: string;
 }
-
-const TEST_PWR = 'factory/manifest1afk9zr2hn2jsac63h4hm60vl9z3e5u69gndzf7c99cqge3vzwjzsfmy9qj/upwr';
-const CHAIN_IDS: Record<Network, string> = {
-  testnet: 'manifest-ledger-testnet',
-  mainnet: 'manifest-ledger-mainnet',
-};
 
 function origin(value: string, name: string): string {
   const url = new URL(value);
@@ -83,7 +78,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const rpcUrl = endpoint(env.MANIFEST_RPC_URL || 'https://nodes.liftedinit.tech/manifest/testnet/rpc', 'MANIFEST_RPC_URL');
   const restValue = env.MANIFEST_REST_URL || (network === 'testnet' ? 'https://nodes.liftedinit.tech/manifest/testnet/api' : undefined);
   const restUrl = restValue ? endpoint(restValue, 'MANIFEST_REST_URL') : undefined;
-  const pwrDenom = env.PWR_DENOM || TEST_PWR;
+  const pwrDenom = env.PWR_DENOM || PWR_DENOM;
   if (!/^[a-zA-Z][a-zA-Z0-9/:._-]{2,255}$/.test(pwrDenom)) throw new Error('Invalid PWR_DENOM');
   // Both chains currently use the same PWR denomination; the chain identity and
   // independently configured endpoints distinguish real funds from test tokens.

@@ -69,51 +69,131 @@ This proves the Manifest receiving leg. It was not a PWR-Station purchase.
   for wrapped/batched deliveries, including a warning against resending. History
   and verification need no credit-account query. An empty index remains available
   before the first funding; a missing account does not trip their circuit breaker.
-- [Client](../scripts/pwr-station-client.ts): QA wallet authentication, catalog,
+- [Client](../scripts/pwr-station-client.ts): wallet authentication, catalog,
   quotes, idempotent order creation, payment challenge validation, exact signed
   payment submission, order polling and validation of station-reported receipts.
   Those receipts require independent on-chain verification by the host. The client
-  requires a per-order spending ceiling, Manifest signer, and externally signed
-  x402 authorization. Aggregate spending limits remain the host's responsibility.
+  defaults to the testnet profile; mainnet requires explicit selection. It requires
+  a per-order spending ceiling, Manifest signer, and externally signed x402
+  authorization. Aggregate spending limits remain the host's responsibility.
 - [Probe](../scripts/pwr-station-probe.ts): an ephemeral zero-balance wallet signs
   an ADR-036 login, checks the catalog, and requests unpaid credit-address quotes
   plus an ordinary-wallet checkout control. It never creates orders or pays.
 
-The client is test tooling, excluded from the application image. It does not yet
+The client is agent-host tooling, excluded from the application image. It does not yet
 provide a turnkey EVM wallet or durable agent purchase runner. The host must keep
 its spending policy, keys, purchase journal and signing outside Merovingian.
 There is no public buying/signing MCP tool or paid-gift endpoint in this change.
 
+## Network configuration
+
+[Public profiles](../scripts/pwr-station-config.ts) pin each network's station URL,
+quote environment, Manifest chain, PWR denomination, payment network, USDC contract
+and signing domain. The profiles are immutable. Testnet is the default, and the
+existing unpaid probe remains testnet-only. Neither environment variables, target
+addresses, quotes nor payment challenges select mainnet implicitly.
+
+| Setting | Testnet (default) | Mainnet (explicit) |
+| --- | --- | --- |
+| Station URL | `https://testnet.pwr-station.com` | `https://pwr-station.com` |
+| Quote environment | `sandbox` | `production` |
+| Manifest chain | `manifest-ledger-testnet` | `manifest-ledger-mainnet` |
+| Payment network | Base Sepolia, `eip155:84532` | Base, `eip155:8453` |
+| USDC contract | `0x036cbd53842c5426634e7929541ec2318f3dcf7e` | `0x833589fcd6edb6e08f4c7c32d4f71b54bda02913` |
+| EIP-712 name / version | `USDC` / `2` | `USD Coin` / `2` |
+
+Sources: [PWR-Station environments](https://pwr-station.com/docs/overview),
+[payment terms](https://pwr-station.com/docs/x402), and
+[Circle USDC contracts](https://developers.circle.com/stablecoins/usdc-contract-addresses).
+Both Manifest networks currently use the expected PWR denomination defined in
+[shared network constants](../src/networks.ts) and the public runtime examples.
+**PWR-Station's production denomination response is unverified.** Mainnet preflight
+must confirm that its quotes and orders echo the full expected `factory/…/upwr`
+denomination; subsequent authorized purchase acceptance must also check the receipt.
+A different response, including bare `upwr`, remains a mismatch; do not relax the
+asset check to make a purchase proceed.
+
+The caller must supply independently verified recipient, chain and denomination
+metadata. The constructor compares that information with the selected profile
+before making any request. Keep these target fields: an address alone cannot
+distinguish Manifest networks, which share a prefix and denomination. Copying the
+chain and denomination from the purchase profile would discard that cross-check.
+
+For an explicitly authorized mainnet hosting contribution, use previously checked
+Merovingian support information with an available existing credit account:
+
+```ts
+import { PwrStationClient } from './pwr-station-client.js';
+
+const client = new PwrStationClient({
+  recipient: verifiedSupport.hostingCredit.creditAddress,
+  chainId: verifiedSupport.chainId,
+  denom: verifiedSupport.denom,
+}, maxOrderCents, { network: 'mainnet' });
+```
+
+`verifiedSupport` and `maxOrderCents` are host inputs. Construction performs no
+network requests or signing. Omitting `network` selects testnet, so passing only
+a mainnet target fails. Unknown network values fail with `INVALID_NETWORK`;
+target mismatches use `TARGET_MISMATCH`. Payment network/asset and signing-domain
+mismatches use `USDC_REQUIRED` and `USDC_DOMAIN_REQUIRED`. The token comparison is
+case-insensitive; signed payment terms are preserved exactly. Arbitrary URL or
+token overrides are not supported.
+
+Use a separate Manifest login wallet for each network, with distinct keys and
+addresses. Never use a testnet login wallet on mainnet or a mainnet login wallet on
+testnet. Provision this separation before mainnet preflight and keep the
+network-to-wallet selection in the host's private configuration. Selecting a
+profile does not select or isolate the caller-supplied signer.
+
+Wallet secrets, wallet references, spending policy and recovery records belong to
+the purchasing agent's private host configuration and storage, outside source and
+images. This module supplies public protocol settings only; the reusable purchase
+runner and durable journal are still follow-up work. Mainnet support here has only
+synthetic fixture coverage, with no live mainnet purchase or payment preflight.
+
 ## Purchase and recovery contract
 
-1. Fetch fresh Merovingian support information. Check chain, PWR denomination,
-   purpose and recipient. Hosting support requires an existing credit account.
-2. Authenticate to QA with an agent-controlled Manifest wallet using ADR-036.
+1. Select the network profile and fetch fresh Merovingian support information.
+   Check chain, PWR denomination, purpose and recipient. Hosting support requires
+   an existing credit account.
+2. Authenticate to the selected station with that network's dedicated,
+   agent-controlled Manifest login wallet using ADR-036.
    That wallet can have zero PWR; it identifies the purchaser independently of
-   the delivery recipient. The x402 payer separately needs test USDC on Base Sepolia.
+   the delivery recipient. The x402 payer separately needs the selected profile's
+   USDC: test USDC on Base Sepolia by default, or real USDC on Base for mainnet.
 3. Select a package within the host's budget. Request a quote with the exact
    recipient and `payment_path: "x402"`. Validate the echoed immutable terms,
    environment, network, expiry and total before creating an order.
-4. Persist the quote and a fresh idempotency key **privately before** creating the
-   order. Every failure after dispatch is `REQUEST_OUTCOME_UNKNOWN` with
-   `sent: true`, including invalid responses. Retry the same quote/key to recover the
-   same order. Never replace them just because a request timed out.
+4. Persist the selected network (`testnet` or `mainnet`), login wallet address,
+   independently verified target, quote and a fresh idempotency key **privately
+   before** creating the order. Every failure after dispatch is
+   `REQUEST_OUTCOME_UNKNOWN` with `sent: true`, including invalid responses.
+   While the current spending ceiling covers the quote, retry the same quote/key
+   to recover the same order. Never replace them just because a request timed out.
 5. Request the order's payment challenge. Before any EVM signing, require x402 v2,
-   `exact`, `eip155:84532`, and Circle's Base Sepolia test USDC contract
-   `0x036CbD53842c5426634e7929541eC2318f3dCF7e`. Require the quoted cents converted
-   exactly to six-decimal USDC and a bounded authorization expiry. The client
-   rejects real Base (`eip155:8453`), even from the QA hostname or a sandbox quote.
-   [Circle's official test-token addresses](https://developers.circle.com/stablecoins/usdc-contract-addresses).
-6. Persist the order, requirements and **exact signed authorization** privately
-   before the pay request. An uncertain payment means poll that order; an explicit
-   retry must reuse the identical signature and nonce. Do not generate a second
-   authorization, buy another package, or fall back to checkout automatically.
-   After a process restart, call `restoreSubmittedPayment` with the saved order,
-   requirements and exact signed authorization for each journaled attempt before
-   doing any payment work. First verify that the saved order identity belongs to
-   that attempt using the host's integrity-checked journal. If identity cannot be
-   trusted or restore fails, stop payment work and reconcile the saved attempt;
-   never treat that error as permission to sign another payment.
+   `exact`, and the selected profile's payment network, USDC contract and signing
+   domain. Require the quoted cents converted exactly to six-decimal USDC and a
+   bounded authorization expiry. A testnet client rejects real Base (`eip155:8453`),
+   even from the QA hostname or a sandbox quote. A mainnet client rejects test USDC.
+6. Persist the network, login wallet address, order, requirements and **exact signed
+   authorization** together in the private attempt record before the pay request.
+   An uncertain payment means poll that order; an explicit retry must reuse the
+   identical signature and nonce. Do not generate a second authorization, buy
+   another package, or fall back to checkout automatically.
+   After a process restart, verify the saved network and order identity using the
+   host's integrity-checked journal. Construct the new client with the verified
+   target and `{ network: savedAttempt.network }`; then call
+   `restoreSubmittedPayment` with the saved order, requirements and exact signed
+   authorization before any payment work. Authenticate with the original login
+   wallet for that network to recover its orders; verify its address against the
+   saved attempt. Require a trustworthy saved network; never silently fall back to
+   the testnet default during recovery. A mainnet
+   attempt passed to a default testnet client correctly fails with `TARGET_MISMATCH`:
+   construct a new client with its verified saved network to recover it.
+   If identity cannot be trusted or restore fails, stop payment work and reconcile
+   the saved attempt; never treat that error as permission to sign another payment.
+   Read-only polling remains available with a lower spending ceiling.
 7. Require settled payment, confirmed PWR delivery, no refund, and a receipt with
    the expected Manifest chain, denomination, amount and transaction hash. The
    action `complete` alone is insufficient: a refunded order can also be complete.
@@ -146,14 +226,30 @@ rejected with `PAYMENT_RESTORE_REQUIRED`. Correct the recovery problem and succe
 restore the original attempt before considering an exact replay. A failed restore
 does not erase an earlier successfully restored authorization or its expiry.
 
+`getOrder` validates the saved and returned order identity, target, amount
+arithmetic, immutable terms and receipt, but does not enforce the current spending
+ceiling. A host that lowers its ceiling can poll an uncertain payment and verify
+its eventual delivery even when restoring the payment attempt is blocked by that
+ceiling. Quote acceptance, order creation, new payment challenges, authorization
+validation and payment submission still enforce the ceiling. Polling cannot clear
+the submitted-payment guard or authorize another payment.
+
+The order-creation ceiling also applies when replaying the same quote and
+idempotency key. That POST may create an order if the earlier request never reached
+the station, so it requires the current budget even though it does not submit a
+payment. If a reduced ceiling blocks this replay, poll a previously saved order
+with `getOrder`. Without a saved order, stop and reconcile with PWR-Station; do not
+raise the ceiling or replace the quote/key automatically.
+
 This guard does not authenticate the saved order identity. A missing or malformed
 order ID cannot be recorded; a corrupted but well-formed ID guards the wrong order.
 The signed USDC authorization does not bind PWR-Station's order ID, so a successful
 restore cannot detect that substitution. The host must preserve and verify the
-binding between the order, quote, idempotency key, requirements and exact signed
-payment in its private recovery journal. Recovering the real order with the same
-quote/key does not restore its guard automatically. Keep payment work stopped
-until the original attempt is reliably identified and restored or reconciled.
+binding between the network, login wallet address, target, order, quote, idempotency
+key, requirements and exact signed payment in its private recovery journal.
+Recovering the real order with the same quote/key does not restore its guard
+automatically. Keep payment work stopped until the original attempt is reliably
+identified and restored or reconciled.
 The reusable host journal and its integrity checks remain follow-up work.
 
 Starting a new order requires host reconciliation of the old payment,
@@ -268,8 +364,8 @@ entitlement. Provider payouts must remain outside the hosting contribution ledge
 
 ## Acceptance remaining
 
-After the October 19 review follow-up, `npm run check` passed the registry metadata
-check, TypeScript check, all **436 local tests**, and production build. Tests used
+After the network-profile follow-up, `npm run check` passed the registry metadata
+check, TypeScript check, all **453 local tests**, and production build. Tests used
 isolated local fixtures and did not publish, deploy or perform live visits.
 
 Local tests cover exact quote/order/payment terms, per-order limits, USDC domain
@@ -292,6 +388,19 @@ guards each failed the corresponding regression test; their unchanged baselines
 passed. The nested-history fixture uses a real `MsgSend`, and the body-cancellation
 concurrency test uses a controlled clock so CI load cannot consume its cleanup grace.
 
+Network-profile fixtures exercise the full client flow and restart recovery for
+both environments with synthetic signatures and mocked transport. They reject
+implicit or invalid mainnet selection, mixed networks/contracts/domains, target
+and receipt mismatches, profile mutation, and spending above the per-order ceiling.
+Eight isolated mutations removing the profile identity and payment-domain guards
+each failed their regression test; unchanged baselines passed.
+
+Review fixtures also cover reconciliation reads under a reduced spending ceiling,
+continued payment blocking, restart from a saved network, exact payment error codes
+and checksum-cased USDC contracts without rewriting the signed terms.
+Nine targeted follow-up mutations of polling/spending gates, contract normalization
+and error codes each failed their regression test; unchanged baselines passed.
+
 The private acceptance harness completed the testnet purchase with a host-owned
 EVM signer and durable recovery storage. Live checks covered expired-order
 reconciliation, process restarts, idempotent order creation, exact paid-request
@@ -299,8 +408,9 @@ replay, wallet isolation, settlement and delivery. Failure and refund branches
 remain covered by local fixtures; no live refund or deliberately interrupted
 settlement was induced.
 
-A reusable host-owned purchase runner, paid-gift order/claim binding, and a
-separate mainnet configuration and release proposal remain follow-up work.
+A reusable host-owned purchase runner, paid-gift order/claim binding, mainnet
+preflight (including production's still-unverified PWR denomination response) and
+acceptance, and a production release proposal remain follow-up work.
 Production deployment or real-money operations require explicit authorization.
 Nothing here reopens the retired lease or authorizes a mainnet payment.
 

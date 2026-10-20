@@ -13,6 +13,7 @@ import { createApp, type SupportPort } from '../src/app.js';
 import type { Config } from '../src/config.js';
 import { VisitCounter } from '../src/counts.js';
 import { MCP_SERVER_INFO } from '../src/identity.js';
+import { CHAIN_IDS } from '../src/networks.js';
 import { registryMetadata } from './registry-metadata.js';
 
 /** Copyable host examples live in docs/CONNECT.md. This module extracts them
@@ -66,7 +67,7 @@ async function loopbackFixture() {
   await once(server, 'listening');
   const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const config: Config = {
-    network: 'mainnet', chainId: 'manifest-ledger-mainnet', publicOrigin: origin, port: 8080,
+    network: 'mainnet', chainId: CHAIN_IDS.mainnet, publicOrigin: origin, port: 8080,
     rpcUrl: 'https://unused-rpc.example', gasPrice: '1.1umfx', pwrDenom: 'upwr', tenant: '', trustedProxyCidrs: [],
   };
   const counts = new VisitCounter(config);

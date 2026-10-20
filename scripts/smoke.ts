@@ -6,9 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { getAmenities, type AmenityId } from '../src/amenities.js';
-import type { Network } from '../src/config.js';
 import type { VisitCounts } from '../src/counts.js';
 import { APP_VERSION, MCP_SERVER_INFO } from '../src/identity.js';
+import { CHAIN_IDS, type Network } from '../src/networks.js';
 import { createSmokeFetch, SMOKE_READ_PATHS } from './smoke-request.js';
 
 const USAGE = 'Usage: npm run smoke -- ORIGIN [CONTRIBUTION_HASH] [--mainnet] [--serve] [--live-serve-authorization REFERENCE] [--expect-unchanged-counts] [--timeout-ms 1..60000]';
@@ -105,7 +105,7 @@ export async function runSmoke(options: SmokeOptions) {
   validateOptions(options);
   const { origin, network, serve, timeoutMs, contributionHash } = options;
   const mode = serve ? 'serving' : 'read-only';
-  const chainId = network === 'mainnet' ? 'manifest-ledger-mainnet' : 'manifest-ledger-testnet';
+  const chainId = CHAIN_IDS[network];
   const budget = smokeBudget(options);
   const http = createSmokeFetch(options, budget);
   const evidence: SmokeEvidence = { servings: {}, souvenirs: [] };

@@ -2,9 +2,10 @@ import { parseAddress } from '@manifest-network/manifest-sdk';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 import { normalizeTrustedProxyCidrs, trustedProxyCidrsSchema } from './runtime-proxy.js';
+import { CHAIN_IDS } from '../src/networks.js';
 
 export const MAINNET = Object.freeze({
-  network: 'mainnet', chainId: 'manifest-ledger-mainnet',
+  network: 'mainnet', chainId: CHAIN_IDS.mainnet,
   rpcUrl: 'https://nodes.manifest.network/manifest/rpc',
   restUrl: 'https://nodes.manifest.network/manifest/api',
   domain: 'merovingian.manifest.network', skuName: 'docker-nano',
