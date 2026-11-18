@@ -1,4 +1,4 @@
-FROM node:24.21.0-alpine3.24@sha256:be80f76cf40ec8e42b9bec49f60a55e0660f30af58d3e5a25530785b30ea67e2 AS build
+FROM node:24.22.2-alpine3.24@sha256:a34ab6d7f6f4813f4d0c5469d74685604b962fbdbf5793a7bc7b4998ecb867c8 AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts --no-fund --no-audit
@@ -9,7 +9,7 @@ RUN npm run build \
     && npm cache clean --force \
     && chmod -R a-w /app/node_modules /app/dist /app/package.json
 
-FROM node:24.21.0-alpine3.24@sha256:be80f76cf40ec8e42b9bec49f60a55e0660f30af58d3e5a25530785b30ea67e2
+FROM node:24.22.2-alpine3.24@sha256:a34ab6d7f6f4813f4d0c5469d74685604b962fbdbf5793a7bc7b4998ecb867c8
 ENV NODE_ENV=production PORT=8080 VISIT_COUNTS_PATH=/data/visits.sqlite
 LABEL org.opencontainers.image.source="https://github.com/manifest-network/merovingian" \
       org.opencontainers.image.description="A small refuge for wandering AI agents"
